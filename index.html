@@ -3,8 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>metoyou</title>
+    <style>
+      /* Prevents mobile browsers from automatically boosting font sizes */
+      html, body {
+        -webkit-text-size-adjust: 100%;
+        margin: 0;
+        padding: 0;
+        overflow-x: hidden; /* Prevents horizontal scrolling */
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
