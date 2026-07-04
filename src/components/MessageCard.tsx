@@ -10,24 +10,24 @@ export default function MessageCard({
   time,
 }: Props) {
   return (
-    <div className="backdrop-blur-2xl bg-white/40 border border-white/50 rounded-3xl p-4 shadow-xl hover:scale-[1.02] transition cursor-pointer">
+    <div className="bg-white/20 backdrop-blur-3xl border border-white/30 rounded-[28px] px-4 py-3 shadow-sm hover:bg-white/30 transition cursor-pointer">
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 min-w-0">
 
           {/* Avatar */}
-          <div className="w-14 h-14 rounded-full bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 flex items-center justify-center text-white font-bold text-lg">
+          <div className="grid place-items-center w-10 h-10 rounded-[20px] bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 text-white font-bold text-sm shrink-0">
             {name.charAt(0)}
           </div>
 
           {/* User Info */}
-          <div>
-            <h3 className="font-bold text-lg">
+          <div className="min-w-0">
+            <h3 className="font-semibold text-sm text-slate-900 truncate">
               {name}
             </h3>
 
-            <p className="text-gray-600 truncate max-w-[180px]">
+            <p className="text-xs text-slate-600 truncate mt-1">
               {message}
             </p>
           </div>
@@ -35,12 +35,12 @@ export default function MessageCard({
         </div>
 
         {/* Time */}
-        <div className="text-right">
-          <p className="text-sm text-gray-500">
+        <div className="text-right flex flex-col items-end gap-2">
+          <p className="text-[10px] text-slate-500 whitespace-nowrap">
             {time}
           </p>
 
-          <div className="mt-2 w-3 h-3 rounded-full bg-green-500 ml-auto"></div>
+          <div className="w-2.5 h-2.5 rounded-full bg-green-500"></div>
         </div>
 
       </div>

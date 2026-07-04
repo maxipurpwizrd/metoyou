@@ -1,7 +1,32 @@
-export type Language = "English-US" | "English-Slang" | "French";
+export type AppLanguage = "en-basic" | "en-street" | "fr-fr";
+export type Language = AppLanguage;
 
-export const translations: Record<Language, Record<string, string>> = {
-  "English-US": {
+export const DEFAULT_LANGUAGE: AppLanguage = "en-basic";
+
+const normalizeLanguageCode = (language?: string): AppLanguage => {
+  if (!language) return DEFAULT_LANGUAGE;
+  const normalized = language.trim().toLowerCase();
+
+  switch (normalized) {
+    case "en":
+    case "english":
+    case "en-basic":
+      return "en-basic";
+    case "street":
+    case "en-street":
+      return "en-street";
+    case "fr":
+    case "french":
+    case "fr-fr":
+    case "en-streetfr":
+      return "fr-fr";
+    default:
+      return DEFAULT_LANGUAGE;
+  }
+};
+
+export const translations: Record<AppLanguage, Record<string, string>> = {
+  "en-basic": {
     // Auth pages
     "app.title": "MeToYou 💜",
     "signup.subtitle": "Join The Vibe 🌎",
@@ -22,12 +47,95 @@ export const translations: Record<Language, Record<string, string>> = {
     "login.entering": "Entering...",
     "login.signupLink": "Join The Family",
     "login.signupText": "New here?",
-    // Language options
+    "lang.en-basic": "English — Basic American English",
+    "lang.en-street": "English — Street Slang",
+    "lang.fr-fr": "French — France",
     "lang.english-us": "English — Basic American English",
     "lang.english-slang": "English — Street Slang",
     "lang.french": "French — France",
+    // Home page
+    "home.heroLabel": "🔥 The Family Social Network",
+    "home.title": "MeToYou 💜",
+    "home.description": "Connect families, friends and communities worldwide. Share memories, catch vibes, create moments and stay close no matter where life takes you.",
+    "home.enter": "Enter MeToYou 🚀",
+    "home.learnMore": "Learn More ✨",
+    "home.card.conversations.title": "Real Conversations",
+    "home.card.conversations.description": "Stay connected through messages, family chats and community groups.",
+    "home.card.family.title": "Family First",
+    "home.card.family.description": "Built to keep families close no matter where they are in the world.",
+    "home.card.community.title": "Global Communities",
+    "home.card.community.description": "Meet new people, build communities and share your journey.",
+    "home.vision.title": "More Than Social Media",
+    "home.vision.description": "MeToYou isn't about chasing likes. It's about bringing people together. Families. Friends. Communities. Real people sharing real moments.",
+    // Settings page
+    "settings.premiumBanner": "Premium settings for your MeToYou experience",
+    "settings.title": "Settings",
+    "settings.subtitle": "A liquid glass control center crafted for family, community and style.",
+    "settings.profileSection": "Profile & Personal Details",
+    "settings.profileSectionTitle": "Your personal control panel",
+    "settings.securitySection": "Password & Security",
+    "settings.securitySectionTitle": "Keep your account safe",
+    "settings.displaySection": "Display Settings",
+    "settings.displaySectionTitle": "Theme & visual polish",
+    "settings.languageSection": "Language",
+    "settings.languageSectionTitle": "App language",
+    "settings.languageSectionDescription": "Choose the language for your MeToYou experience.",
+    "settings.changeLanguage": "Change Language",
+    "settings.profileName": "Name",
+    "settings.profileUsername": "Username",
+    "settings.profilePicture": "Profile Picture",
+    "settings.profilePictureDesc": "Add or change photo",
+    "settings.changePassword": "Change Password",
+    "settings.securityCheck": "Security Check",
+    "settings.phoneNumber": "Add / Change Phone Number",
+    "settings.email": "Add / Change Email",
+    "settings.profileLabel": "Profile & Personal Details",
+    "settings.displayLabel": "Display Settings",
+    "settings.theme.blackIce": "Black Ice",
+    "settings.theme.pinkGlow": "Pink Liquid Glass Glow",
+    "settings.save": "Save",
+    // Notifications
+    "notifications.title": "Notifications",
+    "notifications.none": "No notifications yet",
+    // Chat
+    "chat.back": "←",
+    "chat.online": "🟢 Online",
+    "chat.onlineNow": "Online now",
+    "chat.typing": "{name} is typing...",
+    "chat.noMessages": "No messages yet. Start the conversation! 💬",
+    "chat.openThread": "Open a message thread or tap a profile message icon to start chatting.",
+    "chat.addAttachment": "Add attachment",
+    "chat.addEmoji": "Add emoji",
+    "chat.typeMessage": "Type a message...",
+    "chat.audioCall": "Audio call",
+    "chat.videoCall": "Video call",
+    "chat.inCall": "In FaceToFace call · started at {time}",
+    // Create Post
+    "createPost.title": "Create Post",
+    "createPost.postingToYourFeed": "Posting to your feed",
+    "createPost.placeholder": "Drop your vibe 💬",
+    "createPost.uploading": "Uploading...",
+    "createPost.creating": "Creating post...",
+    "createPost.created": "✓ Post created successfully!",
+    "createPost.postButton": "Post it 🔥",
+    "createPost.close": "Close",
+    "createPost.recording": "🔴 Recording in progress...",
+    "createPost.imageTooLarge": "Image must be less than 5MB",
+    "createPost.invalidImage": "Please select a valid image file",
+    "createPost.failedImage": "Failed to read image file",
+    "createPost.failedVideo": "Failed to upload video",
+    "createPost.audioTooLarge": "Audio must be less than 10MB",
+    "createPost.invalidAudio": "Please select a valid audio file",
+    "createPost.failedAudio": "Failed to read audio file",
+    "createPost.microphoneDenied": "Microphone access denied. Please allow microphone permission.",
+    // VibesPro
+    "vibespro.posts": "Posts",
+    "vibespro.online": "Online",
+    "vibespro.offline": "Offline",
+    "vibespro.message": "Message",
+    "vibespro.follow": "Follow",
+    "vibespro.following": "Following",
     // Profile page
-    "profile.hitStreets": "← Hit the streets",
     "profile.settingsTitle": "⚙️ Settings",
     "profile.editProfile": "Edit Profile",
     "profile.changePicture": "Change Picture",
@@ -51,8 +159,10 @@ export const translations: Record<Language, Record<string, string>> = {
     "profile.darkMode": "Dark 🌙",
     "profile.helpCenter": "Help Center",
     "profile.reportProblem": "Report a Problem",
+    "profile.uploadNewProfile": "Upload new profile",
+    "profile.viewProfile": "View profile",
   },
-  "English-Slang": {
+  "en-street": {
     // Auth pages
     "app.title": "MeToYou 💜",
     "signup.subtitle": "Join The Vibe 🌎",
@@ -73,12 +183,95 @@ export const translations: Record<Language, Record<string, string>> = {
     "login.entering": "Entering...",
     "login.signupLink": "Join The Family",
     "login.signupText": "New to the fam?",
-    // Language options
+    "lang.en-basic": "English — Proper American",
+    "lang.en-street": "English — Street Vibes 🏙️",
+    "lang.fr-fr": "French — France",
     "lang.english-us": "English — Proper American",
     "lang.english-slang": "English — Street Vibes 🏙️",
     "lang.french": "French — France",
+    // Home page
+    "home.heroLabel": "🔥 The Family Social Network",
+    "home.title": "MeToYou 💜",
+    "home.description": "Connect families, friends and communities worldwide. Share memories, catch vibes, create moments and stay close no matter where life takes you.",
+    "home.enter": "Enter MeToYou 🚀",
+    "home.learnMore": "Learn More ✨",
+    "home.card.conversations.title": "Real Conversations",
+    "home.card.conversations.description": "Stay connected through messages, family chats and community groups.",
+    "home.card.family.title": "Family First",
+    "home.card.family.description": "Built to keep families close no matter where they are in the world.",
+    "home.card.community.title": "Global Communities",
+    "home.card.community.description": "Meet new people, build communities and share your journey.",
+    "home.vision.title": "More Than Social Media",
+    "home.vision.description": "MeToYou isn't about chasing likes. It's about bringing people together. Families. Friends. Communities. Real people sharing real moments.",
+    // Settings page
+    "settings.premiumBanner": "Premium settings for your MeToYou experience",
+    "settings.title": "Settings",
+    "settings.subtitle": "A liquid glass control center crafted for family, community and style.",
+    "settings.profileSection": "Profile & Personal Details",
+    "settings.profileSectionTitle": "Your personal control panel",
+    "settings.securitySection": "Password & Security",
+    "settings.securitySectionTitle": "Keep your account safe",
+    "settings.displaySection": "Display Settings",
+    "settings.displaySectionTitle": "Theme & visual polish",
+    "settings.languageSection": "Language",
+    "settings.languageSectionTitle": "App language",
+    "settings.languageSectionDescription": "Choose the language for your MeToYou experience.",
+    "settings.changeLanguage": "Change Language",
+    "settings.profileName": "Name",
+    "settings.profileUsername": "Username",
+    "settings.profilePicture": "Profile Picture",
+    "settings.profilePictureDesc": "Add or change photo",
+    "settings.changePassword": "Change Password",
+    "settings.securityCheck": "Security Check",
+    "settings.phoneNumber": "Add / Change Phone Number",
+    "settings.email": "Add / Change Email",
+    "settings.profileLabel": "Profile & Personal Details",
+    "settings.displayLabel": "Display Settings",
+    "settings.theme.blackIce": "Black Ice",
+    "settings.theme.pinkGlow": "Pink Liquid Glass Glow",
+    "settings.save": "Save",
+    // Notifications
+    "notifications.title": "Notifications",
+    "notifications.none": "No notifications yet",
+    // Chat
+    "chat.back": "←",
+    "chat.online": "🟢 Online",
+    "chat.onlineNow": "Online now",
+    "chat.typing": "{name} is typing...",
+    "chat.noMessages": "No messages yet. Start the conversation! 💬",
+    "chat.openThread": "Open a message thread or tap a profile message icon to start chatting.",
+    "chat.addAttachment": "Add attachment",
+    "chat.addEmoji": "Add emoji",
+    "chat.typeMessage": "Type a message...",
+    "chat.audioCall": "Audio call",
+    "chat.videoCall": "Video call",
+    "chat.inCall": "In FaceToFace call · started at {time}",
+    // Create Post
+    "createPost.title": "Create Post",
+    "createPost.postingToYourFeed": "Posting to your feed",
+    "createPost.placeholder": "Drop your vibe 💬",
+    "createPost.uploading": "Uploading...",
+    "createPost.creating": "Creating post...",
+    "createPost.created": "✓ Post created successfully!",
+    "createPost.postButton": "Post it 🔥",
+    "createPost.close": "Close",
+    "createPost.recording": "🔴 Recording in progress...",
+    "createPost.imageTooLarge": "Image must be less than 5MB",
+    "createPost.invalidImage": "Please select a valid image file",
+    "createPost.failedImage": "Failed to read image file",
+    "createPost.failedVideo": "Failed to upload video",
+    "createPost.audioTooLarge": "Audio must be less than 10MB",
+    "createPost.invalidAudio": "Please select a valid audio file",
+    "createPost.failedAudio": "Failed to read audio file",
+    "createPost.microphoneDenied": "Microphone access denied. Please allow microphone permission.",
+    // VibesPro
+    "vibespro.posts": "Posts",
+    "vibespro.online": "Online",
+    "vibespro.offline": "Offline",
+    "vibespro.message": "Message",
+    "vibespro.follow": "Follow",
+    "vibespro.following": "Following",
     // Profile page
-    "profile.hitStreets": "← Bounce back",
     "profile.settingsTitle": "⚙️ Settings",
     "profile.editProfile": "Edit Profile",
     "profile.changePicture": "Switch Pic",
@@ -102,8 +295,10 @@ export const translations: Record<Language, Record<string, string>> = {
     "profile.darkMode": "Dark 🌙",
     "profile.helpCenter": "Help Center",
     "profile.reportProblem": "Report Problem",
+    "profile.uploadNewProfile": "Upload new profile",
+    "profile.viewProfile": "View profile",
   },
-  "French": {
+  "fr-fr": {
     // Auth pages
     "app.title": "MeToYou 💜",
     "signup.subtitle": "Rejoignez l'Ambiance 🌎",
@@ -124,12 +319,95 @@ export const translations: Record<Language, Record<string, string>> = {
     "login.entering": "Entrée...",
     "login.signupLink": "Rejoindre la Famille",
     "login.signupText": "Nouveau ici?",
-    // Language options
+    "lang.en-basic": "Anglais — Anglais Américain",
+    "lang.en-street": "Anglais — Argot de Rue",
+    "lang.fr-fr": "Français — France",
     "lang.english-us": "Anglais — Anglais Américain",
     "lang.english-slang": "Anglais — Argot de Rue",
     "lang.french": "Français — France",
+    // Home page
+    "home.heroLabel": "🔥 Le réseau familial",
+    "home.title": "MeToYou 💜",
+    "home.description": "Connectez familles, amis et communautés dans le monde entier. Partagez des souvenirs, captez les vibes, créez des moments et restez proches où que la vie vous mène.",
+    "home.enter": "Entrer sur MeToYou 🚀",
+    "home.learnMore": "En savoir plus ✨",
+    "home.card.conversations.title": "Conversations Réelles",
+    "home.card.conversations.description": "Restez connecté grâce aux messages, chats familiaux et groupes communautaires.",
+    "home.card.family.title": "La Famille d'Abord",
+    "home.card.family.description": "Conçu pour rapprocher les familles où qu'elles soient dans le monde.",
+    "home.card.community.title": "Communautés Mondiales",
+    "home.card.community.description": "Rencontrez de nouvelles personnes, créez des communautés et partagez votre parcours.",
+    "home.vision.title": "Plus que les réseaux sociaux",
+    "home.vision.description": "MeToYou n'est pas là pour chercher des likes. Il s'agit de réunir les gens. Familles. Amis. Communautés. De vraies personnes partageant de vrais moments.",
+    // Settings page
+    "settings.premiumBanner": "Paramètres premium pour votre expérience MeToYou",
+    "settings.title": "Paramètres",
+    "settings.subtitle": "Un centre de contrôle verre liquide conçu pour la famille, la communauté et le style.",
+    "settings.profileSection": "Profil & Détails Personnels",
+    "settings.profileSectionTitle": "Votre panneau de contrôle personnel",
+    "settings.securitySection": "Mot de passe & Sécurité",
+    "settings.securitySectionTitle": "Protégez votre compte",
+    "settings.displaySection": "Paramètres d'affichage",
+    "settings.displaySectionTitle": "Thème & finition visuelle",
+    "settings.languageSection": "Langue",
+    "settings.languageSectionTitle": "Langue de l'application",
+    "settings.languageSectionDescription": "Choisissez la langue pour votre expérience MeToYou.",
+    "settings.changeLanguage": "Modifier la langue",
+    "settings.profileName": "Nom",
+    "settings.profileUsername": "Nom d'utilisateur",
+    "settings.profilePicture": "Photo de profil",
+    "settings.profilePictureDesc": "Ajouter ou changer la photo",
+    "settings.changePassword": "Changer le mot de passe",
+    "settings.securityCheck": "Vérification de sécurité",
+    "settings.phoneNumber": "Ajouter / Changer le numéro de téléphone",
+    "settings.email": "Ajouter / Changer l'e-mail",
+    "settings.profileLabel": "Profil & Détails Personnels",
+    "settings.displayLabel": "Paramètres d'affichage",
+    "settings.theme.blackIce": "Black Ice",
+    "settings.theme.pinkGlow": "Pink Liquid Glass Glow",
+    "settings.save": "Enregistrer",
+    // Notifications
+    "notifications.title": "Notifications",
+    "notifications.none": "Pas encore de notifications",
+    // Chat
+    "chat.back": "←",
+    "chat.online": "🟢 En ligne",
+    "chat.onlineNow": "En ligne maintenant",
+    "chat.typing": "{name} est en train d'écrire...",
+    "chat.noMessages": "Pas de messages pour le moment. Commencez la conversation ! 💬",
+    "chat.openThread": "Ouvrez un fil de message ou appuyez sur une icône de profil pour commencer à discuter.",
+    "chat.addAttachment": "Ajouter une pièce jointe",
+    "chat.addEmoji": "Ajouter un emoji",
+    "chat.typeMessage": "Tapez un message...",
+    "chat.audioCall": "Appel audio",
+    "chat.videoCall": "Appel vidéo",
+    "chat.inCall": "En appel FaceToFace · commencé à {time}",
+    // Create Post
+    "createPost.title": "Créer une publication",
+    "createPost.postingToYourFeed": "Publication sur votre fil",
+    "createPost.placeholder": "Laissez tomber votre vibe 💬",
+    "createPost.uploading": "Téléchargement...",
+    "createPost.creating": "Création de la publication...",
+    "createPost.created": "✓ Publication créée avec succès !",
+    "createPost.postButton": "Publier 🔥",
+    "createPost.close": "Fermer",
+    "createPost.recording": "🔴 Enregistrement en cours...",
+    "createPost.imageTooLarge": "L'image doit faire moins de 5 Mo",
+    "createPost.invalidImage": "Veuillez sélectionner un fichier image valide",
+    "createPost.failedImage": "Impossible de lire l'image",
+    "createPost.failedVideo": "Échec du téléchargement de la vidéo",
+    "createPost.audioTooLarge": "L'audio doit faire moins de 10 Mo",
+    "createPost.invalidAudio": "Veuillez sélectionner un fichier audio valide",
+    "createPost.failedAudio": "Impossible de lire l'audio",
+    "createPost.microphoneDenied": "Microphone refusé. Veuillez autoriser l'accès au microphone.",
+    // VibesPro
+    "vibespro.posts": "Publications",
+    "vibespro.online": "En ligne",
+    "vibespro.offline": "Hors ligne",
+    "vibespro.message": "Message",
+    "vibespro.follow": "Suivre",
+    "vibespro.following": "Suivi",
     // Profile page
-    "profile.hitStreets": "← Retour",
     "profile.settingsTitle": "⚙️ Paramètres",
     "profile.editProfile": "Modifier Profil",
     "profile.changePicture": "Changer Photo",
@@ -153,11 +431,18 @@ export const translations: Record<Language, Record<string, string>> = {
     "profile.darkMode": "Sombre 🌙",
     "profile.helpCenter": "Centre d'Aide",
     "profile.reportProblem": "Signaler un Problème",
+    "profile.uploadNewProfile": "Télécharger un nouveau profil",
+    "profile.viewProfile": "Voir le profil",
   },
 };
 
-export function getTranslation(language: Language, key: string): string {
-  // Fallback to English-US if language is missing
-  const trans = translations[language] || translations["English-US"];
-  return trans[key] || key;
+export function normalizeLanguage(language?: string): AppLanguage {
+  return normalizeLanguageCode(language);
+}
+
+export function getTranslation(language: string, key: string): string {
+  const normalized = normalizeLanguageCode(language);
+  const defaultTrans = translations[DEFAULT_LANGUAGE];
+  const currentTrans = translations[normalized] || defaultTrans;
+  return currentTrans[key] || defaultTrans[key] || key;
 }

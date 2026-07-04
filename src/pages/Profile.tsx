@@ -1,11 +1,19 @@
-import { Link, useNavigate } from "react-router-dom";
-import { useState, useEffect, useRef, type ChangeEvent } from "react";
+import { Link, useParams } from "react-router-dom";
+import type { ChangeEvent } from "react";
+import { useState, useEffect, useRef } from "react";
 import { getProfile, saveProfile } from "../utils/profileStorage";
-import { fetchProfileFromSupabase, upsertProfileToSupabase } from "../lib/profileApi";
+import { fetchProfileFromSupabase, fetchProfileByUsername, upsertProfileToSupabase, uploadProfileImage } from "../lib/profileApi";
+import { fetchPostsFromSupabase } from "../lib/postApi";
+import { followUser, unfollowUser, getFollowStatus } from "../lib/followApi";
+import FollowButton from "../components/social/FollowButton";
+import { useAuth } from "../hooks/useAuth";
 import type { ProfileData } from "../utils/profileStorage";
 import { useLanguage } from "../contexts/LanguageContext";
-import type { Language } from "../lib/i18n";
+import { normalizeLanguage } from "../lib/i18n";
+import type { AppLanguage as Language } from "../lib/i18n";
 import ImageViewer from "../components/ImageViewer";
+import VibesProProfilePage from "../components/VibesPro/VibesProProfilePage";
+import { Settings2 } from "lucide-react";
 
 type ProfilePost = {
   id: string | number;
@@ -14,94 +22,84 @@ type ProfilePost = {
   image?: string;
   highlighted?: boolean;
   time?: string;
+  likes?: number;
+  comments?: number;
+  like_count?: number;
+  comment_count?: number;
 };
 
-const AVAILABLE_INTERESTS = [
-  "Travel",
-  "Music",
-  "Fitness",
-  "Food",
-  "Gaming",
-  "Art",
-  "Technology",
-  "Fashion",
-  "Sports",
-  "Movies",
-  "Books",
-  "Nature",
-];
 
 export default function Profile() {
-  const navigate = useNavigate();
-  const { setLanguage, t } = useLanguage();
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
+  const { setLanguage } = useLanguage();
+  const params = useParams();
+  const routeUsername = params.username;
+
   const [profile, setProfile] = useState<ProfileData>(() => getProfile());
-  const [myPosts, setMyPosts] = useState<ProfilePost[]>(() => {
-    const saved = localStorage.getItem("metoyou-posts");
-    if (!saved) return [];
-
-    try {
-      const parsed = JSON.parse(saved);
-      if (!Array.isArray(parsed)) return [];
-      return parsed.filter((post) => {
-        return post?.author?.id === profile.id || post?.author?.username === profile.username;
-      });
-    } catch {
-      return [];
-    }
-  });
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  const [appearance, setAppearance] = useState<"light" | "dark">("light");
-  const [postNotifications, setPostNotifications] = useState(true);
-  const [commentNotifications, setCommentNotifications] = useState(true);
-  const [messageNotifications, setMessageNotifications] = useState(true);
-  
-  const [settingsView, setSettingsView] = useState<
-    | "main"
-    | "edit"
-    | "changePic"
-    | "bio"
-    | "privacy"
-    | "notifications"
-    | "appearance"
-    | "help"
-    | "language"
-    | "interests"
-  >("main");
-  const [isPrivateAccount, setIsPrivateAccount] = useState(false);
+  const [myPosts, setMyPosts] = useState<ProfilePost[]>([]);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerImages, setViewerImages] = useState<string[]>([]);
   const [viewerIndex, setViewerIndex] = useState(0);
   const [viewerPostId, setViewerPostId] = useState<string | number | null>(null);
   const [viewerAuthorId, setViewerAuthorId] = useState<string | undefined>(undefined);
   const [viewerAuthorUsername, setViewerAuthorUsername] = useState<string | undefined>(undefined);
+  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [isFollowedBy, setIsFollowedBy] = useState(false);
+  const [followersCount, setFollowersCount] = useState(profile.hommies_count ?? 0);
+  const [followLoading, setFollowLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const currentUser = getProfile();
+  const { user: authUser } = useAuth();
+  const viewerId = authUser?.id ?? currentUser?.id;
+  const actorUsername = currentUser?.username ?? authUser?.user_metadata?.first_name ?? "Someone";
+  const followLabel = isFollowing ? "Following" : isFollowedBy ? "Follow Back" : "Follow";
+
+  const handleProfilePicClick = () => {
+    setAvatarMenuOpen((open) => !open);
+  };
+
+  const handleUploadProfilePicture = () => {
+    fileInputRef.current?.click();
+    setAvatarMenuOpen(false);
+  };
+
+  const handleProfileFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      const uploadedUrl = await uploadProfileImage(file);
+      if (!uploadedUrl) {
+        alert("Unable to upload profile image. Try again.");
+        return;
+      }
+
+      const updatedProfile = profile.is_vibes_pro
+        ? { ...profile, vibes_pro_portrait: uploadedUrl }
+        : { ...profile, profilePic: uploadedUrl };
+      setProfile(updatedProfile);
+      saveProfile(updatedProfile);
+
+      if (viewingOwn) {
+        await upsertProfileToSupabase(updatedProfile);
+      }
+    } catch (error) {
+      console.error("Profile image upload failed", error);
+      alert("Profile image upload failed.");
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
 
   const updateProfile = (updated: ProfileData) => {
     setProfile(updated);
     saveProfile(updated);
-  };
-
-  const updateField = <K extends keyof ProfileData>(key: K, value: ProfileData[K]) => {
-    updateProfile({ ...profile, [key]: value });
-  };
-
-  const handleAvatarClick = () => {
-    setAvatarMenuOpen(true);
-  };
-
-  const handleProfileUpload = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      const newProfile = { ...profile, profilePic: reader.result as string };
-      updateProfile(newProfile);
-      upsertProfileToSupabase(newProfile);
-    };
-    reader.readAsDataURL(file);
   };
 
   const profilePic = profile.profilePic;
@@ -110,528 +108,375 @@ export default function Profile() {
   const username = profile.username;
   const email = profile.email;
 
+  const viewingOwn = !routeUsername || routeUsername === currentUser?.username;
+  const isVibesPro = (profile.is_vibes_pro === true);
+
   const vibesCount = myPosts.length;
   const snapshotsCount = myPosts.filter((post) => Boolean(post.image)).length;
-  const hommiesCount = profile.hommies_count ?? 0;
+  const hommiesCount = viewingOwn ? profile.hommies_count ?? 0 : followersCount;
 
   // Initialize language from profile when component mounts
   useEffect(() => {
     if (profile.language) {
-      // Migrate old language format to new format
-      let lang: Language = "English-US";
-      if (profile.language === "English-US" || profile.language === "English-Slang" || profile.language === "French") {
-        lang = profile.language as Language;
-      } else if (profile.language === "English") {
-        lang = "English-US"; // migrate old "English" to new format
-      }
-      setLanguage(lang);
+      setLanguage(normalizeLanguage(profile.language));
     }
   }, [profile.language, setLanguage]);
 
-  // Load profile from Supabase on mount only
+  // Load profile: prefer route `:username` as source of truth.
   useEffect(() => {
+    let mounted = true;
     (async () => {
       try {
-        const remote = await fetchProfileFromSupabase();
-        if (remote) {
-          updateProfile(remote);
-          if (remote.language) {
-            setLanguage(remote.language as Language);
+        if (routeUsername) {
+          // load the profile for the given username
+          const remote = await fetchProfileByUsername(routeUsername);
+          if (!mounted) return;
+          if (remote) {
+            setProfile(remote);
+            if (remote.language) setLanguage(normalizeLanguage(remote.language));
+          } else {
+            // No such user — navigate away or show fallback
+            setProfile((prev) => prev);
+          }
+        } else {
+          // No route username — load authenticated user's profile
+          const remote = await fetchProfileFromSupabase();
+          if (!mounted) return;
+          if (remote) {
+            updateProfile(remote);
+            if (remote.language) setLanguage(normalizeLanguage(remote.language));
           }
         }
-      } catch {
-        // ignore - fallback to local
+      } catch (err) {
+        console.warn("Failed to load profile", err);
       }
     })();
-  }, [setLanguage]); // Only run on mount, not on every profile change
 
-  // Refresh posts when profile id or username changes
+    return () => {
+      mounted = false;
+    };
+  }, [routeUsername, setLanguage]);
+
+  // Load user's posts from Supabase when profile id changes
   useEffect(() => {
-    const refreshPosts = () => {
-      const saved = localStorage.getItem("metoyou-posts");
-      if (!saved) {
-        setMyPosts([]);
-        return;
-      }
-
+    let mounted = true;
+    (async () => {
+      if (!profile?.id) return;
       try {
-        const parsed = JSON.parse(saved);
-        if (!Array.isArray(parsed)) {
-          setMyPosts([]);
-          return;
-        }
+        const records = await fetchPostsFromSupabase({ author_id: profile.id, limit: 50 });
+        if (!mounted) return;
 
-        setMyPosts(
-          parsed.filter((post) => {
-            return post?.author?.id === profile.id || post?.author?.username === profile.username;
-          })
-        );
+        const mapped = (records || []).map((r: any) => ({
+          id: r.id,
+          author: { id: r.author_id, username: r.profiles?.username ?? r.author_id },
+          text: r.text ?? "",
+          image: r.image_url ?? undefined,
+          highlighted: Boolean(r.highlighted),
+          time: new Date(r.created_at).toLocaleString(),
+        } as ProfilePost));
+
+        setMyPosts(mapped);
       } catch {
         setMyPosts([]);
       }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [profile.id, profile.username]);
+
+  useEffect(() => {
+    if (viewingOwn) {
+      setFollowersCount(profile.hommies_count ?? 0);
+      return;
+    }
+
+    let mounted = true;
+    const loadFollowStatus = async () => {
+      if (!viewerId || !profile?.id) return;
+      const status = await getFollowStatus(viewerId, profile.id);
+      if (!mounted) return;
+
+      setIsFollowing(status.isFollowing);
+      setIsFollowedBy(status.isFollowedBy);
+      setFollowersCount(status.followersCount);
     };
 
-    refreshPosts();
-  }, [profile.id, profile.username]); // Only depend on id and username, not entire profile
+    loadFollowStatus();
+
+    return () => {
+      mounted = false;
+    };
+  }, [profile.id, viewerId, viewingOwn]);
+
+  const handleFollowToggle = async () => {
+    if (!viewerId || !profile?.id || viewingOwn || followLoading) return;
+
+    setFollowLoading(true);
+
+    if (isFollowing) {
+      const success = await unfollowUser(viewerId, profile.id);
+      if (success) {
+        setIsFollowing(false);
+        setFollowersCount((count) => Math.max(0, count - 1));
+      }
+    } else {
+      const success = await followUser(viewerId, profile.id, actorUsername);
+      if (success) {
+        setIsFollowing(true);
+        setFollowersCount((count) => count + 1);
+      }
+    }
+
+    setFollowLoading(false);
+  };
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-pink-100 via-purple-100 to-blue-100 p-6 pt-32 pb-28">
-      <div className="max-w-xl mx-auto">
-        <div className="flex items-center justify-between mb-8 relative">
-          <Link
-            to="/feed"
-            className="inline-block bg-white/40 backdrop-blur-2xl border border-white/50 rounded-2xl px-5 py-3 shadow-xl font-semibold"
-          >
-            {t("profile.hitStreets")}
-          </Link>
+    <div className={`min-h-screen bg-linear-to-br from-pink-100 via-purple-100 to-blue-100 ${isVibesPro ? 'px-0 pt-0 pb-20 md:pb-24' : 'p-3 md:p-6 pt-24 md:pt-32 pb-20 md:pb-24'}`}>
+      <div className="max-w-2xl mx-auto">
+        {!isVibesPro && (
+          <div className="flex items-center justify-between mb-6 md:mb-8 relative">
+            <h1 className="text-2xl md:text-4xl font-black bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 bg-clip-text text-transparent absolute left-1/2 -translate-x-1/2">
+              MeToYou 💜
+            </h1>
 
-          <h1 className="text-4xl font-black bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 bg-clip-text text-transparent absolute left-1/2 -translate-x-1/2">
-            MeToYou 💜
-          </h1>
+            {/* owner controls removed */}
+          </div>
+        )}
 
-          <button
-            onClick={() => setSettingsOpen(true)}
-            className="bg-white/40 backdrop-blur-xl px-3 py-2 rounded-xl shadow-md hover:scale-105 transition text-2xl"
-          >
-            ⚙️
-          </button>
-        </div>
+        {isVibesPro ? (
+          <div className="w-full">
+            <VibesProProfilePage
+              username={profile.username}
+              portraitUrl={profile.vibes_pro_portrait ?? profile.profilePic ?? "/default-avatar.png"}
+              badgeLabel="Vibes Pro"
+              subtitle={bio ?? 'Live like royalty, share your brightest moments.'}
+              posts={myPosts.map((post) => ({
+                id: post.id,
+                title: post.text.slice(0, 40),
+                description: post.text,
+                mediaUrl: post.image,
+                mediaType: post.image ? 'image' : undefined,
+                badgeLabel: post.highlighted ? 'Highlight' : 'Snapshot',
+                likes: (post.like_count ?? post.likes) ?? 0,
+                comments: (post.comment_count ?? post.comments) ?? 0,
+              }))}
+              hommiesCount={hommiesCount}
+              isOnline={true}
+              isFollowing={isFollowing}
+              followLabel={followLabel}
+              viewingOwn={viewingOwn}
+              onFollow={handleFollowToggle}
+              onMessage={() => {
+                /* placeholder for message action */
+              }}
+            />
+          </div>
+        ) : (
+          <>
+            <div className="bg-white/20 backdrop-blur-3xl rounded-3xl md:rounded-4xl p-4 md:p-8 shadow-2xl border border-white/30">
+              {viewingOwn && (
+                <div className="flex items-center justify-end gap-2 md:gap-4 mb-4 md:mb-6">
+                  <Link
+                    to="/settings"
+                    className="inline-flex items-center gap-1 md:gap-2 rounded-full border border-white/60 bg-white/40 px-2 md:px-4 py-1 md:py-2 text-xs md:text-sm font-semibold text-slate-900 shadow-xl backdrop-blur-2xl transition hover:scale-[1.02]"
+                  >
+                    <Settings2 className="w-3 h-3 md:w-4 md:h-4" />
+                    Settings
+                  </Link>
+                </div>
+              )}
 
-        <div className="bg-white/40 backdrop-blur-2xl rounded-3xl p-8 shadow-xl border border-white/50">
-          <div className="flex justify-center">
-            <div
-              onClick={handleAvatarClick}
-              className="cursor-pointer w-40 h-40 rounded-full bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 p-1 shadow-2xl"
-            >
-              <div className="w-full h-full rounded-full bg-white flex items-center justify-center text-6xl overflow-hidden">
-                {profilePic ? (
-                  <img src={profilePic} alt="avatar" className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-6xl">😎</div>
+              <div className="flex justify-center relative w-full">
+                <button
+                  type="button"
+                  onClick={handleProfilePicClick}
+                  className="w-32 h-32 md:w-40 md:h-40 rounded-full bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 p-1 shadow-2xl focus:outline-none"
+                >
+                  <div className="w-full h-full rounded-full bg-white flex items-center justify-center text-4xl md:text-6xl overflow-hidden">
+                    {profilePic ? (
+                      <img src={profilePic} alt="avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-4xl md:text-6xl">😎</div>
+                    )}
+                  </div>
+                </button>
+
+                {avatarMenuOpen && (
+                  <div className="absolute top-full mt-3 w-56 md:w-64 rounded-3xl bg-white/95 border border-white/80 shadow-xl py-3 text-left z-20">
+                    {viewingOwn && (
+                      <button
+                        type="button"
+                        onClick={handleUploadProfilePicture}
+                        className="w-full text-left px-3 md:px-4 py-3 text-sm md:text-base hover:bg-slate-100 transition"
+                      >
+                        {isUploading ? "Uploading avatar..." : "Upload new profile"}
+                      </button>
+                    )}
+                    <Link
+                      to={viewingOwn ? "/profile" : `/profile/${currentUser?.username}`}
+                      onClick={() => setAvatarMenuOpen(false)}
+                      className="block px-3 md:px-4 py-3 text-sm md:text-base text-left hover:bg-slate-100 transition"
+                    >
+                      View profile
+                    </Link>
+                  </div>
                 )}
               </div>
             </div>
-          </div>
 
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handleProfileUpload}
-          />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleProfileFileChange}
+              className="hidden"
+            />
 
-          {avatarMenuOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-              <div className="absolute inset-0 bg-black/40" onClick={() => setAvatarMenuOpen(false)}></div>
-              <div className="relative bg-white rounded-3xl p-6 shadow-2xl z-10 w-full max-w-sm">
-                <h2 className="text-2xl font-bold text-center mb-6">Profile Picture</h2>
-                <div className="space-y-3">
-                  <button
-                    onClick={() => setAvatarMenuOpen(false)}
-                    className="w-full bg-blue-500 text-white py-3 rounded-2xl font-semibold hover:bg-blue-600 transition"
-                  >
-                    👀 View Picture
-                  </button>
-                  <button
-                    onClick={() => {
-                      fileInputRef.current?.click();
-                      setAvatarMenuOpen(false);
-                    }}
-                    className="w-full bg-pink-500 text-white py-3 rounded-2xl font-semibold hover:bg-pink-600 transition"
-                  >
-                    📸 Change Picture
-                  </button>
-                  <button
-                    onClick={() => setAvatarMenuOpen(false)}
-                    className="w-full bg-gray-300 text-black py-3 rounded-2xl font-semibold hover:bg-gray-400 transition"
-                  >
-                    Cancel
-                  </button>
-                </div>
+            <div className="mt-6 md:mt-8 text-center">
+              <p className="uppercase text-xs md:text-sm tracking-[0.3em] text-slate-500">@{username.toLowerCase().replace(/\s+/g, "")}</p>
+              <h2 className="text-2xl md:text-3xl font-black mt-2">{username}</h2>
+              <p className="text-xs md:text-sm text-slate-600 mt-2">{email}</p>
+            </div>
+
+            {!viewingOwn && (
+              <div className="mt-4 md:mt-6 flex items-center justify-between gap-2 md:gap-3 bg-white/20 backdrop-blur-3xl rounded-3xl p-3 md:p-4 border border-white/30">
+                <FollowButton
+                  label={followLoading ? "Working..." : followLabel}
+                  isFollowing={isFollowing}
+                  loading={followLoading}
+                  onClick={handleFollowToggle}
+                  disabled={false}
+                />
+
+                <Link
+                  to={`/chat?recipient=${profile.id}&username=${encodeURIComponent(profile.username)}`}
+                  className="inline-flex items-center justify-center w-10 h-10 md:w-12 md:h-12 rounded-2xl bg-white shadow-lg border border-white/60 text-slate-900 text-lg md:text-xl transition hover:scale-105 shrink-0"
+                  aria-label="Message user"
+                >
+                  💬
+                </Link>
+              </div>
+            )}
+
+            <div className="grid grid-cols-3 gap-2 md:gap-4 mt-6 md:mt-8">
+              <div className="bg-white/30 rounded-2xl p-3 md:p-4 text-center shadow-lg">
+                <h2 className="font-black text-2xl md:text-3xl text-slate-900">{hommiesCount}</h2>
+                <p className="text-slate-700 text-xs md:text-sm mt-2">Hommies</p>
+              </div>
+              <div className="bg-white/30 rounded-2xl p-3 md:p-4 text-center shadow-lg">
+                <h2 className="font-black text-2xl md:text-3xl text-slate-900">{snapshotsCount}</h2>
+                <p className="text-slate-700 text-xs md:text-sm mt-2">Snapshots</p>
+              </div>
+              <div className="bg-white/30 rounded-2xl p-3 md:p-4 text-center shadow-lg">
+                <h2 className="font-black text-2xl md:text-3xl text-slate-900">{vibesCount}</h2>
+                <p className="text-slate-700 text-xs md:text-sm mt-2">Vibes</p>
               </div>
             </div>
-          )}
 
-          <div className="mt-8 text-center">
-            <p className="uppercase text-sm tracking-[0.3em] text-slate-500">@{username.toLowerCase().replace(/\s+/g, "")}</p>
-            <h2 className="text-3xl font-black mt-2">{username}</h2>
-            <p className="text-sm text-slate-600 mt-2">{email}</p>
-          </div>
+            {bio && (
+              <div className="mt-6 md:mt-8 bg-white/30 rounded-3xl p-4 md:p-6 shadow-lg">
+                <h2 className="font-bold text-xl md:text-2xl mb-3 text-slate-900">About Me</h2>
+                <p className="text-slate-700 text-sm md:text-base leading-relaxed">{bio}</p>
+              </div>
+            )}
 
-          <div className="grid grid-cols-3 gap-4 mt-8">
-            <div className="bg-white/50 rounded-2xl p-4 text-center shadow">
-              <h2 className="font-black text-3xl">{hommiesCount}</h2>
-              <p>Hommies</p>
-            </div>
-            <div className="bg-white/50 rounded-2xl p-4 text-center shadow">
-              <h2 className="font-black text-3xl">{snapshotsCount}</h2>
-              <p>Snapshots</p>
-            </div>
-            <div className="bg-white/50 rounded-2xl p-4 text-center shadow">
-              <h2 className="font-black text-3xl">{vibesCount}</h2>
-              <p>Vibes</p>
-            </div>
-          </div>
-
-          <div className="mt-8 bg-white/30 rounded-2xl p-5">
-            <h2 className="font-bold text-2xl mb-3">About Me</h2>
-            <p className="text-gray-700 leading-relaxed">{bio}</p>
-          </div>
-
-          <div className="flex flex-wrap justify-center gap-3 mt-8">
-            {selectedInterests.map((interest) => (
-              <span key={interest} className="bg-pink-200/70 px-4 py-2 rounded-full text-sm">
-                {interest}
-              </span>
-            ))}
-          </div>
-
-          <div className="mt-8">
-            <h2 className="font-bold text-2xl mb-4">Highlights ✨</h2>
-            <div className="grid grid-cols-2 gap-3">
-              {myPosts.filter((post) => post.highlighted).length > 0 ? (
-                myPosts
-                  .filter((post) => post.highlighted)
-                  .map((post) => (
-                    <div key={post.id} className="rounded-3xl overflow-hidden bg-white/80 border border-white/70 shadow-md">
-                      {post.image ? (
-                        <img src={post.image} alt={post.text} className="w-full h-40 object-cover" />
-                      ) : (
-                        <div className="h-40 flex items-center justify-center bg-pink-100 text-slate-700 px-4 text-sm text-center">
-                          {post.text}
-                        </div>
-                      )}
-                      <div className="p-4">
-                        <p className="font-semibold text-slate-800">{post.text}</p>
-                        <p className="text-xs text-slate-500 mt-2">{post.time}</p>
-                      </div>
-                    </div>
-                  ))
-              ) : (
-                <div className="col-span-full rounded-3xl bg-white/60 border border-dashed border-slate-300 p-6 text-center text-slate-500">
-                  No highlighted posts yet. Mark a post as a highlight from feed to show it here.
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="mt-8">
-            <h2 className="font-bold text-2xl mb-4">My Snapshots 📸</h2>
-            <div className="grid grid-cols-3 gap-2">
-              {myPosts.map((post) => (
-                <div
-                  key={post.id}
-                  className="aspect-square rounded-2xl overflow-hidden bg-gray-200 shadow-md hover:shadow-lg transition cursor-pointer"
-                  onClick={() => {
-                    if (post.image) {
-                      setViewerImages([post.image]);
-                      setViewerIndex(0);
-                      setViewerPostId(post.id);
-                      setViewerAuthorId(post.author?.id);
-                      setViewerAuthorUsername(post.author?.username);
-                      setViewerOpen(true);
-                    }
-                  }}
-                >
-                  {post.image ? (
-                    <img src={post.image} alt={post.text} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-linear-to-br from-pink-300 to-blue-300 p-4 text-center">
-                      <p className="text-sm font-semibold text-white">{post.text}</p>
-                    </div>
-                  )}
-                </div>
+            <div className="flex flex-wrap justify-center gap-2 md:gap-3 mt-6 md:mt-8">
+              {selectedInterests.map((interest) => (
+                <span key={interest} className="bg-white/40 backdrop-blur-2xl border border-white/50 px-3 md:px-4 py-2 rounded-full text-xs md:text-sm text-slate-900 shadow-lg">
+                  {interest}
+                </span>
               ))}
             </div>
-          </div>
-        </div>
 
-        {viewerOpen && viewerImages.length > 0 && (
-          <ImageViewer
-            images={viewerImages}
-            initialIndex={viewerIndex}
-            onClose={() => setViewerOpen(false)}
-            postId={viewerPostId ?? undefined}
-            authorId={viewerAuthorId}
-            authorUsername={viewerAuthorUsername}
-            onEditPost={() => {
-              const newText = window.prompt("Edit post text:", viewerImages[viewerIndex] ? undefined : "");
-              if (newText !== null) {
-                setMyPosts((prev) => prev.map((p) => (p.id === viewerPostId ? { ...p, text: newText } : p)));
-              }
-            }}
-            onDeleteImage={() => {
-              setMyPosts((prev) => prev.map((p) => (p.id === viewerPostId ? { ...p, image: undefined } : p)));
-              setViewerOpen(false);
-            }}
-            onDeletePost={() => {
-              setMyPosts((prev) => prev.filter((p) => p.id !== viewerPostId));
-              setViewerOpen(false);
-            }}
-          />
+            <div className="mt-6 md:mt-8">
+              <h2 className="font-bold text-xl md:text-2xl mb-3 md:mb-4">Highlights ✨</h2>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3">
+                {myPosts.filter((post) => post.highlighted).length > 0 ? (
+                  myPosts
+                    .filter((post) => post.highlighted)
+                    .map((post) => (
+                      <div key={post.id} className="rounded-3xl overflow-hidden bg-white/80 border border-white/70 shadow-md">
+                        {post.image ? (
+                          <img src={post.image} alt={post.text} className="w-full h-32 md:h-40 object-cover" />
+                        ) : (
+                          <div className="h-32 md:h-40 flex items-center justify-center bg-pink-100 text-slate-700 px-3 md:px-4 text-xs md:text-sm text-center">
+                            {post.text}
+                          </div>
+                        )}
+                        <div className="p-2 md:p-4">
+                          <p className="font-semibold text-slate-800 text-xs md:text-sm line-clamp-2">{post.text}</p>
+                          <p className="text-xs text-slate-500 mt-1 md:mt-2">{post.time}</p>
+                        </div>
+                      </div>
+                    ))
+                ) : (
+                  <div className="col-span-full rounded-3xl bg-white/60 border border-dashed border-slate-300 p-6 text-center text-slate-500">
+                    No highlighted posts yet. Mark a post as a highlight from feed to show it here.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-6 md:mt-8">
+              <h2 className="font-bold text-xl md:text-2xl mb-3 md:mb-4">My Snapshots 📸</h2>
+              <div className="grid grid-cols-3 md:grid-cols-4 gap-1 md:gap-2">
+                {myPosts.map((post) => (
+                  <div
+                    key={post.id}
+                    className="aspect-square rounded-2xl overflow-hidden bg-gray-200 shadow-md hover:shadow-lg transition cursor-pointer"
+                    onClick={() => {
+                      if (post.image) {
+                        setViewerImages([post.image]);
+                        setViewerIndex(0);
+                        setViewerPostId(post.id);
+                        setViewerAuthorId(post.author?.id);
+                        setViewerAuthorUsername(post.author?.username);
+                        setViewerOpen(true);
+                      }
+                    }}
+                  >
+                    {post.image ? (
+                      <img src={post.image} alt={post.text} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-linear-to-br from-pink-300 to-blue-300 p-2 text-center">
+                        <p className="text-xs font-semibold text-white line-clamp-3">{post.text}</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* The conditional logic container is now clean and within the fragment branch boundary */}
+            {viewerOpen && viewerImages.length > 0 && (
+              <ImageViewer
+                images={viewerImages}
+                initialIndex={viewerIndex}
+                onClose={() => setViewerOpen(false)}
+                postId={viewerPostId ?? undefined}
+                authorId={viewerAuthorId}
+                authorUsername={viewerAuthorUsername}
+                onEditPost={() => {
+                  const newText = window.prompt("Edit post text:", viewerImages[viewerIndex] ? undefined : "");
+                  if (newText !== null) {
+                    setMyPosts((prev) => prev.map((p) => (p.id === viewerPostId ? { ...p, text: newText } : p)));
+                  }
+                }}
+                onDeleteImage={() => {
+                  setMyPosts((prev) => prev.map((p) => (p.id === viewerPostId ? { ...p, image: undefined } : p)));
+                  setViewerOpen(false);
+                }}
+                onDeletePost={() => {
+                  setMyPosts((prev) => prev.filter((p) => p.id !== viewerPostId));
+                  setViewerOpen(false);
+                }}
+              />
+            )}
+          </>
         )}
       </div>
-      {settingsOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setSettingsOpen(false)}></div>
-
-          <div className="relative w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl z-10">
-            <button onClick={() => setSettingsOpen(false)} className="absolute top-4 right-4 text-xl">✕</button>
-            <h2 className="text-2xl font-bold mb-4">{t("profile.settingsTitle")}</h2>
-
-            {settingsView === "main" && (
-              <div className="space-y-3">
-                <button onClick={() => setSettingsView("edit")} className="w-full text-left rounded-2xl border px-4 py-3">👤 {t("profile.editProfile")}</button>
-                <button
-                  onClick={() => {
-                    fileInputRef.current?.click();
-                  }}
-                  className="w-full text-left rounded-2xl border px-4 py-3"
-                >
-                  📸 {t("profile.changePicture")}
-                </button>
-                <button onClick={() => setSettingsView("bio")} className="w-full text-left rounded-2xl border px-4 py-3">💜 {t("profile.editBio")}</button>
-                <button onClick={() => setSettingsView("interests")} className="w-full text-left rounded-2xl border px-4 py-3">✨ {t("profile.editInterests") || "Edit Interests"}</button>
-
-                <div className="border-t my-3"></div>
-
-                <button onClick={() => setSettingsView("privacy")} className="w-full text-left rounded-2xl border px-4 py-3">🔒 {t("profile.privacy")}</button>
-                <button onClick={() => setSettingsView("notifications")} className="w-full text-left rounded-2xl border px-4 py-3">💬 {t("profile.notifications")}</button>
-                <button onClick={() => setSettingsView("appearance")} className="w-full text-left rounded-2xl border px-4 py-3">🌙 {t("profile.appearance")}</button>
-
-                <div className="border-t my-3"></div>
-
-                <button onClick={() => setSettingsView("help")} className="w-full text-left rounded-2xl border px-4 py-3">❓ {t("profile.helpSupport")}</button>
-
-                <button
-                  onClick={() => {
-                    setSettingsOpen(false);
-                    navigate("/");
-                  }}
-                  className="w-full rounded-2xl bg-red-500 text-white px-4 py-3 mt-2"
-                >
-                  🚪 {t("profile.logout")}
-                </button>
-              </div>
-            )}
-
-            {settingsView === "edit" && (
-              <div className="space-y-4">
-                <button onClick={() => setSettingsView("main")} className="text-sm text-slate-500">← {t("profile.back")}</button>
-                <h3 className="font-semibold">{t("profile.editProfile")}</h3>
-                <label className="block text-sm text-slate-700">{t("profile.username")}
-                  <input value={username} onChange={(e) => updateField("username", e.target.value)} className="w-full rounded-2xl border px-3 py-2 mt-2" />
-                </label>
-                <div className="flex gap-2">
-                  <button onClick={() => setSettingsView("main")} className="flex-1 rounded-2xl border px-4 py-2">{t("profile.cancel")}</button>
-                  <button
-                    onClick={async () => {
-                      await upsertProfileToSupabase(profile);
-                      saveProfile(profile);
-                      setSettingsView("main");
-                    }}
-                    className="flex-1 rounded-2xl bg-blue-600 text-white px-4 py-2"
-                  >
-                    {t("profile.save")}
-                  </button>
-                </div>
-              </div>
-            )}
-            {settingsView === "interests" && (
-              <div className="space-y-4">
-                <button onClick={() => setSettingsView("main")} className="text-sm text-slate-500">← {t("profile.back")}</button>
-                <h3 className="font-semibold">{t("profile.interests") || "Interests"}</h3>
-                <p className="text-sm text-slate-600">Select the interests you want saved to your profile.</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {AVAILABLE_INTERESTS.map((interest) => {
-                    const active = selectedInterests.includes(interest);
-                    return (
-                      <button
-                        key={interest}
-                        type="button"
-                        onClick={() => {
-                          const next = active
-                            ? selectedInterests.filter((item) => item !== interest)
-                            : [...selectedInterests, interest];
-                          updateField("interests", next);
-                        }}
-                        className={`rounded-2xl border px-4 py-3 text-left ${active ? "bg-pink-500 text-white border-pink-500" : "bg-white text-slate-700"}`}
-                      >
-                        {interest}
-                      </button>
-                    );
-                  })}
-                </div>
-                <div className="flex gap-2">
-                  <button onClick={() => setSettingsView("main")} className="flex-1 rounded-2xl border px-4 py-2">{t("profile.cancel")}</button>
-                  <button
-                    onClick={async () => {
-                      await upsertProfileToSupabase(profile);
-                      saveProfile(profile);
-                      setSettingsView("main");
-                    }}
-                    className="flex-1 rounded-2xl bg-blue-600 text-white px-4 py-2"
-                  >
-                    {t("profile.save")}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {settingsView === "bio" && (
-              <div className="space-y-4">
-                <button onClick={() => setSettingsView("main")} className="text-sm text-slate-500">← {t("profile.back")}</button>
-                <h3 className="font-semibold">{t("profile.editBio")}</h3>
-                <textarea value={bio} onChange={(e) => updateField("bio", e.target.value)} className="w-full rounded-2xl border px-3 py-2 mt-2 min-h-20" />
-                <div className="flex gap-2">
-                  <button onClick={() => setSettingsView("main")} className="flex-1 rounded-2xl border px-4 py-2">{t("profile.cancel")}</button>
-                  <button
-                    onClick={async () => {
-                      await upsertProfileToSupabase(profile);
-                      saveProfile(profile);
-                      setSettingsView("main");
-                    }}
-                    className="flex-1 rounded-2xl bg-blue-600 text-white px-4 py-2"
-                  >
-                    {t("profile.save")}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {settingsView === "privacy" && (
-              <div className="space-y-4">
-                <button onClick={() => setSettingsView("main")} className="text-sm text-slate-500">← {t("profile.back")}</button>
-                <h3 className="font-semibold">{t("profile.privacy")}</h3>
-                <div className="space-y-2 mt-2">
-                  <label className="flex items-center justify-between rounded-2xl border px-4 py-3">
-                    <span>{t("profile.publicAccount")}</span>
-                    <input type="radio" name="privacy" checked={!isPrivateAccount} onChange={() => setIsPrivateAccount(false)} />
-                  </label>
-                  <label className="flex items-center justify-between rounded-2xl border px-4 py-3">
-                    <span>{t("profile.privateAccount")}</span>
-                    <input type="radio" name="privacy" checked={isPrivateAccount} onChange={() => setIsPrivateAccount(true)} />
-                  </label>
-                </div>
-              </div>
-            )}
-
-            {settingsView === "notifications" && (
-              <div className="space-y-4">
-                <button onClick={() => setSettingsView("main")} className="text-sm text-slate-500">← {t("profile.back")}</button>
-                <h3 className="font-semibold">{t("profile.notifications")}</h3>
-                <div className="space-y-2 mt-2">
-                  <label className="flex items-center justify-between rounded-2xl border px-4 py-3">
-                    <span>{t("profile.messagesNotif")}</span>
-                    <input type="checkbox" checked={messageNotifications} onChange={(e) => setMessageNotifications(e.target.checked)} />
-                  </label>
-                  <label className="flex items-center justify-between rounded-2xl border px-4 py-3">
-                    <span>{t("profile.likesNotif")}</span>
-                    <input type="checkbox" checked={postNotifications} onChange={(e) => setPostNotifications(e.target.checked)} />
-                  </label>
-                  <label className="flex items-center justify-between rounded-2xl border px-4 py-3">
-                    <span>{t("profile.commentsNotif")}</span>
-                    <input type="checkbox" checked={commentNotifications} onChange={(e) => setCommentNotifications(e.target.checked)} />
-                  </label>
-                </div>
-              </div>
-            )}
-
-            {settingsView === "appearance" && (
-              <div className="space-y-4">
-                <button onClick={() => setSettingsView("main")} className="text-sm text-slate-500">← {t("profile.back")}</button>
-                <h3 className="font-semibold">{t("profile.appearance")}</h3>
-                <div className="mt-2 grid grid-cols-2 gap-3">
-                  <button onClick={() => setAppearance("light")} className={`rounded-2xl border px-4 py-3 ${appearance === "light" ? "bg-blue-600 text-white" : "bg-white"}`}>{t("profile.lightMode")}</button>
-                  <button onClick={() => setAppearance("dark")} className={`rounded-2xl border px-4 py-3 ${appearance === "dark" ? "bg-blue-600 text-white" : "bg-white"}`}>{t("profile.darkMode")}</button>
-                </div>
-              </div>
-            )}
-
-            {settingsView === "language" && (
-              <div className="space-y-4">
-                <button onClick={() => setSettingsView("main")} className="text-sm text-slate-500">← Back</button>
-                <h3 className="font-semibold">{t("profile.language")}</h3>
-
-                <label className="flex items-center justify-between rounded-2xl border px-4 py-3 cursor-pointer">
-                  <div>
-                    <div className="font-medium">{t("lang.english-us")}</div>
-                    <div className="text-xs text-slate-500">Basic English</div>
-                  </div>
-                  <input
-                    type="radio"
-                    name="language"
-                    checked={profile.language === "English-US"}
-                    onChange={() => {
-                      updateField("language", "English-US");
-                      setLanguage("English-US");
-                    }}
-                  />
-                </label>
-
-                <label className="flex items-center justify-between rounded-2xl border px-4 py-3 cursor-pointer">
-                  <div>
-                    <div className="font-medium">{t("lang.english-slang")}</div>
-                    <div className="text-xs text-slate-500">Street Slang</div>
-                  </div>
-                  <input
-                    type="radio"
-                    name="language"
-                    checked={profile.language === "English-Slang"}
-                    onChange={() => {
-                      updateField("language", "English-Slang");
-                      setLanguage("English-Slang");
-                    }}
-                  />
-                </label>
-
-                <label className="flex items-center justify-between rounded-2xl border px-4 py-3 cursor-pointer">
-                  <div>
-                    <div className="font-medium">{t("lang.french")}</div>
-                    <div className="text-xs text-slate-500">France</div>
-                  </div>
-                  <input
-                    type="radio"
-                    name="language"
-                    checked={profile.language === "French"}
-                    onChange={() => {
-                      updateField("language", "French");
-                      setLanguage("French");
-                    }}
-                  />
-                </label>
-
-                <div className="flex gap-2">
-                  <button onClick={() => setSettingsView("main")} className="flex-1 rounded-2xl border px-4 py-2">{t("profile.cancel")}</button>
-                  <button
-                    onClick={async () => {
-                      await upsertProfileToSupabase(profile);
-                      saveProfile(profile);
-                      setSettingsView("main");
-                    }}
-                    className="flex-1 rounded-2xl bg-blue-600 text-white px-4 py-2"
-                  >
-                    {t("profile.save")}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {settingsView === "help" && (
-              <div className="space-y-4">
-                <button onClick={() => setSettingsView("main")} className="text-sm text-slate-500">← {t("profile.back")}</button>
-                <h3 className="font-semibold">{t("profile.helpSupport")}</h3>
-                <div className="space-y-2 mt-2">
-                  <button className="w-full rounded-2xl border px-4 py-3 text-left">{t("profile.helpCenter")}</button>
-                  <button className="w-full rounded-2xl border px-4 py-3 text-left">{t("profile.reportProblem")}</button>
-                </div>
-              </div>
-            )}
-
-          </div>
-        </div>
-      )}
     </div>
   );
 }

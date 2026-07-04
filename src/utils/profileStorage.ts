@@ -1,8 +1,13 @@
+import { normalizeLanguage } from "../lib/i18n";
+
 export type ProfileData = {
   id: string;
   username: string;
+  firstName?: string;
   bio: string;
   profilePic: string | null;
+  vibes_pro_portrait?: string | null;
+  is_vibes_pro?: boolean;
   interests: string[];
   email: string;
   language?: string;
@@ -20,7 +25,7 @@ export const DEFAULT_PROFILE: ProfileData = {
   profilePic: null,
   interests: [],
   email: "maxi@example.com",
-  language: "English",
+  language: "en-basic",
   hommies_count: 0,
   snapshots_count: 0,
   vibes_count: 0,
@@ -35,6 +40,7 @@ export function getProfile(): ProfileData {
     return {
       ...DEFAULT_PROFILE,
       ...parsed,
+      language: normalizeLanguage(parsed.language),
     };
   } catch {
     return DEFAULT_PROFILE;
@@ -42,5 +48,9 @@ export function getProfile(): ProfileData {
 }
 
 export function saveProfile(profile: ProfileData): void {
-  localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+  const normalizedProfile = {
+    ...profile,
+    language: normalizeLanguage(profile.language),
+  };
+  localStorage.setItem(PROFILE_KEY, JSON.stringify(normalizedProfile));
 }

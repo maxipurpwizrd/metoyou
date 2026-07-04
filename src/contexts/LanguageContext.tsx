@@ -1,19 +1,29 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
-import type { Language } from "../lib/i18n";
-import { getTranslation } from "../lib/i18n";
+import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { DEFAULT_LANGUAGE, getTranslation, normalizeLanguage, type AppLanguage } from "../lib/i18n";
 
 type LanguageContextType = {
-  language: Language;
-  setLanguage: (lang: Language) => void;
+  language: AppLanguage;
+  setLanguage: (lang: AppLanguage) => void;
   t: (key: string) => string;
 };
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
+const LANGUAGE_STORAGE_KEY = "metoyou-language";
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguage] = useState<Language>("English-US");
+  const [language, setLanguageState] = useState<AppLanguage>(() => {
+    if (typeof window === "undefined") return DEFAULT_LANGUAGE;
+    const saved = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
+    return normalizeLanguage(saved ?? DEFAULT_LANGUAGE);
+  });
 
-  const t = (key: string) => getTranslation(language, key);
+  const setLanguage = (lang: AppLanguage) => {
+    const normalized = normalizeLanguage(lang);
+    window.localStorage.setItem(LANGUAGE_STORAGE_KEY, normalized);
+    setLanguageState(normalized);
+  };
+
+  const t = useMemo(() => (key: string) => getTranslation(language, key), [language]);
 
   return (
     <LanguageContext.Provider value={{ language, setLanguage, t }}>

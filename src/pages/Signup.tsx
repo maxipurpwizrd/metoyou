@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { signUp } from "../lib/auth";
 import { useLanguage } from "../contexts/LanguageContext";
-import type { Language } from "../lib/i18n";
+import type { AppLanguage as Language } from "../lib/i18n";
 
 export default function Signup() {
   const navigate = useNavigate();
@@ -43,30 +43,30 @@ export default function Signup() {
             <div className="space-y-3">
               <button
                 onClick={() => {
-                  setSelectedLanguage("English-US");
+                  setSelectedLanguage("en-basic");
                   setLanguageStep("choose-english-variant");
                 }}
                 className="w-full rounded-2xl border px-4 py-3 text-left hover:bg-blue-50"
               >
-                {t("lang.english-us")}
+                {t("lang.en-basic")}
               </button>
               <button
                 onClick={() => {
-                  setSelectedLanguage("English-Slang");
+                  setSelectedLanguage("en-street");
                   setLanguageStep("choose-english-variant");
                 }}
                 className="w-full rounded-2xl border px-4 py-3 text-left hover:bg-blue-50"
               >
-                {t("lang.english-slang")}
+                {t("lang.en-street")}
               </button>
               <button
                 onClick={() => {
-                  setSelectedLanguage("French");
+                  setSelectedLanguage("fr-fr");
                   setLanguageStep("continue");
                 }}
                 className="w-full rounded-2xl border px-4 py-3 text-left hover:bg-blue-50"
               >
-                {t("lang.french")}
+                {t("lang.fr-fr")}
               </button>
             </div>
           </div>
@@ -87,16 +87,16 @@ export default function Signup() {
               <label className="flex items-center gap-3 rounded-2xl border px-4 py-3 cursor-pointer">
                 <input
                   type="radio"
-                  checked={selectedLanguage === "English-US"}
-                  onChange={() => setSelectedLanguage("English-US")}
+                  checked={selectedLanguage === "en-basic"}
+                  onChange={() => setSelectedLanguage("en-basic")}
                 />
                 <span>Basic English</span>
               </label>
               <label className="flex items-center gap-3 rounded-2xl border px-4 py-3 cursor-pointer">
                 <input
                   type="radio"
-                  checked={selectedLanguage === "English-Slang"}
-                  onChange={() => setSelectedLanguage("English-Slang")}
+                  checked={selectedLanguage === "en-street"}
+                  onChange={() => setSelectedLanguage("en-street")}
                 />
                 <span>Street Slang</span>
               </label>
@@ -152,7 +152,7 @@ export default function Signup() {
           <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" className="w-full rounded-2xl border px-3 py-2 mb-4" />
 
           <p className="text-sm text-slate-600 mb-4">
-            {t("signup.language")}: <span className="font-semibold">{selectedLanguage === "English-US" ? "Basic English" : selectedLanguage === "English-Slang" ? "Street Slang" : "Français"}</span>
+            {t("signup.language")}: <span className="font-semibold">{selectedLanguage === "en-basic" ? t("lang.en-basic") : selectedLanguage === "en-street" ? t("lang.en-street") : t("lang.fr-fr")}</span>
           </p>
 
           <button type="submit" className="w-full bg-linear-to-r from-pink-500 to-pink-600 text-white py-3 rounded-2xl font-semibold mb-3" disabled={loading}>

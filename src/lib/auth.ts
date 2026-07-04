@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { normalizeLanguage } from "./i18n";
 
 export async function login(email: string, password: string) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -14,6 +15,7 @@ export async function signUp(
   language?: string
 ) {
   const username = `${firstName || ""} ${lastName || ""}`.trim();
+  const normalizedLanguage = normalizeLanguage(language);
 
   const { data, error } = await supabase.auth.signUp({
     email,
@@ -23,7 +25,7 @@ export async function signUp(
         username,
         first_name: firstName,
         last_name: lastName,
-        language,
+        language: normalizedLanguage,
       },
     },
   });
@@ -41,7 +43,7 @@ export async function signUp(
         hommies_count: 0,
         vibes_count: 0,
         snapshots_count: 0,
-        language: language ?? "English",
+        language: normalizedLanguage,
       });
 
     if (profileError) {

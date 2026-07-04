@@ -12,7 +12,7 @@ export default function MobileDock() {
 
   return (
     <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50">
-      <div className="bg-white/40 backdrop-blur-3xl border border-white/50 rounded-full px-4 py-3 shadow-2xl flex gap-4">
+      <div className="bg-white/20 backdrop-blur-3xl border border-white/30 rounded-full px-4 py-3 shadow-2xl flex gap-4">
 
         {navItems.map((item) => {
           const isActive = location.pathname === item.path;
@@ -29,7 +29,7 @@ export default function MobileDock() {
                 transition-all duration-300
                 ${
                   isActive
-                    ? "bg-white/60 scale-110 shadow-lg"
+                    ? "bg-white/30 scale-110 shadow-lg"
                     : "hover:scale-105"
                 }
               `}

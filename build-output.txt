@@ -1,0 +1,52 @@
+
+> metoyou@0.0.0 build
+> tsc -b && vite build
+
+src/components/CreatePost.tsx(407,9): error TS6133: 'handlePostAndClose' is declared but its value is never read.
+src/components/Navbar.tsx(1,1): error TS6133: 'React' is declared but its value is never read.
+src/contexts/ChatContext.tsx(1,47): error TS1484: 'ReactNode' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/contexts/FeedContext.tsx(1,65): error TS1484: 'ReactNode' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/contexts/FeedContext.tsx(129,41): error TS2345: Argument of type '{ id: any; author_id: any; text: any; image_url: any; video_url: any; media_type: any; likes_count: any; comments_count: any; highlighted: any; created_at: any; profiles: { username: any; profile_pic: any; }[]; }[] | PostRecord[]' is not assignable to parameter of type 'PostRecord[]'.
+  Type '{ id: any; author_id: any; text: any; image_url: any; video_url: any; media_type: any; likes_count: any; comments_count: any; highlighted: any; created_at: any; profiles: { username: any; profile_pic: any; }[]; }[]' is not assignable to type 'PostRecord[]'.
+    Type '{ id: any; author_id: any; text: any; image_url: any; video_url: any; media_type: any; likes_count: any; comments_count: any; highlighted: any; created_at: any; profiles: { username: any; profile_pic: any; }[]; }' is not assignable to type 'PostRecord'.
+      Types of property 'profiles' are incompatible.
+        Type '{ username: any; profile_pic: any; }[]' has no properties in common with type '{ username?: string | undefined; profile_pic?: string | undefined; }'.
+src/contexts/VideoContext.tsx(1,47): error TS1484: 'ReactNode' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/lib/videoApi.ts(39,9): error TS2353: Object literal may only specify known properties, and 'onUploadProgress' does not exist in type 'FileOptions'.
+src/lib/videoApi.ts(39,28): error TS7006: Parameter 'progress' implicitly has an 'any' type.
+src/pages/Feed.tsx(191,18): error TS2345: Argument of type '(prev: Post[]) => (Post | Post)[]' is not assignable to parameter of type 'SetStateAction<Post[]>'.
+  Type '(prev: Post[]) => (Post | Post)[]' is not assignable to type '(prevState: Post[]) => Post[]'.
+    Type '(Post | Post)[]' is not assignable to type 'Post[]'.
+      Type 'Post | Post' is not assignable to type 'Post'.
+        Type 'Post' is not assignable to type 'import("C:/Users/WiZrd/metoyou/src/contexts/FeedContext").Post'.
+          Types of property 'comments' are incompatible.
+            Type 'Comment[] | undefined' is not assignable to type 'Comment[] | undefined'. Two different types with this name exist, but they are unrelated.
+              Type 'Comment[]' is not assignable to type 'Comment[]'. Two different types with this name exist, but they are unrelated.
+                Type 'Comment' is not assignable to type 'Comment'. Two different types with this name exist, but they are unrelated.
+                  Types of property 'id' are incompatible.
+                    Type 'string' is not assignable to type 'number'.
+src/pages/Feed.tsx(442,21): error TS2719: Type 'Comment[] | undefined' is not assignable to type 'Comment[] | undefined'. Two different types with this name exist, but they are unrelated.
+  Type 'Comment[]' is not assignable to type 'Comment[]'. Two different types with this name exist, but they are unrelated.
+    Type 'Comment' is not assignable to type 'Comment'. Two different types with this name exist, but they are unrelated.
+      Types of property 'id' are incompatible.
+        Type 'number' is not assignable to type 'string'.
+src/pages/Feed.tsx(533,32): error TS2345: Argument of type '(prevPosts: Post[]) => (Post | { comments: (Comment | { id: string; user: { id: string; username: string; }; text: string; likes: number; })[]; id: string | number; author: User; ... 11 more ...; highlighted?: boolean | undefined; })[]' is not assignable to parameter of type 'SetStateAction<Post[]>'.
+  Type '(prevPosts: Post[]) => (Post | { comments: (Comment | { id: string; user: { id: string; username: string; }; text: string; likes: number; })[]; id: string | number; author: User; ... 11 more ...; highlighted?: boolean | undefined; })[]' is not assignable to type '(prevState: Post[]) => Post[]'.
+    Type '(Post | { comments: (Comment | { id: string; user: { id: string; username: string; }; text: string; likes: number; })[]; id: string | number; author: User; authorId?: string | undefined; ... 10 more ...; highlighted?: boolean | undefined; })[]' is not assignable to type 'Post[]'.
+      Type 'Post | { comments: (Comment | { id: string; user: { id: string; username: string; }; text: string; likes: number; })[]; id: string | number; author: User; authorId?: string | undefined; ... 10 more ...; highlighted?: boolean | undefined; }' is not assignable to type 'Post'.
+        Type '{ comments: (Comment | { id: string; user: { id: string; username: string; }; text: string; likes: number; })[]; id: string | number; author: User; authorId?: string; author_id?: string; ... 9 more ...; highlighted?: boolean; }' is not assignable to type 'Post'.
+          Types of property 'comments' are incompatible.
+            Type '(Comment | { id: string; user: { id: string; username: string; }; text: string; likes: number; })[]' is not assignable to type 'Comment[]'.
+              Type 'Comment | { id: string; user: { id: string; username: string; }; text: string; likes: number; }' is not assignable to type 'Comment'.
+                Type '{ id: string; user: { id: string; username: string; }; text: string; likes: number; }' is not assignable to type 'Comment'.
+                  Types of property 'id' are incompatible.
+                    Type 'string' is not assignable to type 'number'.
+src/pages/Messages.tsx(86,19): error TS2322: Type 'string | null | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/pages/Messages.tsx(87,19): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/pages/Notifications.tsx(11,10): error TS6133: 'isLoading' is declared but its value is never read.
+src/pages/Notifications.tsx(24,31): error TS2363: The right-hand side of an arithmetic operation must be of type 'any', 'number', 'bigint' or an enum type.
+src/pages/Profile.tsx(2,10): error TS1484: 'ChangeEvent' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/pages/Profile.tsx(21,7): error TS6133: 'AVAILABLE_INTERESTS' is declared but its value is never read.
+src/pages/Profile.tsx(103,9): error TS6133: 'updateField' is declared but its value is never read.

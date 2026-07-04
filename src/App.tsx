@@ -1,9 +1,14 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import ScrollRestoration from "./lib/ScrollRestoration";
 import { LanguageProvider } from "./contexts/LanguageContext";
+import { VideoProvider } from "./contexts/VideoContext";
+import { ChatProvider } from "./contexts/ChatContext";
+import { FaceToFaceProvider } from "./contexts/FaceToFaceContext";
 
 import Home from "./pages/Home";
 import Feed from "./pages/Feed";
 import Profile from "./pages/Profile";
+import Settings from "./pages/Settings";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Chat from "./pages/Chat";
@@ -15,19 +20,28 @@ import RequireAuth from "./components/RequireAuth";
 function App() {
   return (
     <LanguageProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/feed" element={<RequireAuth><Feed /></RequireAuth>} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
-          <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
-          <Route path="/messages" element={<RequireAuth><Messages /></RequireAuth>} />
-          <Route path="/chat" element={<RequireAuth><Chat /></RequireAuth>} />
-          <Route path="/notifications" element={<RequireAuth><Notifications /></RequireAuth>} />
-          <Route path="/search" element={<RequireAuth><Search /></RequireAuth>} />
-        </Routes>
-      </BrowserRouter>
+      <VideoProvider>
+        <ChatProvider>
+          <FaceToFaceProvider>
+            <BrowserRouter>
+              <ScrollRestoration />
+              <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/feed" element={<RequireAuth><Feed /></RequireAuth>} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<Signup />} />
+              <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
+              <Route path="/profile/:username" element={<RequireAuth><Profile /></RequireAuth>} />
+              <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
+              <Route path="/messages" element={<RequireAuth><Messages /></RequireAuth>} />
+              <Route path="/chat" element={<RequireAuth><Chat /></RequireAuth>} />
+              <Route path="/notifications" element={<RequireAuth><Notifications /></RequireAuth>} />
+              <Route path="/search" element={<RequireAuth><Search /></RequireAuth>} />
+                </Routes>
+            </BrowserRouter>
+          </FaceToFaceProvider>
+        </ChatProvider>
+      </VideoProvider>
     </LanguageProvider>
   );
 }
