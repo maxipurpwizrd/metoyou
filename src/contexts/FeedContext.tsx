@@ -1,17 +1,17 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode, type SetStateAction } from "react";
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getProfile } from "../utils/profileStorage";
 import { fetchPostsFromSupabase, type PostRecord } from "../lib/postApi";
 import { getComments } from "../lib/commentApi";
 import { getPostLikes } from "../lib/likeApi";
 
-type User = {
+export type User = {
   id: string;
   username: string;
   avatar?: string;
 };
 
-type Comment = {
+export type Comment = {
   id: string | number;
   user: User;
   text?: string;
@@ -43,7 +43,7 @@ export type Post = {
 
 type FeedContextValue = {
   posts: Post[];
-  setPosts: (updater: React.SetStateAction<Post[]>) => void;
+  setPosts: (updater: SetStateAction<Post[]>) => void;
   loading: boolean;
   refreshPosts: (force?: boolean) => Promise<void>;
   lastFetchTime: number | null;
@@ -63,15 +63,15 @@ export function useFeed() {
 
 export function FeedProvider({ children }: { children: ReactNode }) {
   const [posts, setPostsState] = useState<Post[]>([]);
-  const [loading, setLoading] = useState(false);
   const [lastFetchTime, setLastFetchTime] = useState<number | null>(null);
   const [savedScrollY, setSavedScrollY] = useState<number>(0);
   const [selectedPostId, setSelectedPostId] = useState<string | number | null>(null);
   const queryClient = useQueryClient();
 
-  const mapRecords = async (records: PostRecord[]) => {
+  const mapRecords = async (records: PostRecord[] | null | undefined) => {
     const profile = getProfile();
-    const mapped = (records || []).map((r: PostRecord) => ({
+    const safeRecords = Array.isArray(records) ? records : [];
+    const mapped = safeRecords.map((r: PostRecord) => ({
       id: r.id,
       author: { id: r.author_id, username: r.profiles?.username ?? r.author_id },
       authorId: r.author_id,
@@ -123,15 +123,15 @@ export function FeedProvider({ children }: { children: ReactNode }) {
     return withMeta;
   };
   // Use react-query to fetch feed; keep local state in sync with query cache
-  const { data: queryData, isFetching, refetch } = useQuery({
+  const { data: queryData, isFetching, refetch } = useQuery<Post[]>({
     queryKey: ["feed"],
     queryFn: async () => {
       const records = await fetchPostsFromSupabase({ limit: 50 });
-      const withMeta = await mapRecords(records || []);
+      const withMeta = await mapRecords(Array.isArray(records) ? (records as PostRecord[]) : []);
       return withMeta;
     },
     staleTime: 5 * 60 * 1000,
-    cacheTime: 1000 * 60 * 30,
+    gcTime: 1000 * 60 * 30,
     refetchOnWindowFocus: false,
   });
 
@@ -168,7 +168,7 @@ export function FeedProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // setPosts wrapper keeps both local state and query cache in sync
-  const setPosts = (updater: React.SetStateAction<Post[]>) => {
+  const setPosts = (updater: SetStateAction<Post[]>) => {
     setPostsState((prev) => {
       const next = typeof updater === "function" ? (updater as any)(prev) : updater;
       try {

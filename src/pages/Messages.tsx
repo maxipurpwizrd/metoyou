@@ -83,8 +83,8 @@ export default function Messages() {
               >
                 <MessageCard
                   name={thread.otherUsername}
-                  message={thread.lastText}
-                  time={thread.lastTime}
+                  message={thread.lastText ?? ""}
+                  time={thread.lastTime ?? ""}
                 />
               </Link>
             ))

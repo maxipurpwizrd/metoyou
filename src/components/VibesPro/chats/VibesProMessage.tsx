@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useRef } from 'react';
 import { motion } from 'framer-motion';
 import type { VibesProMessageProps } from '../types';
 import scrollImage from '../assets/scroll.png';
@@ -6,16 +6,9 @@ import scrollImage from '../assets/scroll.png';
 const MAX_WIDTH = '75vw';
 
 export default function VibesProMessage({ message, isOwn }: VibesProMessageProps) {
-  const [height, setHeight] = useState(0);
   const measureRef = useRef<HTMLDivElement | null>(null);
 
   const text = message?.text ?? '';
-
-  useMemo(() => {
-    if (!measureRef.current) return;
-    const nextHeight = measureRef.current.scrollHeight;
-    setHeight(nextHeight);
-  }, [text]);
 
   return (
     <div style={{ display: 'flex', justifyContent: isOwn ? 'flex-end' : 'flex-start', marginBottom: 12 }}>

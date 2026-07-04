@@ -22,7 +22,6 @@ export default function VibesProProfilePage({
   username,
   portraitUrl,
   badgeLabel = 'Vibes Pro',
-  subtitle,
   hommiesCount = 0,
   isOnline = false,
   isFollowing = false,

@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { startFaceToFace as apiStartFaceToFace, endFaceToFace as apiEndFaceToFace, saveFaceToFace as apiSaveFaceToFace, getFaceToFaceHistory } from "../lib/faceToFaceApi";
+import { startFaceToFace as apiStartFaceToFace, endFaceToFace as apiEndFaceToFace, saveFaceToFace as apiSaveFaceToFace, getFaceToFaceHistory } from "../lib/FaceToFaceApi";
 
 type FaceToFaceSession = {
   id: string;

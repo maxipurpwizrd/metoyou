@@ -1,7 +1,7 @@
 type Props = {
   name: string;
-  message: string;
-  time: string;
+  message?: string | null;
+  time?: string | null;
 };
 
 export default function MessageCard({

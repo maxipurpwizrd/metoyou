@@ -266,6 +266,8 @@ export default function CreatePost({ onPost }: Props) {
 
 
 
+  void handlePost;
+
   const removeImage = () => {
 
     setImage(undefined);
@@ -422,12 +424,6 @@ export default function CreatePost({ onPost }: Props) {
   };
 
 
-
-  const handlePostAndClose = async () => {
-
-    await handlePost();
-
-  };
 
   const handlePostWithAudio = async () => {
 

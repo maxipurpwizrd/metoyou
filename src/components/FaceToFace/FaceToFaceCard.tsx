@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import FaceToFacePlayer from "./FaceToFacePlayer";
-import type { FaceToFaceSession } from "../../lib/faceToFaceApi";
+import type { FaceToFaceSession } from "../../lib/FaceToFaceApi";
 
 type Props = {
   session: FaceToFaceSession;

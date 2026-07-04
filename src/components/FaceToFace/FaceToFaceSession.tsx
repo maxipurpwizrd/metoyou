@@ -1,4 +1,4 @@
-import type { FaceToFaceSession as FaceToFaceSessionType } from "../../lib/faceToFaceApi";
+import type { FaceToFaceSession as FaceToFaceSessionType } from "../../lib/FaceToFaceApi";
 
 type Props = {
   session: FaceToFaceSessionType;

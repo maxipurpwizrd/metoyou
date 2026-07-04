@@ -1,5 +1,4 @@
 import type { VibesProFalconSendProps } from '../types';
-import falconAsset from '../assets/falcon.json';
 
 export default function VibesProFalconSend({ onSend, disabled = false }: VibesProFalconSendProps) {
   return (

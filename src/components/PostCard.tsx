@@ -5,20 +5,7 @@ import { getProfile } from "../utils/profileStorage";
 import { useAutoplayVideo } from "../hooks/useAutoplayVideo";
 import { useAutoplayAudio } from "../hooks/useAutoplayAudio";
 import { useVideoContext } from "../contexts/VideoContext";
-
-type User = {
-  id: string;
-  username: string;
-  avatar?: string;
-};
-
-type Comment = {
-  id: string;
-  user: User;
-  text?: string;
-  voice?: string;
-  likes: number;
-};
+import type { Comment, User } from "../contexts/FeedContext";
 
 type Props = {
   author: User;

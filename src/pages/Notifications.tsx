@@ -8,20 +8,20 @@ export default function Notifications() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (!user || typeof user !== "object" || !("id" in user)) return;
     const userId = (user as any).id as string;
 
-    setIsLoading(true);
     getNotifications(userId)
-      .then((data) => setNotifications(data))
-      .finally(() => setIsLoading(false));
+      .then((data) => setNotifications(data));
   }, [user]);
 
   const getTimeString = (timestamp: string | number) => {
-    const diff = Date.now() - timestamp;
+    const numericTimestamp = typeof timestamp === "string" ? Number(timestamp) : timestamp;
+    if (!Number.isFinite(numericTimestamp)) return "just now";
+
+    const diff = Date.now() - numericTimestamp;
     const minutes = Math.floor(diff / 60000);
     const hours = Math.floor(diff / 3600000);
     const days = Math.floor(diff / 86400000);

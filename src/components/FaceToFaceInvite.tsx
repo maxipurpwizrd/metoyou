@@ -10,7 +10,7 @@ type Props = {
 
 export default function FaceToFaceInvite({ message, isMine = false, onAccept, onDecline }: Props) {
   const inviteName = String(message.sender_id ?? "your partner");
-  const status = String(message.face_to_face_status ?? "pending");
+  const status = String((message as Message & { face_to_face_status?: string | null }).face_to_face_status ?? "pending");
 
   const actionLabel = useMemo(() => {
     if (isMine) {

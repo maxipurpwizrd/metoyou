@@ -84,6 +84,8 @@ export type VibesProActionsProps = {
   onGift?: () => void;
 };
 
+import type { ReactNode } from 'react';
+
 export type VibesProPostsProps = {
   children: ReactNode;
 };

@@ -10,7 +10,6 @@ import { useAuth } from "../hooks/useAuth";
 import type { ProfileData } from "../utils/profileStorage";
 import { useLanguage } from "../contexts/LanguageContext";
 import { normalizeLanguage } from "../lib/i18n";
-import type { AppLanguage as Language } from "../lib/i18n";
 import ImageViewer from "../components/ImageViewer";
 import VibesProProfilePage from "../components/VibesPro/VibesProProfilePage";
 import { Settings2 } from "lucide-react";
