@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLanguage } from "../contexts/LanguageContext";
 import type { AppLanguage } from "../lib/i18n";
@@ -21,18 +21,21 @@ import {
   User,
 } from "lucide-react";
 import { getProfile, saveProfile, type ProfileData } from "../utils/profileStorage";
-import { fetchProfileByUsername, upsertProfileToSupabase } from "../lib/profileApi";
+import { fetchProfileByUsername, upsertProfileToSupabase, uploadProfileImage } from "../lib/profileApi";
 import { logout } from "../lib/auth";
 
 export default function Settings() {
   const initialProfile = getProfile();
   const { language, setLanguage } = useLanguage();
   const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [profile, setProfile] = useState<ProfileData>(initialProfile);
   const [activeModal, setActiveModal] = useState<"name" | "username" | "picture" | "language" | "logout" | null>(null);
   const [name, setName] = useState(initialProfile.firstName ?? initialProfile.username);
   const [username, setUsername] = useState(initialProfile.username);
   const [profilePictureUrl, setProfilePictureUrl] = useState(initialProfile.profilePic ?? "");
+  const [selectedProfilePictureFile, setSelectedProfilePictureFile] = useState<File | null>(null);
+  const [profilePicturePreview, setProfilePicturePreview] = useState<string | null>(null);
   const [selectedTheme, setSelectedTheme] = useState<"black-ice" | "pink-glow">(() => {
     const stored = window.localStorage.getItem("metoyou-theme");
     return stored === "pink-glow" ? "pink-glow" : "black-ice";
@@ -46,9 +49,21 @@ export default function Settings() {
     document.documentElement.dataset.theme = selectedTheme;
   }, [selectedTheme]);
 
+  useEffect(() => {
+    return () => {
+      if (profilePicturePreview?.startsWith("blob:")) {
+        URL.revokeObjectURL(profilePicturePreview);
+      }
+    };
+  }, [profilePicturePreview]);
+
   const openModal = (modal: "name" | "username" | "picture" | "language" | "logout") => {
     setErrorMessage("");
     setStatusMessage("");
+    if (modal !== "picture") {
+      setSelectedProfilePictureFile(null);
+      setProfilePicturePreview(null);
+    }
     setActiveModal(modal);
   };
 
@@ -100,6 +115,41 @@ export default function Settings() {
     }
   };
 
+  const handleProfilePictureFile = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setErrorMessage("Please choose an image file.");
+      return;
+    }
+
+    setErrorMessage("");
+    setSelectedProfilePictureFile(file);
+    setProfilePicturePreview(URL.createObjectURL(file));
+    setStatusMessage("Image ready to save.");
+    event.target.value = "";
+  };
+
+  const handleRemoveProfilePicture = async () => {
+    setErrorMessage("");
+    setStatusMessage("Removing profile picture...");
+    setIsSaving(true);
+
+    try {
+      await saveProfileFields({ profilePic: "" });
+      setProfilePictureUrl("");
+      setSelectedProfilePictureFile(null);
+      setProfilePicturePreview(null);
+      setActiveModal(null);
+    } catch (error) {
+      console.error("Profile picture removal error", error);
+      setErrorMessage("Unable to remove profile picture. Please try again.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleModalSave = async () => {
     if (activeModal === "name") {
       const trimmedName = name.trim();
@@ -133,13 +183,42 @@ export default function Settings() {
     }
 
     if (activeModal === "picture") {
+      if (selectedProfilePictureFile) {
+        setErrorMessage("");
+        setStatusMessage("Uploading profile picture...");
+        setIsSaving(true);
+
+        try {
+          const uploadedUrl = await uploadProfileImage(selectedProfilePictureFile);
+          if (!uploadedUrl) {
+            throw new Error("Image upload failed");
+          }
+
+          await saveProfileFields({ profilePic: uploadedUrl });
+          setProfilePictureUrl(uploadedUrl);
+          setSelectedProfilePictureFile(null);
+          setProfilePicturePreview(null);
+          setActiveModal(null);
+          return;
+        } catch (error) {
+          console.error("Profile picture upload error", error);
+          setErrorMessage("Unable to upload profile picture. Please try again.");
+        } finally {
+          setIsSaving(false);
+        }
+
+        return;
+      }
+
       const trimmedUrl = profilePictureUrl.trim();
       if (!trimmedUrl) {
-        setErrorMessage("Profile picture URL cannot be empty.");
+        setErrorMessage("Please choose an image or enter a profile picture URL.");
         return;
       }
 
       await saveProfileFields({ profilePic: trimmedUrl });
+      setSelectedProfilePictureFile(null);
+      setProfilePicturePreview(null);
       setActiveModal(null);
       return;
     }
@@ -562,15 +641,53 @@ export default function Settings() {
               )}
 
               {activeModal === "picture" && (
-                <label className="grid gap-3 text-slate-700">
-                  <span className="font-semibold">Profile picture URL</span>
+                <div className="grid gap-4 text-slate-700">
                   <input
-                    value={profilePictureUrl}
-                    onChange={(event) => setProfilePictureUrl(event.target.value)}
-                    placeholder="https://..."
-                    className="w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-pink-500"
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleProfilePictureFile}
                   />
-                </label>
+
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full rounded-3xl border border-pink-200 bg-pink-50 px-4 py-3 text-sm font-semibold text-pink-600 transition hover:bg-pink-100"
+                  >
+                    📷 Choose from gallery
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleRemoveProfilePicture}
+                    disabled={isSaving}
+                    className="w-full rounded-3xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    🧹 Remove current photo
+                  </button>
+
+                  {profilePicturePreview && (
+                    <div className="rounded-3xl border border-slate-200 bg-slate-50 p-3">
+                      <p className="mb-2 text-sm font-semibold text-slate-800">Preview</p>
+                      <img
+                        src={profilePicturePreview}
+                        alt="Profile preview"
+                        className="mx-auto h-36 w-36 rounded-3xl object-cover shadow-sm"
+                      />
+                    </div>
+                  )}
+
+                  <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-sm font-semibold text-slate-800">Or use an image URL</p>
+                    <input
+                      value={profilePictureUrl}
+                      onChange={(event) => setProfilePictureUrl(event.target.value)}
+                      placeholder="https://..."
+                      className="mt-3 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-pink-500"
+                    />
+                  </div>
+                </div>
               )}
 
               {activeModal === "language" && (

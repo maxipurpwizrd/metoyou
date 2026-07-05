@@ -1,6 +1,29 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { useAuth } from "../hooks/useAuth";
+import { getUnreadNotificationCount, subscribeToNotifications } from "../lib/notificationApi";
 
 export default function Navbar() {
+  const { user } = useAuth();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!user || typeof user !== "object" || !("id" in user)) return;
+    const userId = (user as any).id as string;
+
+    let channel: ReturnType<typeof subscribeToNotifications> | undefined;
+
+    const refreshUnread = () => {
+      void getUnreadNotificationCount(userId).then((count) => setUnreadCount(count));
+    };
+
+    refreshUnread();
+    channel = subscribeToNotifications(userId, refreshUnread);
+
+    return () => {
+      channel?.unsubscribe();
+    };
+  }, [user]);
   return (
     <div className="fixed top-0 left-0 right-0 z-50 bg-linear-to-br from-blue-100 via-pink-100 to-purple-100 border-b border-white/30 h-20 px-3 sm:px-4">
       <div className="max-w-3xl mx-auto h-full">
@@ -58,9 +81,11 @@ export default function Navbar() {
                 <span aria-hidden>🔔</span>
                 <span className="sr-only">Notifications</span>
 
-                <span className="absolute -top-1 -right-1 bg-pink-500 text-white text-[9px] h-4 w-4 rounded-full flex items-center justify-center font-bold">
-                  2
-                </span>
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-pink-500 text-white text-[9px] min-h-4 min-w-4 px-1 rounded-full flex items-center justify-center font-bold">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                )}
               </Link>
 
             </div>

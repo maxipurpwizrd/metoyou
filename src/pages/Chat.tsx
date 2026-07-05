@@ -1,13 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 import type { RealtimeChannel, User } from "@supabase/supabase-js";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
+import { Mic, Paperclip, Send, Smile, Square, X, Pause, Play } from "lucide-react";
 import ChatBubble from "../components/ChatBubble";
-import FaceToFaceButton from "../components/FaceToFace/FaceToFaceButton";
-import FaceToFaceFloating from "../components/FaceToFace/FaceToFaceFloating";
-import FaceToFaceCard from "../components/FaceToFace/FaceToFaceCard";
 import { VibesProChat } from "../components/VibesPro";
 import type { VibesProMessage as VibesProMessageType } from "../components/VibesPro/types";
-import { useFaceToFace } from "../contexts/FaceToFaceContext";
 import { useAuth } from "../hooks/useAuth";
 import { useChat } from "../contexts/ChatContext";
 import { supabase } from "../lib/supabase";
@@ -31,11 +28,10 @@ type AuthUserWithVibesFlag = (User | null | undefined) & {
 };
 
 export default function Chat() {
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { getCachedMessages, setCachedMessages, addMessageToCache } = useChat();
-  const { activeCall, isCalling, callHistory, startCall } = useFaceToFace();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -44,11 +40,13 @@ export default function Chat() {
   const [isLoading, setIsLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   const subscriptionRef = useRef<RealtimeChannel | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewUrlRef = useRef<string | null>(null);
 
   const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -59,6 +57,7 @@ export default function Chat() {
   const waveRef = useRef<HTMLCanvasElement | null>(null);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const typingTimeoutRef = useRef<number | null>(null);
+  const recordingTimerRef = useRef<number | null>(null);
   const [presenceState, setPresenceState] = useState<Record<string, { last_active?: number; username?: string }>>({});
   const presenceChannelRef = useRef<RealtimeChannel | null>(null);
 
@@ -71,14 +70,24 @@ export default function Chat() {
     (user as AuthUserWithVibesFlag | null | undefined)?.app_metadata?.is_vibes_pro === true;
 
   useEffect(() => {
-    if (!userId || !recipientId) return;
+    if (!userId || !recipientId) {
+      setConversationId(null);
+      return;
+    }
 
     let mounted = true;
     (async () => {
       const conversation = await findOrCreateConversation(userId, recipientId);
-      if (!mounted || !conversation) return;
+      if (!mounted) return;
+
+      if (!conversation) {
+        setConversationId(null);
+        setSendError("We couldn’t open this chat right now. Please try again.");
+        return;
+      }
 
       setConversationId(conversation.id);
+      setSendError(null);
     })();
 
     return () => {
@@ -191,6 +200,10 @@ export default function Chat() {
 
   useEffect(() => {
     return () => {
+      if (recordingTimerRef.current) {
+        window.clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
       if (conversationId && userId) {
         // ensure we announce stop-typing when leaving
         void sendTypingIndicator(conversationId, userId, false);
@@ -199,8 +212,24 @@ export default function Chat() {
   }, [conversationId, userId]);
 
   async function handleSend() {
-    if ((!inputText.trim() && !selectedFile && !audioBlob) || !userId || !recipientId || !conversationId) return;
+    if ((!inputText.trim() && !selectedFile && !audioBlob)) return;
 
+    if (authLoading) {
+      setSendError("Please wait for your account to finish loading.");
+      return;
+    }
+
+    if (!userId || !recipientId) {
+      setSendError("You need to be signed in to send a message.");
+      return;
+    }
+
+    if (!conversationId) {
+      setSendError("This chat is still loading. Please wait a moment and try again.");
+      return;
+    }
+
+    setSendError(null);
     setIsLoading(true);
     setUploadProgress(0);
 
@@ -309,10 +338,23 @@ export default function Chat() {
       setInputText("");
       setPreviewUrl(null);
       setAudioBlob(null);
+      setSendError(null);
+    } else {
+      setMessages((current) => current.filter((msg) => msg.id !== optimisticId));
+      if (optimisticAudioUrl) {
+        URL.revokeObjectURL(optimisticAudioUrl);
+      }
+      setSendError("Your message couldn’t be sent. Please try again.");
     }
   }
 
   const commonEmojis = ["😀", "😂", "❤️", "🔥", "👍", "🎉", "😍", "🤔", "😎", "💀", "🙏", "😢"];
+
+  function formatRecordingTime(seconds: number) {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  }
 
   function handleEmojiClick(emoji: string) {
     setInputText((prev) => prev + emoji);
@@ -390,6 +432,13 @@ export default function Chat() {
       };
       recorder.start();
       mediaRecorderRef.current = recorder;
+      setRecordingDuration(0);
+      if (recordingTimerRef.current) {
+        window.clearInterval(recordingTimerRef.current);
+      }
+      recordingTimerRef.current = window.setInterval(() => {
+        setRecordingDuration((prev) => prev + 1);
+      }, 1000);
       setIsRecording(true);
     } catch (err) {
       console.error(err);
@@ -398,6 +447,10 @@ export default function Chat() {
   }
 
   function stopRecording() {
+    if (recordingTimerRef.current) {
+      window.clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
     mediaRecorderRef.current?.stop();
     try {
       mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
@@ -418,6 +471,7 @@ export default function Chat() {
     }
     setAudioPreviewUrl(null);
     setAudioBlob(null);
+    setRecordingDuration(0);
     setIsPlaying(false);
     if (audioRef.current) {
       audioRef.current.pause();
@@ -579,8 +633,6 @@ export default function Chat() {
 
   return (
     <div className="min-h-screen bg-linear-to-br from-slate-800 via-slate-700 to-blue-900 flex flex-col relative overflow-hidden">
-      <FaceToFaceFloating />
-      
       {/* Paw Print Background */}
       <svg
         className="absolute inset-0 w-full h-full opacity-15 pointer-events-none"
@@ -683,7 +735,6 @@ export default function Chat() {
 
             {/* Call Buttons */}
             <div className="ml-auto flex items-center gap-2">
-              <FaceToFaceButton onClick={() => void startCall()} />
               <button
                 onClick={() => alert(`Starting audio call with ${recipientName}`)}
                 title="Audio call"
@@ -708,20 +759,6 @@ export default function Chat() {
       {/* Messages Container */}
       <div className="flex-1 overflow-y-auto pt-28 md:pt-32 pb-28 md:pb-32 px-3 md:px-6">
         <div className="max-w-xl mx-auto">
-
-          {activeCall && isCalling ? (
-            <div className="mb-4 rounded-3xl border border-cyan-400/20 bg-cyan-500/10 p-3 text-cyan-100 text-sm">
-              In FaceToFace call · started at {new Date(activeCall.started_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-            </div>
-          ) : null}
-
-          {callHistory.length > 0 ? (
-            <div className="space-y-4 mb-4">
-              {callHistory.slice(0, 2).map((session) => (
-                <FaceToFaceCard key={session.id} session={session} />
-              ))}
-            </div>
-          ) : null}
 
           {/* Messages */}
           {recipientId ? (
@@ -759,7 +796,7 @@ export default function Chat() {
                 className="h-9 w-9 rounded-full bg-white/5 text-white flex items-center justify-center"
                 aria-label={isPlaying ? "Pause preview" : "Play preview"}
               >
-                {isPlaying ? "⏸" : "▶"}
+                {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
               </button>
 
               <div className="flex-1">
@@ -770,9 +807,10 @@ export default function Chat() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={clearRecording}
-                  className="h-8 px-3 rounded-md bg-slate-900/60 text-white"
+                  className="h-8 w-8 rounded-full bg-slate-900/60 text-white flex items-center justify-center"
+                  aria-label="Remove voice note"
                 >
-                  ✕
+                  <X className="h-4 w-4" />
                 </button>
               </div>
 
@@ -786,7 +824,7 @@ export default function Chat() {
                 <img
                   src={previewUrl}
                   alt={selectedFile.name}
-                  className="w-full max-h-[200px] object-contain bg-slate-950"
+                  className="w-full max-h-50 object-contain bg-slate-950"
                 />
                 <button
                   type="button"
@@ -798,7 +836,7 @@ export default function Chat() {
                     setSelectedFile(null);
                     setPreviewUrl(null);
                   }}
-                  className="absolute top-3 right-3 h-9 w-9 rounded-full bg-slate-900/80 text-white shadow-lg hover:bg-slate-800 transition"
+                  className="absolute top-3 right-3 h-9 w-9 rounded-full bg-slate-900/80 text-white shadow-lg hover:bg-slate-800 transition shrink-0"
                 >
                   ✕
                 </button>
@@ -817,98 +855,110 @@ export default function Chat() {
             </div>
           ) : null}
 
-            <div className="bg-white/5 backdrop-blur-3xl border border-white/10 rounded-3xl md:rounded-4xl p-2 md:p-4 shadow-2xl flex gap-1 md:gap-2 items-center">
+          <div className="bg-white/5 backdrop-blur-3xl border border-white/10 rounded-3xl md:rounded-4xl p-2 md:p-4 shadow-2xl">
+            {sendError ? (
+              <div className="mb-2 rounded-2xl border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+                {sendError}
+              </div>
+            ) : null}
 
-            {/* Attachment Button */}
-            <button
-              onClick={handleAttachmentClick}
-              className="text-lg md:text-xl hover:scale-110 transition flex-shrink-0 text-white"
-              title="Add attachment"
-            >
-              📎
-            </button>
+            <div className="flex gap-1 md:gap-2 items-center">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleAttachmentClick}
+                  className="h-10 w-10 rounded-full bg-white/10 text-white hover:bg-white/20 transition flex items-center justify-center shrink-0"
+                  title="Add attachment"
+                >
+                  <Paperclip className="h-4 w-4" />
+                </button>
 
-            {isRecording ? (
+                {isRecording ? (
+                  <button
+                    onClick={stopRecording}
+                    className="h-10 w-10 rounded-full bg-red-500 text-white shadow-lg shadow-red-500/30 animate-pulse flex items-center justify-center shrink-0"
+                    title="Stop recording"
+                  >
+                    <Square className="h-4 w-4" />
+                  </button>
+                ) : (
+                  <button
+                    onClick={startRecording}
+                    className="h-10 w-10 rounded-full bg-white/10 text-white hover:bg-white/20 transition flex items-center justify-center shrink-0"
+                    title="Start recording"
+                  >
+                    <Mic className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex-1">
+                {isRecording ? (
+                  <div className="mb-2 flex items-center gap-2 rounded-full bg-red-500/15 px-3 py-1.5 text-xs font-medium text-red-200 border border-red-400/30 w-fit">
+                    <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+                    <span>Recording • {formatRecordingTime(recordingDuration)}</span>
+                  </div>
+                ) : null}
+                <input
+                  type="text"
+                  placeholder="Type a message..."
+                  value={inputText}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setInputText(val);
+                    if (!conversationId || !userId) return;
+                    void sendTypingIndicator(conversationId, userId, true);
+                    if (typingTimeoutRef.current) window.clearTimeout(typingTimeoutRef.current);
+                    typingTimeoutRef.current = window.setTimeout(() => {
+                      void sendTypingIndicator(conversationId!, userId!, false);
+                      typingTimeoutRef.current = null;
+                    }, 1200) as unknown as number;
+                  }}
+                  onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                  className="w-full bg-transparent outline-none text-white placeholder-white/40 text-sm md:text-base px-2"
+                />
+              </div>
+
+              <div className="relative shrink-0">
+                <button
+                  onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                  className="h-10 w-10 rounded-full bg-white/10 text-white hover:bg-white/20 transition flex items-center justify-center"
+                  title="Add emoji"
+                >
+                  <Smile className="h-4 w-4" />
+                </button>
+
+                {showEmojiPicker && (
+                  <div className="absolute bottom-full right-0 mb-2 bg-slate-800/95 backdrop-blur-xl border border-white/20 rounded-2xl p-2 md:p-3 shadow-xl grid grid-cols-6 gap-1 md:gap-2 w-44 md:w-48 z-50">
+                    {commonEmojis.map((emoji) => (
+                      <button
+                        key={emoji}
+                        onClick={() => handleEmojiClick(emoji)}
+                        className="text-lg md:text-xl hover:scale-125 transition cursor-pointer"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <button
-                onClick={stopRecording}
-                className="text-lg transition text-red-400 animate-pulse flex-shrink-0"
-                title="Stop recording"
+                onClick={handleSend}
+                disabled={isLoading || authLoading || !userId || !recipientId || !conversationId || (!inputText.trim() && !selectedFile && !audioBlob)}
+                className="bg-linear-to-r from-cyan-500 to-blue-600 text-white h-10 w-10 md:w-auto md:px-4 rounded-full md:rounded-2xl font-bold shadow-lg hover:scale-105 transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex items-center justify-center shrink-0 text-sm md:text-base active:scale-95"
               >
-                ⏹
+                {isLoading ? (
+                  <span className="hidden md:inline">Uploading... {uploadProgress}%</span>
+                ) : (
+                  <span className="hidden md:inline">Send</span>
+                )}
+                {isLoading ? (
+                  <span className="md:hidden">{uploadProgress}%</span>
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
               </button>
-            ) : (
-              <button
-                onClick={startRecording}
-                className="text-lg transition text-white flex-shrink-0"
-                title="Start recording"
-              >
-                🎤
-              </button>
-            )}
-
-            <input
-              type="text"
-              placeholder="Type a message..."
-              value={inputText}
-              onChange={(e) => {
-                const val = e.target.value;
-                setInputText(val);
-                if (!conversationId || !userId) return;
-                void sendTypingIndicator(conversationId, userId, true);
-                if (typingTimeoutRef.current) window.clearTimeout(typingTimeoutRef.current);
-                typingTimeoutRef.current = window.setTimeout(() => {
-                  void sendTypingIndicator(conversationId!, userId!, false);
-                  typingTimeoutRef.current = null;
-                }, 1200) as unknown as number;
-              }}
-              onKeyPress={(e) => e.key === "Enter" && handleSend()}
-              className="flex-1 bg-transparent outline-none text-white placeholder-white/40 text-sm md:text-base px-2"
-            />
-
-            {/* Emoji Button */}
-            <div className="relative flex-shrink-0">
-              <button
-                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                className="text-lg md:text-xl hover:scale-110 transition text-white"
-                title="Add emoji"
-              >
-                😊
-              </button>
-
-              {/* Emoji Picker Popup */}
-              {showEmojiPicker && (
-                <div className="absolute bottom-full right-0 mb-2 bg-slate-800/95 backdrop-blur-xl border border-white/20 rounded-2xl p-2 md:p-3 shadow-xl grid grid-cols-6 gap-1 md:gap-2 w-44 md:w-48 z-50">
-                  {commonEmojis.map((emoji) => (
-                    <button
-                      key={emoji}
-                      onClick={() => handleEmojiClick(emoji)}
-                      className="text-lg md:text-xl hover:scale-125 transition cursor-pointer"
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
-
-            {/* Send Button */}
-            <button
-              onClick={handleSend}
-              disabled={isLoading || (!inputText.trim() && !selectedFile && !audioBlob)}
-              className="bg-linear-to-r from-cyan-500 to-blue-600 text-white px-3 md:px-5 py-2 rounded-2xl font-bold shadow-lg hover:scale-105 transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex-shrink-0 text-sm md:text-base active:scale-95"
-            >
-              {isLoading ? (
-                <span className="hidden md:inline">Uploading... {uploadProgress}%</span>
-              ) : (
-                <span className="hidden md:inline">Send 🚀</span>
-              )}
-              {isLoading ? (
-                <span className="md:hidden">Uploading... {uploadProgress}%</span>
-              ) : (
-                <span className="md:hidden">🚀</span>
-              )}
-            </button>
-
           </div>
         </div>
       </div>

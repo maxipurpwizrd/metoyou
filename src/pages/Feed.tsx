@@ -21,6 +21,8 @@ type Story = {
   duration: string;
   expiresAt: number;
   reactions?: { [emoji: string]: string[] };
+  viewedAt?: number;
+  profilePic?: string;
 };
 
 export default function Feed() {
@@ -30,7 +32,8 @@ export default function Feed() {
   const audioChunksRef = useRef<Blob[]>([]);
 
   const [selectedStory, setSelectedStory] = useState<Story | null>(null);
-
+  const [selectedStoryIndex, setSelectedStoryIndex] = useState<number | null>(null);
+  const [storyProgress, setStoryProgress] = useState(0);
 
   const [savedPosts, setSavedPosts] = useState<string[]>(() => {
     const saved = localStorage.getItem("metoyou-saved-posts");
@@ -52,6 +55,8 @@ export default function Feed() {
   const [currentTime, setCurrentTime] = useState<number>(() => Date.now());
   const [userReactions, setUserReactions] = useState<{ [storyId: number]: string | null }>({});
   const { posts, setPosts, savedScrollY, setSavedScrollY, selectedPostId, setSelectedPostId } = useFeed();
+  const suppressAutoCloseRef = useRef(false);
+  const autoCloseTimeoutRef = useRef<number | null>(null);
 
   const [stories, setStories] = useState<Story[]>(() => {
     const savedStories = localStorage.getItem("metoyou-stories");
@@ -121,12 +126,81 @@ export default function Feed() {
     return () => clearInterval(interval);
   }, []);
 
+  const setAutoCloseSuppressed = (isSuppressed: boolean) => {
+    suppressAutoCloseRef.current = isSuppressed;
+
+    if (autoCloseTimeoutRef.current) {
+      window.clearTimeout(autoCloseTimeoutRef.current);
+      autoCloseTimeoutRef.current = null;
+    }
+
+    if (isSuppressed) {
+      autoCloseTimeoutRef.current = window.setTimeout(() => {
+        suppressAutoCloseRef.current = false;
+        autoCloseTimeoutRef.current = null;
+      }, 700);
+    }
+  };
+
+  const openStoryAtIndex = (index: number) => {
+    const story = stories[index];
+    if (!story) return;
+
+    setSelectedStory(story);
+    setSelectedStoryIndex(index);
+    setStoryProgress(0);
+
+    setStories((prevStories) =>
+      prevStories.map((item) => (item.id === story.id ? { ...item, viewedAt: Date.now() } : item))
+    );
+  };
+
+  const goToNextStory = () => {
+    if (selectedStoryIndex === null) return;
+    const nextIndex = (selectedStoryIndex + 1) % stories.length;
+    openStoryAtIndex(nextIndex);
+  };
+
+  const goToPreviousStory = () => {
+    if (selectedStoryIndex === null) return;
+    const previousIndex = (selectedStoryIndex - 1 + stories.length) % stories.length;
+    openStoryAtIndex(previousIndex);
+  };
+
+  useEffect(() => {
+    if (!selectedStory || selectedStoryIndex === null) return;
+
+    setStoryProgress(0);
+    const progressInterval = window.setInterval(() => {
+      setStoryProgress((prev) => {
+        const next = prev + 100 / 50;
+        return next >= 100 ? 100 : next;
+      });
+    }, 100);
+
+    const advanceTimer = window.setTimeout(() => {
+      goToNextStory();
+    }, 5000);
+
+    return () => {
+      window.clearInterval(progressInterval);
+      window.clearTimeout(advanceTimer);
+    };
+  }, [selectedStory?.id, selectedStoryIndex]);
+
   useEffect(() => {
     const handleScroll = () => {
+      if (suppressAutoCloseRef.current) return;
       setSelectedPostId(null);
     };
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      if (autoCloseTimeoutRef.current) {
+        window.clearTimeout(autoCloseTimeoutRef.current);
+      }
+    };
   }, [setSelectedPostId]);
 
   const updatePostById = (postId: string | number, patch: Partial<Post>) => {
@@ -325,16 +399,20 @@ export default function Feed() {
   const handleCreateStory = () => {
     if (!selectedImage) return;
 
+    const profile = getProfile();
+    const displayName = profile?.username || "Maxi";
+
     setStories((prevStories) => [
       {
         id: Date.now(),
-        name: "Maxi",
+        name: displayName,
         text: storyText,
         music: storyMusic,
         voice: storyVoice,
         image: selectedImage,
         duration: `${storyDuration}h`,
         expiresAt: Date.now() + storyDuration * 60 * 60 * 1000,
+        profilePic: profile?.profilePic ?? undefined,
       },
       ...prevStories,
     ]);
@@ -450,7 +528,7 @@ export default function Feed() {
           <button
             type="button"
             onClick={handleStoryClick}
-            className="min-w-[82px] h-[120px] md:min-w-[110px] md:h-[160px] shrink-0 bg-white/80 backdrop-blur-xs border-2 border-dashed border-pink-300 text-pink-500 shadow-md flex flex-col items-center justify-center hover:scale-[1.02] active:scale-95 transition-all snap-start"
+            className="min-w-[92px] h-[132px] md:min-w-[122px] md:h-[176px] shrink-0 bg-white/80 backdrop-blur-xs border-2 border-dashed border-pink-300 text-pink-500 shadow-md flex flex-col items-center justify-center hover:scale-[1.02] active:scale-95 transition-all snap-start"
             style={{ borderRadius: "50% 50% 28% 28% / 18% 18% 70% 70%" }}
           >
             <span className="text-2xl md:text-3xl font-light mb-0.5 md:mb-1">+</span>
@@ -458,11 +536,11 @@ export default function Feed() {
           </button>
 
           {/* Render Active Stories */}
-          {stories.map((story) => (
+          {stories.map((story, index) => (
             <div
               key={story.id}
-              onClick={() => setSelectedStory(story)}
-              className="min-w-[82px] h-[120px] md:min-w-[110px] md:h-[160px] shrink-0 relative overflow-hidden shadow-md text-white cursor-pointer hover:scale-[1.02] transition-transform snap-start"
+              onClick={() => openStoryAtIndex(index)}
+              className={`min-w-[92px] h-[132px] md:min-w-[122px] md:h-[176px] shrink-0 relative overflow-hidden shadow-md text-white cursor-pointer hover:scale-[1.02] transition-transform snap-start ${story.viewedAt ? 'opacity-70 ring-1 ring-white/20' : ''}`}
               style={{ borderRadius: "50% 50% 28% 28% / 18% 18% 70% 70%" }}
             >
               {story.image ? (
@@ -492,8 +570,6 @@ export default function Feed() {
         {/* Dynamic Post Interaction Container */}
         <div
           onClick={() => selectedPostId !== null && setSelectedPostId(null)}
-          onWheel={() => setSelectedPostId(null)}
-          onTouchMove={() => setSelectedPostId(null)}
           className={`space-y-4 transition-all duration-300 ${selectedPostId !== null ? "relative z-10" : ""}`}
         >
           {selectedPostId !== null && (
@@ -609,6 +685,7 @@ export default function Feed() {
                         )
                       );
                     }}
+                    onInteractionActivity={setAutoCloseSuppressed}
                     audio={post.audio}
                     highlighted={Boolean(post.highlighted)}
                     uploadState={post.uploadState}
@@ -624,9 +701,7 @@ export default function Feed() {
                       const profile = getProfile();
                       if (!profile) return;
 
-                      const added = await addComment(String(post.id), profile.id, comment.text);
-                      if (!added) return;
-
+                      const added = await addComment(String(post.id), profile.id, comment.text, comment.voice);
                       setPosts((prevPosts) =>
                         prevPosts.map((p) =>
                           p.id === post.id
@@ -635,9 +710,10 @@ export default function Feed() {
                                 comments: [
                                   ...(p.comments || []),
                                   {
-                                    id: added.id,
-                                    user: { id: added.author_id, username: added.profiles?.username ?? added.author_id },
-                                    text: added.text ?? "",
+                                    id: added?.id ?? Date.now(),
+                                    user: { id: profile.id, username: profile.username ?? profile.id },
+                                    text: added?.text ?? comment.text ?? "",
+                                    voice: comment.voice,
                                     likes: 0,
                                   },
                                 ],
@@ -692,21 +768,31 @@ export default function Feed() {
         <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <button
             type="button"
-            onClick={() => setSelectedStory(null)}
+            onClick={() => {
+              setSelectedStory(null);
+              setSelectedStoryIndex(null);
+              setStoryProgress(0);
+            }}
             className="absolute top-5 right-5 text-white/70 hover:text-white text-3xl font-light transition-colors z-50"
           >
             ✕
           </button>
 
           <div className="w-full max-w-sm h-[85vh] rounded-2xl overflow-hidden relative shadow-2xl bg-slate-900">
-            {/* Contextual Story Progress Ticker */}
-            <div className="absolute top-0 left-0 right-0 h-1 bg-white/20 z-50">
-              <div
-                className="h-full bg-white transition-all duration-1000 ease-linear"
-                style={{
-                  width: `${Math.max(0, ((selectedStory.expiresAt - currentTime) / (selectedStory.expiresAt - (selectedStory.expiresAt - (parseInt(selectedStory.duration) * 60 * 60 * 1000)))) * 100)}%`,
-                }}
-              ></div>
+            <div className="absolute inset-x-0 top-0 z-50 flex gap-1.5 p-2">
+              {stories.map((_, index) => (
+                <div key={index} className="h-1 flex-1 overflow-hidden rounded-full bg-white/20">
+                  <div
+                    className="h-full bg-white transition-all duration-100 ease-linear"
+                    style={{ width: `${index < (selectedStoryIndex ?? 0) ? 100 : index === (selectedStoryIndex ?? 0) ? storyProgress : 0}%` }}
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div className="absolute inset-0 z-40 flex">
+              <button type="button" className="h-full w-1/2" aria-label="Previous story" onClick={goToPreviousStory} />
+              <button type="button" className="h-full w-1/2" aria-label="Next story" onClick={goToNextStory} />
             </div>
 
             {selectedStory.image ? (
@@ -726,11 +812,10 @@ export default function Feed() {
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/40"></div>
 
             <div className="absolute bottom-6 left-0 right-0 text-center text-white px-4 space-y-3">
-              <p className="text-xs text-white/70">⏳ {getTimeLeft(selectedStory.expiresAt)}</p>
-
-              {selectedStory.music && (
-                <p className="text-xs bg-black/30 inline-block px-3 py-1 rounded-full text-purple-200">🎵 {selectedStory.music}</p>
-              )}
+              <div className="flex items-center justify-center gap-2 text-xs text-white/70">
+                <span className="rounded-full bg-black/30 px-2 py-1">⏳ {getTimeLeft(selectedStory.expiresAt)}</span>
+                {selectedStory.music && <span className="rounded-full bg-black/30 px-2 py-1">🎵 {selectedStory.music}</span>}
+              </div>
 
               {selectedStory.voice && (
                 <div className="mx-auto max-w-xs">
@@ -747,9 +832,8 @@ export default function Feed() {
                 <p className="text-sm font-medium px-4 text-white/90">{selectedStory.text}</p>
               )}
 
-              {/* Reaction Pill Container */}
               <div className="pt-2 flex gap-1.5 justify-center">
-                {["❤️", "😂", "🔥", "😮", "👏"].map((emoji) => {
+                {['❤️', '😂', '🔥', '😮', '👏'].map((emoji) => {
                   const count = selectedStory.reactions?.[emoji]?.length || 0;
                   const isUserReacted = userReactions[selectedStory.id] === emoji;
                   return (
@@ -758,11 +842,11 @@ export default function Feed() {
                       onClick={() => handleReaction(selectedStory.id, emoji)}
                       className={`px-2.5 py-1 rounded-full text-xs transition-all ${
                         isUserReacted
-                          ? "bg-white text-slate-900 scale-105 font-bold shadow-md"
-                          : "bg-white/10 text-white hover:bg-white/20"
+                          ? 'bg-white text-slate-900 scale-105 font-bold shadow-md'
+                          : 'bg-white/10 text-white hover:bg-white/20'
                       }`}
                     >
-                      {emoji} <span className="text-[10px] opacity-90">{count > 0 ? count : ""}</span>
+                      {emoji} <span className="text-[10px] opacity-90">{count > 0 ? count : ''}</span>
                     </button>
                   );
                 })}

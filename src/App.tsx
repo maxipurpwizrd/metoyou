@@ -3,7 +3,6 @@ import ScrollRestoration from "./lib/ScrollRestoration";
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { VideoProvider } from "./contexts/VideoContext";
 import { ChatProvider } from "./contexts/ChatContext";
-import { FaceToFaceProvider } from "./contexts/FaceToFaceContext";
 
 import Home from "./pages/Home";
 import Feed from "./pages/Feed";
@@ -22,9 +21,8 @@ function App() {
     <LanguageProvider>
       <VideoProvider>
         <ChatProvider>
-          <FaceToFaceProvider>
-            <BrowserRouter>
-              <ScrollRestoration />
+          <BrowserRouter>
+            <ScrollRestoration />
               <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/feed" element={<RequireAuth><Feed /></RequireAuth>} />
@@ -39,7 +37,6 @@ function App() {
               <Route path="/search" element={<RequireAuth><Search /></RequireAuth>} />
                 </Routes>
             </BrowserRouter>
-          </FaceToFaceProvider>
         </ChatProvider>
       </VideoProvider>
     </LanguageProvider>

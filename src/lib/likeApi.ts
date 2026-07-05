@@ -9,6 +9,16 @@ export type PostLikeRecord = {
 
 export async function likePost(postId: string, userId: string) {
   try {
+    const { data: existingLike, error: existingLikeError } = await supabase
+      .from("post_likes")
+      .select("id")
+      .eq("post_id", postId)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (existingLikeError) throw existingLikeError;
+    if (existingLike) return existingLike as PostLikeRecord;
+
     const insert = {
       post_id: postId,
       user_id: userId,
@@ -18,7 +28,26 @@ export async function likePost(postId: string, userId: string) {
     const { data, error } = await supabase.from("post_likes").insert(insert).select("id, post_id, user_id, created_at").maybeSingle();
     if (error) throw error;
 
-    // Optionally update posts.likes_count using a count query
+    const { data: postData, error: postError } = await supabase.from("posts").select("author_id").eq("id", postId).maybeSingle();
+    if (postError) throw postError;
+
+    const authorId = postData?.author_id;
+    if (authorId && authorId !== userId) {
+      const { data: actorData, error: actorError } = await supabase.from("profiles").select("username").eq("id", userId).maybeSingle();
+      if (!actorError) {
+        const actorUsername = actorData?.username ?? "Someone";
+        await supabase.from("notifications").insert({
+          type: "like",
+          message: `${actorUsername} liked your post`,
+          target_id: postId,
+          actor_id: userId,
+          user_id: authorId,
+          created_at: new Date().toISOString(),
+          is_read: false,
+        });
+      }
+    }
+
     return (data as PostLikeRecord) ?? null;
   } catch (e) {
     console.error("likePost error", e);

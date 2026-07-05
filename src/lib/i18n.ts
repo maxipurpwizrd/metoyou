@@ -109,7 +109,7 @@ export const translations: Record<AppLanguage, Record<string, string>> = {
     "chat.typeMessage": "Type a message...",
     "chat.audioCall": "Audio call",
     "chat.videoCall": "Video call",
-    "chat.inCall": "In FaceToFace call · started at {time}",
+    "chat.inCall": "In call · started at {time}",
     // Create Post
     "createPost.title": "Create Post",
     "createPost.postingToYourFeed": "Posting to your feed",
@@ -245,7 +245,7 @@ export const translations: Record<AppLanguage, Record<string, string>> = {
     "chat.typeMessage": "Type a message...",
     "chat.audioCall": "Audio call",
     "chat.videoCall": "Video call",
-    "chat.inCall": "In FaceToFace call · started at {time}",
+    "chat.inCall": "In call · started at {time}",
     // Create Post
     "createPost.title": "Create Post",
     "createPost.postingToYourFeed": "Posting to your feed",
@@ -381,7 +381,7 @@ export const translations: Record<AppLanguage, Record<string, string>> = {
     "chat.typeMessage": "Tapez un message...",
     "chat.audioCall": "Appel audio",
     "chat.videoCall": "Appel vidéo",
-    "chat.inCall": "En appel FaceToFace · commencé à {time}",
+    "chat.inCall": "En appel · commencé à {time}",
     // Create Post
     "createPost.title": "Créer une publication",
     "createPost.postingToYourFeed": "Publication sur votre fil",

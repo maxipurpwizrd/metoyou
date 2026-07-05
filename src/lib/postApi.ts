@@ -117,6 +117,7 @@ export async function savePostToSupabase(payload: {
 export async function fetchPostsFromSupabase(options?: {
   limit?: number;
   before?: string;
+  after?: string;
   author_id?: string;
 }) {
   try {
@@ -132,6 +133,10 @@ export async function fetchPostsFromSupabase(options?: {
 
     if (options?.before) {
       builder = builder.lt("created_at", options.before);
+    }
+
+    if (options?.after) {
+      builder = builder.gt("created_at", options.after);
     }
 
     if (options?.author_id) {

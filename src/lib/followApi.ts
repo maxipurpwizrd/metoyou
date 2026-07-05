@@ -71,9 +71,18 @@ export async function followUser(
     });
     if (followError) throw followError;
 
-    const message = `${actorUsername} followed you`;
+    const { data: mutualFollowData, error: mutualFollowError } = await supabase
+      .from("followers")
+      .select("id")
+      .match({ follower_id: targetId, following_id: viewerId })
+      .maybeSingle();
+
+    if (mutualFollowError) throw mutualFollowError;
+
+    const notificationType = mutualFollowData ? "follow_back" : "follow";
+    const message = mutualFollowData ? `${actorUsername} followed you back` : `${actorUsername} followed you`;
     const { error: notificationError } = await supabase.from("notifications").insert({
-      type: "follow",
+      type: notificationType,
       message,
       target_id: targetId,
       actor_id: viewerId,

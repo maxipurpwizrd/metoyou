@@ -1,4 +1,4 @@
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import type { ChangeEvent } from "react";
 import { useState, useEffect, useRef } from "react";
 import { getProfile, saveProfile } from "../utils/profileStorage";
@@ -31,6 +31,7 @@ type ProfilePost = {
 export default function Profile() {
   const { setLanguage } = useLanguage();
   const params = useParams();
+  const navigate = useNavigate();
   const routeUsername = params.username;
 
   const [profile, setProfile] = useState<ProfileData>(() => getProfile());
@@ -231,9 +232,14 @@ export default function Profile() {
     setFollowLoading(false);
   };
 
+  const handleMessage = () => {
+    if (!profile?.id || viewingOwn) return;
+    navigate(`/chat?recipient=${profile.id}&username=${encodeURIComponent(profile.username)}`);
+  };
+
   return (
-    <div className={`min-h-screen bg-linear-to-br from-pink-100 via-purple-100 to-blue-100 ${isVibesPro ? 'px-0 pt-0 pb-20 md:pb-24' : 'p-3 md:p-6 pt-24 md:pt-32 pb-20 md:pb-24'}`}>
-      <div className="max-w-2xl mx-auto">
+    <div className={`min-h-screen bg-linear-to-br from-pink-100 via-purple-100 to-blue-100 ${isVibesPro ? 'px-0 pt-0 pb-0' : 'p-3 md:p-6 pt-24 md:pt-32 pb-20 md:pb-24'}`}>
+      <div className={`mx-auto ${isVibesPro ? 'w-full max-w-none' : 'max-w-2xl'}`}>
         {!isVibesPro && (
           <div className="flex items-center justify-between mb-6 md:mb-8 relative">
             <h1 className="text-2xl md:text-4xl font-black bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 bg-clip-text text-transparent absolute left-1/2 -translate-x-1/2">
@@ -267,9 +273,7 @@ export default function Profile() {
               followLabel={followLabel}
               viewingOwn={viewingOwn}
               onFollow={handleFollowToggle}
-              onMessage={() => {
-                /* placeholder for message action */
-              }}
+              onMessage={handleMessage}
             />
           </div>
         ) : (

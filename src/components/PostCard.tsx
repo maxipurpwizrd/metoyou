@@ -43,6 +43,7 @@ type Props = {
   onDeleteComment?: (commentId: number) => void;
   onEditComment?: (commentId: number, newText: string) => void;
   onLikeComment?: (commentId: number) => void;
+  onInteractionActivity?: (isActive: boolean) => void;
 };
 
 export default function PostCard({
@@ -77,6 +78,7 @@ export default function PostCard({
   onDeleteComment,
   onEditComment,
   onLikeComment,
+  onInteractionActivity,
 }: Props) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -94,12 +96,24 @@ export default function PostCard({
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingText, setEditingText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const MAX_RECORDING_SECONDS = 60;
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const waveCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const recordingTimerRef = useRef<number | null>(null);
+  const recordingTimeoutRef = useRef<number | null>(null);
+  const activeVoiceUrlRef = useRef<string | null>(null);
 
   // Video autoplay state
   const [isMuted, setIsMuted] = useState(true);
+  const [mediaReady, setMediaReady] = useState(false);
+  const [mediaErrored, setMediaErrored] = useState(false);
   const { playingVideoId, setPlayingVideoId } = useVideoContext();
 
   const videoElementId = `video_${postId}`;
@@ -154,25 +168,197 @@ export default function PostCard({
     return () => window.clearTimeout(timeout);
   }, [location.pathname]);
 
-  const startRecording = async () => {
+  useEffect(() => {
+    if (isRecording || !voiceComment) return;
+    void drawWaveformFromUrl(voiceComment);
+  }, [voiceComment, isRecording]);
+
+  useEffect(() => {
+    if (!image && !video) {
+      setMediaReady(true);
+      return;
+    }
+
+    setMediaReady(false);
+    setMediaErrored(false);
+  }, [image, video]);
+
+  useEffect(() => {
+    return () => {
+      if (recordingTimerRef.current) {
+        window.clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+      if (recordingTimeoutRef.current) {
+        window.clearTimeout(recordingTimeoutRef.current);
+        recordingTimeoutRef.current = null;
+      }
+      stopWaveformVisualization();
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+      if (activeVoiceUrlRef.current) {
+        URL.revokeObjectURL(activeVoiceUrlRef.current);
+      }
+    };
+  }, []);
+
+  const stopWaveformVisualization = () => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+
+    if (audioContextRef.current) {
+      void audioContextRef.current.close().catch(() => undefined);
+      audioContextRef.current = null;
+    }
+
+    analyserRef.current = null;
+
+    if (waveCanvasRef.current) {
+      const canvasCtx = waveCanvasRef.current.getContext("2d");
+      if (canvasCtx) {
+        canvasCtx.clearRect(0, 0, waveCanvasRef.current.width, waveCanvasRef.current.height);
+      }
+    }
+  };
+
+  const startWaveformVisualization = (stream: MediaStream) => {
+    const AudioContextCtor = window.AudioContext || (window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextCtor) return;
+
+    const audioContext = new AudioContextCtor();
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+
+    const source = audioContext.createMediaStreamSource(stream);
+    source.connect(analyser);
+
+    audioContextRef.current = audioContext;
+    analyserRef.current = analyser;
+
+    const drawWaveform = () => {
+      const canvas = waveCanvasRef.current;
+      const currentAnalyser = analyserRef.current;
+      if (!canvas || !currentAnalyser) return;
+
+      const canvasCtx = canvas.getContext("2d");
+      if (!canvasCtx) return;
+
+      const width = (canvas.width = canvas.clientWidth || 240);
+      const height = (canvas.height = 40);
+      const dataArray = new Uint8Array(currentAnalyser.frequencyBinCount);
+
+      currentAnalyser.getByteFrequencyData(dataArray);
+      canvasCtx.clearRect(0, 0, width, height);
+      canvasCtx.fillStyle = "rgba(148, 163, 184, 0.2)";
+      for (let i = 0; i < width; i += 1) {
+        const value = dataArray[i * Math.max(1, Math.floor(dataArray.length / width))] ?? 0;
+        const barHeight = Math.max(3, (value / 255) * (height - 8));
+        const y = (height - barHeight) / 2;
+        canvasCtx.fillRect(i, y, 1, barHeight);
+      }
+
+      animationFrameRef.current = window.requestAnimationFrame(drawWaveform);
+    };
+
+    drawWaveform();
+  };
+
+  const drawWaveformFromUrl = async (audioUrl: string) => {
+    const canvas = waveCanvasRef.current;
+    if (!canvas) return;
+
+    try {
+      const response = await fetch(audioUrl);
+      const arrayBuffer = await response.arrayBuffer();
+      const AudioContextCtor = window.AudioContext || (window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextCtor) return;
+
+      const audioContext = new AudioContextCtor();
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+      const rawData = audioBuffer.getChannelData(0);
+      const canvasCtx = canvas.getContext("2d");
+      if (!canvasCtx) return;
+
+      const width = (canvas.width = canvas.clientWidth || 240);
+      const height = (canvas.height = 40);
+      canvasCtx.clearRect(0, 0, width, height);
+      canvasCtx.fillStyle = "rgba(148, 163, 184, 0.2)";
+      const blockSize = Math.max(1, Math.floor(rawData.length / width));
+      for (let i = 0; i < width; i += 1) {
+        let sum = 0;
+        const start = i * blockSize;
+        for (let j = 0; j < blockSize; j += 1) {
+          sum += Math.abs(rawData[start + j] ?? 0);
+        }
+        const avg = sum / blockSize;
+        const barHeight = Math.max(3, avg * height * 2);
+        const y = (height - barHeight) / 2;
+        canvasCtx.fillRect(i, y, 1, barHeight);
+      }
+
+      await audioContext.close();
+    } catch {
+      const canvasCtx = canvas.getContext("2d");
+      if (canvasCtx) {
+        canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    }
+  };
+
+  const formatRecordingDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60).toString().padStart(2, "0");
+    const secs = (seconds % 60).toString().padStart(2, "0");
+    return `${mins}:${secs}`;
+  };
+
+  const startRecording = async (replaceExisting = false) => {
+    if (!replaceExisting && voiceComment) {
+      alert("Only one voice comment can be attached at a time.");
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream);
 
       mediaRecorderRef.current = recorder;
+      mediaStreamRef.current = stream;
       chunksRef.current = [];
 
       recorder.ondataavailable = (e) => {
-        chunksRef.current.push(e.data);
+        if (e.data.size > 0) {
+          chunksRef.current.push(e.data);
+        }
       };
 
       recorder.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: "audio/webm" });
         const audioUrl = URL.createObjectURL(blob);
+        if (activeVoiceUrlRef.current) {
+          URL.revokeObjectURL(activeVoiceUrlRef.current);
+        }
+        activeVoiceUrlRef.current = audioUrl;
         setVoiceComment(audioUrl);
       };
 
+      if (recordingTimerRef.current) {
+        window.clearInterval(recordingTimerRef.current);
+      }
+      if (recordingTimeoutRef.current) {
+        window.clearTimeout(recordingTimeoutRef.current);
+      }
+      setRecordingDuration(0);
+      recordingTimerRef.current = window.setInterval(() => {
+        setRecordingDuration((current) => current + 1);
+      }, 1000);
+      recordingTimeoutRef.current = window.setTimeout(() => {
+        stopRecording();
+      }, MAX_RECORDING_SECONDS * 1000);
+
       recorder.start();
+      startWaveformVisualization(stream);
       setIsRecording(true);
     } catch {
       alert("Microphone permission denied.");
@@ -180,15 +366,46 @@ export default function PostCard({
   };
 
   const stopRecording = () => {
-    mediaRecorderRef.current?.stop();
-    setIsRecording(false);
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+      if (recordingTimerRef.current) {
+        window.clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+      if (recordingTimeoutRef.current) {
+        window.clearTimeout(recordingTimeoutRef.current);
+        recordingTimeoutRef.current = null;
+      }
+      stopWaveformVisualization();
+      setIsRecording(false);
+    }
+  };
+
+  const retryRecording = async () => {
+    if (isRecording) return;
+    if (activeVoiceUrlRef.current) {
+      URL.revokeObjectURL(activeVoiceUrlRef.current);
+      activeVoiceUrlRef.current = null;
+    }
+    setVoiceComment(undefined);
+    await startRecording(true);
+  };
+
+  const removeVoiceComment = () => {
+    if (activeVoiceUrlRef.current) {
+      URL.revokeObjectURL(activeVoiceUrlRef.current);
+      activeVoiceUrlRef.current = null;
+    }
+    setVoiceComment(undefined);
   };
 
   return (
     <div
-      className={`bg-white/70 backdrop-blur-sm border border-white/40 rounded-[28px] shadow-sm p-4 mb-4 transition-all duration-300 ${
+      className={`bg-white/70 backdrop-blur-sm border border-white/40 rounded-[28px] shadow-sm p-5 md:p-6 mb-4 transition-all duration-300 ${
         isSelected ? "shadow-lg ring-1 ring-purple-200/50" : "hover:bg-white/80"
-      } md:backdrop-blur-md md:rounded-3xl md:shadow-xs md:p-5`}
+      } md:backdrop-blur-md md:rounded-3xl md:shadow-xs md:p-7`}
     >
       <div className="transition-all duration-300" style={{ opacity: uploadState === "uploading" ? 0.6 : 1 }}>
       {/* Header Container */}
@@ -425,6 +642,12 @@ export default function PostCard({
             <div className="flex md:flex-col gap-3 md:gap-3.5">
               {/* LEFT: Media Container (45% on mobile, full width on desktop) */}
               <div className="w-[45%] md:w-full shrink-0 rounded-2xl bg-linear-to-br from-pink-100 via-purple-100 to-blue-100 flex items-center justify-center overflow-hidden relative shadow-inner border border-white/20">
+                {!mediaReady && !mediaErrored && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-white/60 backdrop-blur-sm">
+                    <div className="h-8 w-8 animate-spin rounded-full border-2 border-pink-300 border-t-transparent" />
+                  </div>
+                )}
+
                 {video ? (
                   <>
                     <video
@@ -432,7 +655,13 @@ export default function PostCard({
                       src={video}
                       muted={isMuted}
                       playsInline
+                      preload="metadata"
                       className="w-full h-full object-contain bg-black/5"
+                      onLoadedData={() => setMediaReady(true)}
+                      onError={() => {
+                        setMediaReady(true);
+                        setMediaErrored(true);
+                      }}
                     />
                     <button
                       type="button"
@@ -450,7 +679,13 @@ export default function PostCard({
                   <img
                     src={image}
                     alt={`${author.username}'s post`}
+                    loading="lazy"
                     className="w-full h-full object-contain bg-black/5 cursor-pointer active:scale-98 transition-transform"
+                    onLoad={() => setMediaReady(true)}
+                    onError={() => {
+                      setMediaReady(true);
+                      setMediaErrored(true);
+                    }}
                     onClick={(e) => {
                       e.stopPropagation();
                       setViewerIndex(0);
@@ -475,9 +710,9 @@ export default function PostCard({
 
               {/* RIGHT: Caption & Interactions (55% on mobile, full width on desktop) */}
               <div className="w-[55%] md:w-full flex flex-col justify-between">
-                <p className="text-xs md:text-sm font-medium text-slate-700 leading-relaxed whitespace-pre-wrap line-clamp-4 md:line-clamp-none">
+                <div className="max-h-24 md:max-h-32 overflow-y-auto pr-1 text-sm md:text-[15px] font-medium text-slate-700 leading-relaxed whitespace-pre-wrap break-words">
                   {text}
-                </p>
+                </div>
 
                 {audio && !image && !video && (
                   <div className="mt-2 rounded-xl border border-white/40 bg-white/60 p-2 shadow-sm">
@@ -557,7 +792,16 @@ export default function PostCard({
 
       {/* Inline Comments Section Extension */}
       {isSelected && (
-        <div className="mt-4 pt-4 border-t border-slate-200/60 space-y-4">
+        <div
+          className="mt-4 pt-4 border-t border-slate-200/60 space-y-4"
+          onTouchStart={() => onInteractionActivity?.(true)}
+          onTouchMove={() => onInteractionActivity?.(true)}
+          onTouchEnd={() => onInteractionActivity?.(false)}
+          onTouchCancel={() => onInteractionActivity?.(false)}
+          onWheel={() => onInteractionActivity?.(true)}
+          onPointerDown={() => onInteractionActivity?.(true)}
+          onPointerUp={() => onInteractionActivity?.(false)}
+        >
           <h4 className="font-bold text-sm text-slate-800 px-0.5">Comments</h4>
 
           {/* Comments List Scroll Tray */}
@@ -655,11 +899,19 @@ export default function PostCard({
                 onChange={(e) => setNewComment(e.target.value)}
                 placeholder="Write a comment..."
                 className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs outline-none focus:border-pink-300 transition-colors placeholder:text-slate-400"
+                onFocus={() => onInteractionActivity?.(true)}
+                onBlur={() => onInteractionActivity?.(false)}
               />
 
               <button
                 type="button"
-                onClick={isRecording ? stopRecording : startRecording}
+                onClick={() => {
+                  if (isRecording) {
+                    stopRecording();
+                  } else {
+                    void startRecording();
+                  }
+                }}
                 className={`w-8 h-8 shrink-0 rounded-xl font-bold text-xs flex items-center justify-center shadow-2xs transition-colors ${
                   isRecording ? "bg-red-500 text-white animate-pulse" : "bg-blue-50 text-blue-600 hover:bg-blue-100"
                 }`}
@@ -687,9 +939,48 @@ export default function PostCard({
               </button>
             </div>
 
-            {voiceComment && (
+            {isRecording && (
               <div className="pt-1.5 border-t border-slate-200/50">
-                <audio controls src={voiceComment} className="w-full h-6 opacity-90" />
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
+                    <span className="text-[11px] font-semibold text-red-600">Recording voice comment</span>
+                    <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">
+                      {formatRecordingDuration(recordingDuration)} / 01:00
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={stopRecording}
+                    className="rounded-full bg-red-500 px-2.5 py-1 text-[10px] font-semibold text-white"
+                  >
+                    ⏹ Stop
+                  </button>
+                </div>
+                <canvas ref={waveCanvasRef} className="mt-2 h-8 w-full rounded-xl bg-slate-900/90" />
+              </div>
+            )}
+
+            {voiceComment && !isRecording && (
+              <div className="pt-1.5 border-t border-slate-200/50">
+                <div className="flex items-center gap-2">
+                  <audio controls src={voiceComment} className="h-6 flex-1 opacity-90" />
+                  <button
+                    type="button"
+                    onClick={retryRecording}
+                    className="rounded-full border border-pink-300 bg-white px-2.5 py-1 text-[10px] font-semibold text-pink-600"
+                  >
+                    Retry
+                  </button>
+                  <button
+                    type="button"
+                    onClick={removeVoiceComment}
+                    className="rounded-full bg-slate-200 px-2 py-1 text-[10px] font-semibold text-slate-600"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <canvas ref={waveCanvasRef} className="mt-2 h-8 w-full rounded-xl bg-slate-900/90" />
               </div>
             )}
           </div>

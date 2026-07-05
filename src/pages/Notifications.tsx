@@ -2,7 +2,7 @@ import Navbar from "../components/Navbar";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { getNotifications, type Notification } from "../lib/notificationApi";
+import { getNotifications, markNotificationsRead, subscribeToNotifications, type Notification } from "../lib/notificationApi";
 
 export default function Notifications() {
   const navigate = useNavigate();
@@ -13,8 +13,19 @@ export default function Notifications() {
     if (!user || typeof user !== "object" || !("id" in user)) return;
     const userId = (user as any).id as string;
 
-    getNotifications(userId)
-      .then((data) => setNotifications(data));
+    let channel: ReturnType<typeof subscribeToNotifications> | undefined;
+
+    const refreshNotifications = () => {
+      void getNotifications(userId).then((data) => setNotifications(data));
+    };
+
+    refreshNotifications();
+    void markNotificationsRead(userId);
+    channel = subscribeToNotifications(userId, refreshNotifications);
+
+    return () => {
+      channel?.unsubscribe();
+    };
   }, [user]);
 
   const getTimeString = (timestamp: string | number) => {
@@ -41,6 +52,8 @@ export default function Notifications() {
         return "👀";
       case "follow":
         return "👤";
+      case "follow_back":
+        return "🤝";
       default:
         return "📢";
     }

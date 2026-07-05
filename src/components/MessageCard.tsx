@@ -2,49 +2,49 @@ type Props = {
   name: string;
   message?: string | null;
   time?: string | null;
+  unread?: boolean;
 };
 
 export default function MessageCard({
   name,
   message,
   time,
+  unread = false,
 }: Props) {
   return (
-    <div className="bg-white/20 backdrop-blur-3xl border border-white/30 rounded-[28px] px-4 py-3 shadow-sm hover:bg-white/30 transition cursor-pointer">
-
+    <div className={`rounded-[28px] border px-4 py-3 shadow-sm transition cursor-pointer backdrop-blur-3xl ${unread ? "bg-white/35 border-white/50 shadow-lg shadow-fuchsia-200/20" : "bg-white/20 border-white/30 hover:bg-white/30"}`}>
       <div className="flex items-center justify-between gap-3">
-
         <div className="flex items-center gap-3 min-w-0">
-
-          {/* Avatar */}
-          <div className="grid place-items-center w-10 h-10 rounded-[20px] bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 text-white font-bold text-sm shrink-0">
+          <div className="grid place-items-center w-11 h-11 rounded-[20px] bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 text-white font-bold text-sm shrink-0 shadow-md">
             {name.charAt(0)}
           </div>
 
-          {/* User Info */}
           <div className="min-w-0">
-            <h3 className="font-semibold text-sm text-slate-900 truncate">
-              {name}
-            </h3>
+            <div className="flex items-center gap-2">
+              <h3 className={`font-semibold text-sm truncate ${unread ? "text-slate-950" : "text-slate-900"}`}>
+                {name}
+              </h3>
+              {unread ? (
+                <span className="rounded-full bg-fuchsia-500 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-white">
+                  new
+                </span>
+              ) : null}
+            </div>
 
-            <p className="text-xs text-slate-600 truncate mt-1">
-              {message}
+            <p className={`text-xs truncate mt-1 ${unread ? "text-slate-700" : "text-slate-600"}`}>
+              {message || "Start a conversation"}
             </p>
           </div>
-
         </div>
 
-        {/* Time */}
         <div className="text-right flex flex-col items-end gap-2">
-          <p className="text-[10px] text-slate-500 whitespace-nowrap">
+          <p className={`text-[10px] whitespace-nowrap ${unread ? "text-slate-800 font-semibold" : "text-slate-500"}`}>
             {time}
           </p>
 
-          <div className="w-2.5 h-2.5 rounded-full bg-green-500"></div>
+          <div className={`h-2.5 w-2.5 rounded-full ${unread ? "bg-fuchsia-500" : "bg-emerald-500"}`} />
         </div>
-
       </div>
-
     </div>
   );
 }

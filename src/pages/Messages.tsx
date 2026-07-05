@@ -15,12 +15,19 @@ export default function Messages() {
 
     setIsLoading(true);
     getMessageThreads(userId)
-      .then((data) => setThreads(data))
+      .then((data) => {
+        const sorted = [...data].sort((a, b) => {
+          const aTime = a.lastTime ? new Date(a.lastTime).getTime() : 0;
+          const bTime = b.lastTime ? new Date(b.lastTime).getTime() : 0;
+          return bTime - aTime;
+        });
+        setThreads(sorted);
+      })
       .finally(() => setIsLoading(false));
   }, [user]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 p-6 pb-24">
+    <div className="min-h-screen bg-linear-to-br from-pink-100 via-purple-100 to-blue-100 p-6 pb-24">
 
       <div className="max-w-xl mx-auto">
 
@@ -85,6 +92,7 @@ export default function Messages() {
                   name={thread.otherUsername}
                   message={thread.lastText ?? ""}
                   time={thread.lastTime ?? ""}
+                  unread={Boolean(thread.lastText) && Boolean(thread.lastTime)}
                 />
               </Link>
             ))

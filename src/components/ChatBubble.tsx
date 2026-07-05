@@ -53,6 +53,9 @@ export default function ChatBubble({ message, mine = false }: Props) {
   const [currentTime, setCurrentTime] = useState(0);
   const [showReactions, setShowReactions] = useState(false);
   const [reactions, setReactions] = useState<Record<string, string[]>>(message.reactions ?? {});
+  const bubbleWrapperRef = useRef<HTMLDivElement | null>(null);
+  const reactionTrayRef = useRef<HTMLDivElement | null>(null);
+  const holdTimerRef = useRef<number | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
@@ -60,6 +63,10 @@ export default function ChatBubble({ message, mine = false }: Props) {
 
   useEffect(() => {
     return () => {
+      if (holdTimerRef.current) {
+        window.clearTimeout(holdTimerRef.current);
+        holdTimerRef.current = null;
+      }
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       try {
         sourceRef.current?.disconnect();
@@ -70,6 +77,21 @@ export default function ChatBubble({ message, mine = false }: Props) {
       }
     };
   }, []);
+
+  useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      const isInsideBubble = bubbleWrapperRef.current?.contains(target);
+      const isInsideTray = reactionTrayRef.current?.contains(target);
+
+      if (showReactions && (!isInsideBubble || (isInsideBubble && !isInsideTray))) {
+        setShowReactions(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [showReactions]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -139,7 +161,24 @@ export default function ChatBubble({ message, mine = false }: Props) {
     rafRef.current = requestAnimationFrame(drawWave);
   }
 
+  function startReactionHold() {
+    if (holdTimerRef.current) {
+      window.clearTimeout(holdTimerRef.current);
+    }
+    holdTimerRef.current = window.setTimeout(() => {
+      setShowReactions(true);
+    }, 260);
+  }
+
+  function cancelReactionHold() {
+    if (holdTimerRef.current) {
+      window.clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+  }
+
   function handleReact(emoji: string) {
+    cancelReactionHold();
     setReactions((prev) => {
       const next: Record<string, string[]> = {};
       let currentReaction: string | null = null;
@@ -199,9 +238,12 @@ export default function ChatBubble({ message, mine = false }: Props) {
     <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
       <div className={`max-w-[75%] mb-2 text-sm ${mine ? "text-right" : "text-left"}`}>
         <div
+          ref={bubbleWrapperRef}
           className={`${bubbleBase} inline-block px-4 py-4`}
-          onTouchStart={() => setShowReactions((prev) => !prev)}
-          onClick={() => setShowReactions((prev) => !prev)}
+          onPointerDown={startReactionHold}
+          onPointerUp={cancelReactionHold}
+          onPointerLeave={cancelReactionHold}
+          onPointerCancel={cancelReactionHold}
         >
           <div className="flex flex-col gap-3">
             {hasText && (
@@ -263,9 +305,21 @@ export default function ChatBubble({ message, mine = false }: Props) {
           </div>
 
           {showReactions && (
-            <div className="mt-2 flex flex-wrap gap-2 rounded-2xl bg-slate-900/90 px-2 py-2 shadow-lg">
+            <div
+              ref={reactionTrayRef}
+              className="mt-2 flex flex-wrap items-center gap-2 rounded-full border border-white/10 bg-slate-900/95 px-2.5 py-2 shadow-[0_12px_35px_rgba(15,23,42,0.4)] backdrop-blur-xl"
+            >
               {['❤️','😂','🔥','😭','👍'].map((emoji) => (
-                <button key={emoji} onClick={() => handleReact(emoji)} className="text-lg hover:scale-125 transition active:scale-110">
+                <button
+                  key={emoji}
+                  type="button"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    handleReact(emoji);
+                  }}
+                  className="flex h-9 w-9 items-center justify-center rounded-full text-lg transition duration-200 ease-out hover:scale-125 hover:bg-white/10 active:scale-110"
+                >
                   {emoji}
                 </button>
               ))}
@@ -274,7 +328,7 @@ export default function ChatBubble({ message, mine = false }: Props) {
 
           <div className="mt-2 flex flex-wrap gap-1">
             {Object.entries(reactions).map(([emoji, users]) => (
-              <span key={emoji} className="rounded-full bg-white/20 px-2 py-1 text-[11px]">
+              <span key={emoji} className="rounded-full bg-white/20 px-2.5 py-1 text-[11px] font-medium shadow-sm">
                 {emoji} {users.length}
               </span>
             ))}

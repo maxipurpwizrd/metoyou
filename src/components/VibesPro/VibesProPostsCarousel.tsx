@@ -3,9 +3,10 @@ import type { VibesProPostType } from './types';
 
 type VibesProPostsCarouselProps = {
   posts: VibesProPostType[];
+  onPostSelect?: (post: VibesProPostType) => void;
 };
 
-export default function VibesProPostsCarousel({ posts }: VibesProPostsCarouselProps) {
+export default function VibesProPostsCarousel({ posts, onPostSelect }: VibesProPostsCarouselProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
 
@@ -35,16 +36,25 @@ export default function VibesProPostsCarousel({ posts }: VibesProPostsCarouselPr
   }, [posts]);
 
   return (
-    <section className="w-full bg-[#050509] px-3 py-2 sm:px-4">
+    <section className="flex h-full w-full flex-col justify-start bg-[#050509] px-3 py-2 sm:px-4">
       <div
         ref={containerRef}
-        className="flex gap-3 md:gap-4 overflow-x-auto pb-2 scrollbar-none snap-x snap-mandatory scroll-smooth"
+        className="flex flex-1 gap-3 overflow-x-auto pb-1 scrollbar-none snap-x snap-mandatory scroll-smooth md:gap-4"
         aria-label="Vibes Pro posts carousel"
       >
         {posts.map((post) => (
           <article
             key={post.id}
-            className="w-[26vw] h-[26vh] md:w-[180px] md:h-[190px] shrink-0 snap-start overflow-hidden rounded-2xl border border-amber-600/20 bg-slate-900 text-white shadow-lg relative"
+            role="button"
+            tabIndex={0}
+            onClick={() => onPostSelect?.(post)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onPostSelect?.(post);
+              }
+            }}
+            className="h-[24vh] w-[28vw] shrink-0 snap-start overflow-hidden rounded-2xl border border-amber-600/20 bg-slate-900 text-white shadow-lg relative cursor-pointer transition hover:-translate-y-1 hover:shadow-amber-400/20 md:h-45 md:w-45"
           >
             {post.mediaUrl ? (
               <img src={post.mediaUrl} alt={post.title ?? 'Vibes Pro post'} className="h-full w-full object-cover" />
@@ -76,21 +86,28 @@ export default function VibesProPostsCarousel({ posts }: VibesProPostsCarouselPr
         ))}
       </div>
 
-      <div className="mt-3 flex items-center justify-center gap-2">
-        {posts.map((_, i) => (
-          <button
-            key={i}
-            type="button"
-            aria-label={`Go to post ${i + 1}`}
-            onClick={() => {
-              const el = containerRef.current;
-              if (!el) return;
-              const child = el.children[i] as HTMLElement | undefined;
-              if (child) el.scrollTo({ left: child.offsetLeft - 12, behavior: 'smooth' });
-            }}
-            className={`w-2 h-2 rounded-full ${i === activeIndex ? 'bg-amber-400' : 'bg-white/30'}`}
-          />
-        ))}
+      <div className="mt-2 flex flex-col items-center justify-center gap-2 pb-1">
+        <div className="flex items-center justify-center gap-2">
+          {posts.map((_, i) => (
+            <button
+              key={i}
+              type="button"
+              aria-label={`Go to post ${i + 1}`}
+              onClick={() => {
+                const el = containerRef.current;
+                if (!el) return;
+                const child = el.children[i] as HTMLElement | undefined;
+                if (child) el.scrollTo({ left: child.offsetLeft - 12, behavior: 'smooth' });
+              }}
+              className={`h-2 w-2 rounded-full ${i === activeIndex ? 'bg-amber-400' : 'bg-white/30'}`}
+            />
+          ))}
+        </div>
+
+        <div className="text-center">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-amber-300">VibesPro</p>
+          <p className="text-[11px] text-white/70">This is a premium user</p>
+        </div>
       </div>
     </section>
   );

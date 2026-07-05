@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { uploadVideo, type UploadProgress } from "../lib/videoApi";
 
@@ -24,6 +24,8 @@ export default function CreatePost({ onPost }: Props) {
 
   const [isRecording, setIsRecording] = useState(false);
 
+  const [recordingDuration, setRecordingDuration] = useState(0);
+
   const [isUploading, setIsUploading] = useState(false);
 
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -46,9 +48,21 @@ export default function CreatePost({ onPost }: Props) {
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
 
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+
   const audioChunksRef = useRef<Blob[]>([]);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const waveCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  const audioContextRef = useRef<AudioContext | null>(null);
+
+  const analyserRef = useRef<AnalyserNode | null>(null);
+
+  const animationFrameRef = useRef<number | null>(null);
+
+  const recordingTimerRef = useRef<number | null>(null);
 
 
 
@@ -344,9 +358,88 @@ export default function CreatePost({ onPost }: Props) {
 
   };
 
-  const startRecording = async () => {
+  const stopWaveformVisualization = () => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
 
-    if (audio) {
+    if (audioContextRef.current) {
+      void audioContextRef.current.close().catch(() => undefined);
+      audioContextRef.current = null;
+    }
+
+    analyserRef.current = null;
+
+    if (waveCanvasRef.current) {
+      const canvasCtx = waveCanvasRef.current.getContext("2d");
+      if (canvasCtx) {
+        canvasCtx.clearRect(0, 0, waveCanvasRef.current.width, waveCanvasRef.current.height);
+      }
+    }
+  };
+
+  const startWaveformVisualization = (stream: MediaStream) => {
+    const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+
+    if (!AudioContextCtor) {
+      return;
+    }
+
+    const audioContext = new AudioContextCtor();
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+
+    const source = audioContext.createMediaStreamSource(stream);
+    source.connect(analyser);
+
+    audioContextRef.current = audioContext;
+    analyserRef.current = analyser;
+
+    const drawWaveform = () => {
+      const canvas = waveCanvasRef.current;
+      const currentAnalyser = analyserRef.current;
+
+      if (!canvas || !currentAnalyser) {
+        return;
+      }
+
+      const canvasCtx = canvas.getContext("2d");
+      if (!canvasCtx) {
+        return;
+      }
+
+      const width = (canvas.width = canvas.clientWidth || 240);
+      const height = (canvas.height = 48);
+      const dataArray = new Uint8Array(currentAnalyser.frequencyBinCount);
+
+      currentAnalyser.getByteFrequencyData(dataArray);
+
+      canvasCtx.clearRect(0, 0, width, height);
+      canvasCtx.fillStyle = "rgba(255, 255, 255, 0.16)";
+      canvasCtx.strokeStyle = "#f43f5e";
+      canvasCtx.lineWidth = 2;
+      canvasCtx.beginPath();
+
+      const step = Math.max(1, Math.floor(dataArray.length / width));
+      for (let i = 0; i < width; i += 1) {
+        const value = dataArray[i * step] ?? 0;
+        const barHeight = Math.max(3, (value / 255) * (height - 8));
+        const x = i;
+        const y = height / 2 - barHeight / 2;
+        canvasCtx.fillRect(x, y, 1, barHeight);
+      }
+
+      canvasCtx.stroke();
+      animationFrameRef.current = window.requestAnimationFrame(drawWaveform);
+    };
+
+    drawWaveform();
+  };
+
+  const startRecording = async (replaceExisting = false) => {
+
+    if (!replaceExisting && audio) {
       alert("Only one audio attachment is allowed per post.");
       return;
     }
@@ -358,7 +451,7 @@ export default function CreatePost({ onPost }: Props) {
       const recorder = new MediaRecorder(stream);
 
       mediaRecorderRef.current = recorder;
-
+      mediaStreamRef.current = stream;
       audioChunksRef.current = [];
 
       recorder.ondataavailable = (e) => {
@@ -377,8 +470,17 @@ export default function CreatePost({ onPost }: Props) {
 
       };
 
-      recorder.start();
+      if (recordingTimerRef.current) {
+        window.clearInterval(recordingTimerRef.current);
+      }
 
+      setRecordingDuration(0);
+      recordingTimerRef.current = window.setInterval(() => {
+        setRecordingDuration((current) => current + 1);
+      }, 1000);
+
+      recorder.start();
+      startWaveformVisualization(stream);
       setIsRecording(true);
 
     } catch (err) {
@@ -395,8 +497,13 @@ export default function CreatePost({ onPost }: Props) {
 
       mediaRecorderRef.current.stop();
 
-      mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop());
-
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+      if (recordingTimerRef.current) {
+        window.clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+      stopWaveformVisualization();
       setIsRecording(false);
 
     }
@@ -416,6 +523,32 @@ export default function CreatePost({ onPost }: Props) {
   };
 
 
+
+  const retryRecording = async () => {
+    if (isRecording) return;
+
+    removeAudio();
+    await startRecording(true);
+  };
+
+  const formatRecordingDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+      .toString()
+      .padStart(2, "0");
+    const secs = (seconds % 60).toString().padStart(2, "0");
+    return `${mins}:${secs}`;
+  };
+
+  useEffect(() => {
+    return () => {
+      if (recordingTimerRef.current) {
+        window.clearInterval(recordingTimerRef.current);
+      }
+      stopWaveformVisualization();
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    };
+  }, []);
 
   const closeComposer = () => {
 
@@ -615,6 +748,20 @@ export default function CreatePost({ onPost }: Props) {
 
               type="button"
 
+              onClick={retryRecording}
+
+              className="rounded-full border border-pink-300 bg-white/80 px-2.5 py-1 text-xs font-semibold text-pink-600 shadow-sm transition hover:bg-pink-50"
+
+            >
+
+              Retry
+
+            </button>
+
+            <button
+
+              type="button"
+
               onClick={removeAudio}
 
               className="bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 transition shadow-lg text-sm font-bold shrink-0"
@@ -777,9 +924,39 @@ export default function CreatePost({ onPost }: Props) {
 
         {isRecording && (
 
-          <div className="mb-4 p-3 bg-red-100 border border-red-300 rounded-2xl text-center animate-pulse">
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-2xl">
 
-            <p className="text-sm font-semibold text-red-700">🔴 Recording in progress...</p>
+            <div className="flex items-center justify-between gap-3">
+
+              <div className="flex items-center gap-2">
+
+                <span className="inline-flex h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
+
+                <p className="text-sm font-semibold text-red-700">Recording in progress...</p>
+
+                <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
+                  {formatRecordingDuration(recordingDuration)}
+                </span>
+
+              </div>
+
+              <button
+
+                type="button"
+
+                onClick={stopRecording}
+
+                className="rounded-full bg-red-500 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-600"
+
+              >
+
+                ⏹ Stop
+
+              </button>
+
+            </div>
+
+            <canvas ref={waveCanvasRef} className="mt-3 h-10 w-full rounded-xl bg-slate-900/90" />
 
           </div>
 
@@ -881,9 +1058,15 @@ export default function CreatePost({ onPost }: Props) {
 
               type="button"
 
-              onClick={isRecording ? stopRecording : startRecording}
+              onClick={() => {
+                if (isRecording) {
+                  stopRecording();
+                } else {
+                  void startRecording();
+                }
+              }}
 
-              disabled={Boolean(audio) || isRecording}
+              disabled={Boolean(audio) && !isRecording}
 
               className={`w-11 h-11 rounded-xl shadow-md flex items-center justify-center text-xl hover:scale-105 transition ${
 
@@ -893,13 +1076,13 @@ export default function CreatePost({ onPost }: Props) {
 
                   : "bg-white"
 
-              } ${Boolean(audio) ? "opacity-50 cursor-not-allowed" : ""}`}
+              } ${Boolean(audio) && !isRecording ? "opacity-50 cursor-not-allowed" : ""}`}
 
               title={isRecording ? "Stop recording" : "Record voice"}
 
             >
 
-              🎤
+              {isRecording ? "⏹" : "🎤"}
 
             </button>
 

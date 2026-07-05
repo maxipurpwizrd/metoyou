@@ -138,7 +138,6 @@ type SendMessageParams = {
   audioUrl?: string;
   videoUrl?: string;
   messageType?: string;
-  metadata?: Record<string, unknown>;
 };
 
 export async function sendMessage({
@@ -149,7 +148,6 @@ export async function sendMessage({
   audioUrl,
   videoUrl,
   messageType,
-  metadata,
 }: SendMessageParams): Promise<Message | null> {
   try {
     const { data, error } = await supabase
@@ -162,7 +160,6 @@ export async function sendMessage({
         audio_url: audioUrl ?? null,
         video_url: videoUrl ?? null,
         message_type: messageType ?? null,
-        metadata: metadata ?? null,
       })
       .select()
       .single();
@@ -174,104 +171,6 @@ export async function sendMessage({
     console.error("sendMessage error", e);
     return null;
   }
-}
-
-export async function sendFaceToFaceInvite({
-  conversationId,
-  senderId,
-  recipientName,
-}: {
-  conversationId: string;
-  senderId: string;
-  recipientName: string;
-}): Promise<Message | null> {
-  const inviteId = `fft-invite-${Date.now()}`;
-  return sendMessage({
-    conversationId,
-    senderId,
-    text: `FaceToFace invitation to ${recipientName}`,
-    messageType: "facetoface_invite",
-    metadata: {
-      invite_id: inviteId,
-      recipientName,
-      status: "pending",
-    },
-  });
-}
-
-export async function sendFaceToFaceSessionCard({
-  conversationId,
-  senderId,
-  title,
-  startedAt,
-  endedAt,
-  duration,
-  inviteMessageId,
-}: {
-  conversationId: string;
-  senderId: string;
-  title: string;
-  startedAt: number;
-  endedAt: number;
-  duration: number;
-  inviteMessageId?: string;
-}): Promise<Message | null> {
-  return sendMessage({
-    conversationId,
-    senderId,
-    text: `Saved FaceToFace session: ${title}`,
-    messageType: "facetoface_card",
-    metadata: {
-      title,
-      started_at: startedAt,
-      ended_at: endedAt,
-      duration,
-      invite_message_id: inviteMessageId,
-      saved: true,
-    },
-  });
-}
-
-export async function sendFaceToFaceAccepted({
-  conversationId,
-  senderId,
-  inviteMessageId,
-}: {
-  conversationId: string;
-  senderId: string;
-  inviteMessageId?: string;
-}): Promise<Message | null> {
-  return sendMessage({
-    conversationId,
-    senderId,
-    text: "FaceToFace accepted",
-    messageType: "facetoface_status",
-    metadata: {
-      status: "accepted",
-      invite_message_id: inviteMessageId,
-    },
-  });
-}
-
-export async function sendFaceToFaceDeclined({
-  conversationId,
-  senderId,
-  inviteMessageId,
-}: {
-  conversationId: string;
-  senderId: string;
-  inviteMessageId?: string;
-}): Promise<Message | null> {
-  return sendMessage({
-    conversationId,
-    senderId,
-    text: "FaceToFace declined",
-    messageType: "facetoface_status",
-    metadata: {
-      status: "declined",
-      invite_message_id: inviteMessageId,
-    },
-  });
 }
 
 export function subscribeToMessages(
