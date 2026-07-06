@@ -1,5 +1,5 @@
 import Navbar from "../components/Navbar";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { getNotifications, markNotificationsRead, subscribeToNotifications, type Notification } from "../lib/notificationApi";
@@ -8,23 +8,145 @@ export default function Notifications() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const mountedRef = useRef(true);
+
+  // Restore/save scroll position for notifications per user
+  useEffect(() => {
+    const userId = (user as any)?.id;
+    if (!userId) return;
+    const scrollKey = `metoyou-notifications-scroll:${userId}`;
+    const saved = Number(sessionStorage.getItem(scrollKey) || "0");
+    if (saved && typeof window !== "undefined") {
+      window.requestAnimationFrame(() => window.scrollTo(0, saved));
+    }
+
+    return () => {
+      try {
+        sessionStorage.setItem(scrollKey, String(window.scrollY || 0));
+      } catch (e) {
+        // ignore
+      }
+    };
+  }, [user]);
 
   useEffect(() => {
+    mountedRef.current = true;
     if (!user || typeof user !== "object" || !("id" in user)) return;
     const userId = (user as any).id as string;
 
-    let channel: ReturnType<typeof subscribeToNotifications> | undefined;
+    const cacheKey = `metoyou-notifs:${userId}`;
+    const lastKey = `${cacheKey}:lastFetch`;
 
-    const refreshNotifications = () => {
-      void getNotifications(userId).then((data) => setNotifications(data));
+    // Try cache-first
+    try {
+      const raw = sessionStorage.getItem(cacheKey);
+      if (raw) {
+        const cached = JSON.parse(raw) as Notification[];
+        setNotifications(cached);
+      }
+    } catch (e) {
+      // ignore parse errors
+    }
+
+    const performBackgroundRefresh = async () => {
+      try {
+        const last = Number(sessionStorage.getItem(lastKey) || "0");
+        const now = Date.now();
+        if (last && now - last < 30_000) return; // throttle
+
+        const remote = await getNotifications(userId);
+        if (!mountedRef.current || !remote) return;
+
+        // Merge remote notifications into current, updating only changed items
+        const byId = new Map<string | number, Notification>();
+        notifications.forEach((n) => byId.set(n.id, n));
+
+        let changed = false;
+        remote.forEach((r) => {
+          const existing = byId.get(r.id);
+          if (!existing) {
+            byId.set(r.id, r);
+            changed = true;
+            return;
+          }
+          if (existing.read !== r.read || existing.message !== r.message || existing.timestamp !== r.timestamp) {
+            byId.set(r.id, r);
+            changed = true;
+          }
+        });
+
+        if (changed || !sessionStorage.getItem(cacheKey)) {
+          const merged = Array.from(byId.values()).sort((a, b) => {
+            const aTime = a.timestamp ? Number(a.timestamp) : 0;
+            const bTime = b.timestamp ? Number(b.timestamp) : 0;
+            return bTime - aTime;
+          });
+          setNotifications(merged);
+          try {
+            sessionStorage.setItem(cacheKey, JSON.stringify(merged));
+            sessionStorage.setItem(lastKey, String(Date.now()));
+          } catch (e) {
+            // ignore storage failures
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to refresh notifications", err);
+      }
     };
 
-    refreshNotifications();
-    void markNotificationsRead(userId);
-    channel = subscribeToNotifications(userId, refreshNotifications);
+    // Initial background refresh if needed
+    void performBackgroundRefresh();
+
+    // Realtime subscription: merge incoming events into cache/state
+    const channel = subscribeToNotifications(userId, (event) => {
+      if (!mountedRef.current) return;
+      try {
+        setNotifications((prev) => {
+          const byId = new Map(prev.map((p) => [p.id, p] as const));
+          const existing = byId.get(event.id);
+          if (!existing) {
+            const next = [event, ...prev].sort((a, b) => {
+              const aTime = a.timestamp ? Number(a.timestamp) : 0;
+              const bTime = b.timestamp ? Number(b.timestamp) : 0;
+              return bTime - aTime;
+            });
+            try {
+              sessionStorage.setItem(cacheKey, JSON.stringify(next));
+              sessionStorage.setItem(lastKey, String(Date.now()));
+            } catch (e) {}
+            return next;
+          }
+
+          // update existing
+          if (existing.read !== event.read || existing.message !== event.message || existing.timestamp !== event.timestamp) {
+            byId.set(event.id, event);
+            const next = Array.from(byId.values()).sort((a, b) => {
+              const aTime = a.timestamp ? Number(a.timestamp) : 0;
+              const bTime = b.timestamp ? Number(b.timestamp) : 0;
+              return bTime - aTime;
+            });
+            try {
+              sessionStorage.setItem(cacheKey, JSON.stringify(next));
+              sessionStorage.setItem(lastKey, String(Date.now()));
+            } catch (e) {}
+            return next;
+          }
+
+          return prev;
+        });
+      } catch (e) {
+        console.warn("Failed to merge notification event", e);
+      }
+    });
+
+    // mark read once (non-blocking)
+    void markNotificationsRead(userId).catch(() => {});
 
     return () => {
-      channel?.unsubscribe();
+      mountedRef.current = false;
+      try {
+        channel?.unsubscribe();
+      } catch (e) {}
     };
   }, [user]);
 

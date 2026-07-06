@@ -57,7 +57,7 @@ export default function VibesProPostsCarousel({ posts, onPostSelect }: VibesProP
             className="h-[24vh] w-[28vw] shrink-0 snap-start overflow-hidden rounded-2xl border border-amber-600/20 bg-slate-900 text-white shadow-lg relative cursor-pointer transition hover:-translate-y-1 hover:shadow-amber-400/20 md:h-45 md:w-45"
           >
             {post.mediaUrl ? (
-              <img src={post.mediaUrl} alt={post.title ?? 'Vibes Pro post'} className="h-full w-full object-cover" />
+              <img src={post.mediaUrl} alt={post.title ?? 'Vibes Pro post'} loading="lazy" className="h-full w-full object-cover" />
             ) : (
               <div className="flex h-full items-center justify-center px-4 text-center text-sm text-white/70">
                 {post.description ?? 'No media'}

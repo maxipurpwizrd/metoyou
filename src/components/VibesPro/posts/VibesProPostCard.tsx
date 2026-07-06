@@ -20,7 +20,7 @@ export default function VibesProPostCard({
           mediaType === 'video' ? (
             <video src={mediaUrl} className="w-full h-full object-cover" muted playsInline />
           ) : (
-            <img src={mediaUrl} alt={title ?? 'Vibes Pro post'} className="w-full h-full object-cover" />
+            <img src={mediaUrl} alt={title ?? 'Vibes Pro post'} loading="lazy" className="w-full h-full object-cover" />
           )
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-white/60">No media</div>

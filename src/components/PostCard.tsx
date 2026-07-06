@@ -416,6 +416,7 @@ export default function PostCard({
             <img
               src={author.avatar}
               alt={author.username}
+              loading="lazy"
               className="w-10 h-10 rounded-xl object-cover shrink-0 shadow-xs"
             />
           ) : (

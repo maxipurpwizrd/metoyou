@@ -1,6 +1,6 @@
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type { ChangeEvent } from "react";
-import { useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { getProfile, saveProfile } from "../utils/profileStorage";
 import { fetchProfileFromSupabase, fetchProfileByUsername, upsertProfileToSupabase, uploadProfileImage } from "../lib/profileApi";
 import { fetchPostsFromSupabase } from "../lib/postApi";
@@ -34,7 +34,8 @@ export default function Profile() {
   const navigate = useNavigate();
   const routeUsername = params.username;
 
-  const [profile, setProfile] = useState<ProfileData>(() => getProfile());
+  const initialProfile = useMemo(() => getProfile(), []);
+  const [profile, setProfile] = useState<ProfileData>(initialProfile);
   const [myPosts, setMyPosts] = useState<ProfilePost[]>([]);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerImages, setViewerImages] = useState<string[]>([]);
@@ -50,7 +51,7 @@ export default function Profile() {
   const [followLoading, setFollowLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const currentUser = getProfile();
+  const currentUser = initialProfile;
   const { user: authUser } = useAuth();
   const viewerId = authUser?.id ?? currentUser?.id;
   const actorUsername = currentUser?.username ?? authUser?.user_metadata?.first_name ?? "Someone";
@@ -122,30 +123,63 @@ export default function Profile() {
     }
   }, [profile.language, setLanguage]);
 
+  const profileScrollKey = useMemo(
+    () => (routeUsername ? `metoyou-profile-scroll:${routeUsername}` : "metoyou-profile-scroll:me"),
+    [routeUsername]
+  );
+
+  useEffect(() => {
+    const savedPosition = Number(sessionStorage.getItem(profileScrollKey) || "0");
+    if (savedPosition && typeof window !== "undefined") {
+      window.requestAnimationFrame(() => window.scrollTo(0, savedPosition));
+    }
+
+    return () => {
+      try {
+        sessionStorage.setItem(profileScrollKey, String(window.scrollY || 0));
+      } catch (e) {
+        // ignore storage failures
+      }
+    };
+  }, [profileScrollKey]);
+
   // Load profile: prefer route `:username` as source of truth.
   useEffect(() => {
     let mounted = true;
-    (async () => {
+    const cacheKey = routeUsername ? `metoyou-profile:${routeUsername}` : `metoyou-profile:me`;
+    const lastKey = `${cacheKey}:lastFetch`;
+
+    try {
+      const raw = sessionStorage.getItem(cacheKey);
+      if (raw) {
+        const cached = JSON.parse(raw) as ProfileData;
+        setProfile((prev) => ({ ...prev, ...cached }));
+        if (cached.language) setLanguage(normalizeLanguage(cached.language));
+      }
+    } catch (e) {
+      // ignore parse failures
+    }
+
+    void (async () => {
       try {
-        if (routeUsername) {
-          // load the profile for the given username
-          const remote = await fetchProfileByUsername(routeUsername);
-          if (!mounted) return;
-          if (remote) {
-            setProfile(remote);
-            if (remote.language) setLanguage(normalizeLanguage(remote.language));
-          } else {
-            // No such user — navigate away or show fallback
-            setProfile((prev) => prev);
-          }
-        } else {
-          // No route username — load authenticated user's profile
-          const remote = await fetchProfileFromSupabase();
-          if (!mounted) return;
-          if (remote) {
-            updateProfile(remote);
-            if (remote.language) setLanguage(normalizeLanguage(remote.language));
-          }
+        const last = Number(sessionStorage.getItem(lastKey) || "0");
+        const now = Date.now();
+        if (last && now - last < 30_000) return;
+
+        const remote = routeUsername
+          ? await fetchProfileByUsername(routeUsername)
+          : await fetchProfileFromSupabase();
+
+        if (!mounted || !remote) return;
+
+        setProfile(remote);
+        if (remote.language) setLanguage(normalizeLanguage(remote.language));
+
+        try {
+          sessionStorage.setItem(cacheKey, JSON.stringify(remote));
+          sessionStorage.setItem(lastKey, String(Date.now()));
+        } catch (e) {
+          // ignore storage failures
         }
       } catch (err) {
         console.warn("Failed to load profile", err);
@@ -160,9 +194,27 @@ export default function Profile() {
   // Load user's posts from Supabase when profile id changes
   useEffect(() => {
     let mounted = true;
-    (async () => {
-      if (!profile?.id) return;
+    if (!profile?.id) return;
+
+    const postsKey = `metoyou-profile-posts:${profile.id}`;
+    const postsLastKey = `${postsKey}:lastFetch`;
+
+    try {
+      const raw = sessionStorage.getItem(postsKey);
+      if (raw) {
+        const cached = JSON.parse(raw) as ProfilePost[];
+        setMyPosts(cached);
+      }
+    } catch (e) {
+      // ignore parse failures
+    }
+
+    void (async () => {
       try {
+        const last = Number(sessionStorage.getItem(postsLastKey) || "0");
+        const now = Date.now();
+        if (last && now - last < 30_000) return;
+
         const records = await fetchPostsFromSupabase({ author_id: profile.id, limit: 50 });
         if (!mounted) return;
 
@@ -176,15 +228,21 @@ export default function Profile() {
         } as ProfilePost));
 
         setMyPosts(mapped);
-      } catch {
-        setMyPosts([]);
+        try {
+          sessionStorage.setItem(postsKey, JSON.stringify(mapped));
+          sessionStorage.setItem(postsLastKey, String(Date.now()));
+        } catch (e) {
+          // ignore storage failures
+        }
+      } catch (err) {
+        console.warn("Failed to load profile posts", err);
       }
     })();
 
     return () => {
       mounted = false;
     };
-  }, [profile.id, profile.username]);
+  }, [profile.id]);
 
   useEffect(() => {
     if (viewingOwn) {
@@ -193,17 +251,45 @@ export default function Profile() {
     }
 
     let mounted = true;
-    const loadFollowStatus = async () => {
+    const followKey = `metoyou-follow:${viewerId}:${profile.id}`;
+    const followLastKey = `${followKey}:lastFetch`;
+
+    try {
+      const raw = sessionStorage.getItem(followKey);
+      if (raw) {
+        const cached = JSON.parse(raw) as { isFollowing: boolean; isFollowedBy: boolean; followersCount: number };
+        setIsFollowing(Boolean(cached.isFollowing));
+        setIsFollowedBy(Boolean(cached.isFollowedBy));
+        setFollowersCount(cached.followersCount ?? profile.hommies_count ?? 0);
+      }
+    } catch (e) {
+      // ignore cache failures
+    }
+
+    void (async () => {
       if (!viewerId || !profile?.id) return;
-      const status = await getFollowStatus(viewerId, profile.id);
-      if (!mounted) return;
+      try {
+        const last = Number(sessionStorage.getItem(followLastKey) || "0");
+        const now = Date.now();
+        if (last && now - last < 30_000) return;
 
-      setIsFollowing(status.isFollowing);
-      setIsFollowedBy(status.isFollowedBy);
-      setFollowersCount(status.followersCount);
-    };
+        const status = await getFollowStatus(viewerId, profile.id);
+        if (!mounted) return;
 
-    loadFollowStatus();
+        setIsFollowing(status.isFollowing);
+        setIsFollowedBy(status.isFollowedBy);
+        setFollowersCount(status.followersCount);
+
+        try {
+          sessionStorage.setItem(followKey, JSON.stringify(status));
+          sessionStorage.setItem(followLastKey, String(Date.now()));
+        } catch (e) {
+          // ignore storage failures
+        }
+      } catch (err) {
+        console.warn("Failed to load follow status", err);
+      }
+    })();
 
     return () => {
       mounted = false;

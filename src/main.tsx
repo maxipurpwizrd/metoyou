@@ -4,6 +4,7 @@ import "./index.css";
 import App from "./App";
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { FeedProvider } from "./contexts/FeedContext";
+import { AuthProvider } from "./hooks/useAuth";
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
 import { Analytics } from '@vercel/analytics/react'
@@ -11,6 +12,7 @@ import { Analytics } from '@vercel/analytics/react'
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
+      <AuthProvider>
       <LanguageProvider>
         <FeedProvider>
         <div className="relative min-h-screen overflow-hidden">
@@ -29,6 +31,7 @@ createRoot(document.getElementById("root")!).render(
         </div>
         </FeedProvider>
       </LanguageProvider>
+      </AuthProvider>
     </QueryClientProvider>
   </StrictMode>
 );

@@ -11,10 +11,10 @@ const ThroneCard: FC<ThroneCardProps> = ({ username, imageUrl, isOnline = false 
   return (
     <div className="relative w-full h-65 rounded-[40px] overflow-hidden shadow-2xl">
       {/* Background image */}
-      <img src={imageUrl} alt={`${username} avatar`} className="absolute inset-0 w-full h-full object-cover" />
+      <img src={imageUrl} alt={`${username} avatar`} loading="lazy" className="absolute inset-0 w-full h-full object-cover" />
 
       {/* Throne template overlay */}
-      <img src={throneTemplate} alt="" className="absolute inset-0 w-full h-full object-contain pointer-events-none z-10" />
+      <img src={throneTemplate} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-contain pointer-events-none z-10" />
 
       {/* Bottom gradient */}
       <div className="absolute bottom-0 left-0 right-0 h-28 bg-linear-to-t from-black/90 to-transparent" />

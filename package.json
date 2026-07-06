@@ -24,6 +24,8 @@
     "react-router-dom": "^7.17.0",
     "react-textarea-autosize": "^8.5.9",
     "react-use-measure": "^2.1.7",
+    "react-virtualized": "^9.22.6",
+    "react-window": "^2.2.7",
     "tailwindcss": "^4.3.0"
   },
   "devDependencies": {

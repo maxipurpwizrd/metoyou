@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import MessageCard from "../components/MessageCard";
 import { useAuth } from "../hooks/useAuth";
 import { getMessageThreads, type MessageThread } from "../lib/messageApi";
@@ -8,22 +8,110 @@ export default function Messages() {
   const { user } = useAuth();
   const [threads, setThreads] = useState<MessageThread[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const mountedRef = useRef(true);
 
+  // Restore/save scroll position for messages list per user
   useEffect(() => {
-    if (!user || typeof user !== "object" || !("id" in user)) return;
-    const userId = (user as any).id as string;
+    const userId = (user as any)?.id;
+    if (!userId) return;
+    const scrollKey = `metoyou-messages-scroll:${userId}`;
+    const saved = Number(sessionStorage.getItem(scrollKey) || "0");
+    if (saved && typeof window !== "undefined") {
+      window.requestAnimationFrame(() => window.scrollTo(0, saved));
+    }
 
-    setIsLoading(true);
-    getMessageThreads(userId)
-      .then((data) => {
-        const sorted = [...data].sort((a, b) => {
+    return () => {
+      try {
+        sessionStorage.setItem(scrollKey, String(window.scrollY || 0));
+      } catch (e) {
+        // ignore
+      }
+    };
+  }, [user]);
+
+  // Cache-first load of message threads + silent background refresh
+  useEffect(() => {
+    mountedRef.current = true;
+    const userId = (user as any)?.id as string | undefined;
+    if (!userId) return;
+
+    const cacheKey = `metoyou-threads:${userId}`;
+    const lastKey = `${cacheKey}:lastFetch`;
+
+    // Try cache first
+    try {
+      const raw = sessionStorage.getItem(cacheKey);
+      if (raw) {
+        const cached = JSON.parse(raw) as MessageThread[];
+        const sorted = [...cached].sort((a, b) => {
           const aTime = a.lastTime ? new Date(a.lastTime).getTime() : 0;
           const bTime = b.lastTime ? new Date(b.lastTime).getTime() : 0;
           return bTime - aTime;
         });
         setThreads(sorted);
-      })
-      .finally(() => setIsLoading(false));
+      }
+    } catch (e) {
+      // ignore parse errors
+    }
+
+    // If no cached data, show loading until first remote arrives
+    const hasCache = Boolean(sessionStorage.getItem(cacheKey));
+    if (!hasCache) setIsLoading(true);
+
+    void (async () => {
+      try {
+        const last = Number(sessionStorage.getItem(lastKey) || "0");
+        const now = Date.now();
+        if (last && now - last < 30_000) return; // throttle background refresh
+
+        const remote = await getMessageThreads(userId);
+        if (!mountedRef.current || !remote) return;
+
+        // Merge remote threads with existing ones, updating only changed threads
+        const byId = new Map<string, MessageThread>();
+        threads.forEach((t) => byId.set(t.otherId, t));
+
+        let changed = false;
+        remote.forEach((r) => {
+          const existing = byId.get(r.otherId);
+          if (!existing) {
+            byId.set(r.otherId, r);
+            changed = true;
+            return;
+          }
+
+          const existingTime = existing.lastTime ? new Date(existing.lastTime).getTime() : 0;
+          const remoteTime = r.lastTime ? new Date(r.lastTime).getTime() : 0;
+          if (remoteTime !== existingTime || r.lastText !== existing.lastText) {
+            byId.set(r.otherId, r);
+            changed = true;
+          }
+        });
+
+        if (changed || !hasCache) {
+          const merged = Array.from(byId.values()).sort((a, b) => {
+            const aTime = a.lastTime ? new Date(a.lastTime).getTime() : 0;
+            const bTime = b.lastTime ? new Date(b.lastTime).getTime() : 0;
+            return bTime - aTime;
+          });
+          setThreads(merged);
+          try {
+            sessionStorage.setItem(cacheKey, JSON.stringify(merged));
+            sessionStorage.setItem(lastKey, String(Date.now()));
+          } catch (e) {
+            // ignore storage errors
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to refresh message threads", err);
+      } finally {
+        setIsLoading(false);
+      }
+    })();
+
+    return () => {
+      mountedRef.current = false;
+    };
   }, [user]);
 
   return (

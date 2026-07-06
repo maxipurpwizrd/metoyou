@@ -340,21 +340,33 @@ export default function CreatePost({ onPost }: Props) {
 
     }
 
-    const reader = new FileReader();
-
-    reader.onloadend = () => {
-
-      setAudio(reader.result as string);
-
-    };
-
-    reader.onerror = () => {
-
-      alert("Failed to read audio file");
-
-    };
-
-    reader.readAsDataURL(file);
+    // Optimize image in-browser before converting to data URL
+    void (async () => {
+      try {
+        const { optimizeImageFile } = await import("../lib/imageUtils");
+        const optimized = await optimizeImageFile(file, 1200, 0.8);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setImage(reader.result as string);
+          setVideo(undefined); // Clear video when adding image
+        };
+        reader.onerror = () => {
+          alert("Failed to read image file");
+        };
+        reader.readAsDataURL(optimized as Blob);
+      } catch (err) {
+        console.warn("Image optimization failed, falling back to original", err);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setImage(reader.result as string);
+          setVideo(undefined);
+        };
+        reader.onerror = () => {
+          alert("Failed to read image file");
+        };
+        reader.readAsDataURL(file);
+      }
+    })();
 
   };
 

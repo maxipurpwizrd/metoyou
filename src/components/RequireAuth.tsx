@@ -1,39 +1,17 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../lib/supabase";
+import { useAuth } from "../hooks/useAuth";
 
 export default function RequireAuth({ children }: { children: ReactNode }) {
-  const [checking, setChecking] = useState(true);
+  const { user, isLoading } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    let isMounted = true;
+    if (!isLoading && !user) {
+      navigate("/login");
+    }
+  }, [isLoading, user, navigate]);
 
-    (async () => {
-      try {
-        const { data } = await supabase.auth.getUser();
-        if (!data?.user) {
-          navigate("/login");
-        }
-      } catch (e) {
-        navigate("/login");
-      } finally {
-        if (isMounted) setChecking(false);
-      }
-    })();
-
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) navigate("/login");
-    });
-
-    return () => {
-      isMounted = false;
-      try {
-        sub?.subscription?.unsubscribe();
-      } catch {}
-    };
-  }, [navigate]);
-
-  if (checking) return null;
-  return children;
+  if (isLoading) return null;
+  return user ? children : null;
 }

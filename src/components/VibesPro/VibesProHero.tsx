@@ -17,7 +17,7 @@ export default function VibesProHero({
 }: VibesProHeroProps) {
   return (
     <section className="sticky top-0 z-50 h-[58vh] min-h-[58vh] overflow-hidden bg-black text-white">
-      <img src={throneTemplate} alt="Throne background" className="absolute inset-0 h-full w-full object-cover" />
+      <img src={throneTemplate} alt="Throne background" loading="lazy" className="absolute inset-0 h-full w-full object-cover" />
       <div className="absolute inset-0 bg-linear-to-b from-black/20 via-black/30 to-black/70" />
 
       <div className="absolute inset-0 pointer-events-none">

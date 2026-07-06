@@ -370,6 +370,19 @@ export default function Chat() {
     path: string,
     onProgress: (value: number) => void
   ) {
+    // Optimize images before uploading to reduce bandwidth
+    let uploadBlob: Blob | File = file;
+    try {
+      if (file.type.startsWith("image/")) {
+        const { optimizeImageFile, mimeToExtension } = await import("../lib/imageUtils");
+        uploadBlob = await optimizeImageFile(file, 1200, 0.8);
+      }
+    } catch (e) {
+      // If optimization fails, fallback to original file
+      console.warn("Image optimization failed, uploading original file", e);
+      uploadBlob = file;
+    }
+
     const { data: signedData, error: signError } = await supabase
       .storage
       .from("messages")
@@ -382,8 +395,8 @@ export default function Chat() {
     await new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open("PUT", signedData.signedUrl);
-      if (file.type) {
-        xhr.setRequestHeader("Content-Type", file.type);
+      if (uploadBlob && (uploadBlob as Blob).type) {
+        xhr.setRequestHeader("Content-Type", (uploadBlob as Blob).type);
       }
 
       xhr.upload.onprogress = (event) => {
@@ -403,7 +416,7 @@ export default function Chat() {
       };
 
       xhr.onerror = () => reject(new Error("Upload failed"));
-      xhr.send(file);
+      xhr.send(uploadBlob);
     });
   }
 

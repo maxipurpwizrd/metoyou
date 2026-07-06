@@ -142,14 +142,22 @@ export function FeedProvider({ children }: { children: ReactNode }) {
     return merged;
   };
 
-  const loadPostsPage = async ({ append = false, refresh = false } = {}) => {
+  const prependNewPosts = (incoming: Post[]) => {
+    if (incoming.length === 0) return postsRef.current;
+    const existingIds = new Set(postsRef.current.map((post) => post.id));
+    const newPosts = incoming.filter((post) => !existingIds.has(post.id));
+    if (newPosts.length === 0) return postsRef.current;
+    return [...newPosts, ...postsRef.current];
+  };
+
+  const loadPostsPage = async ({ append = false, refresh = false, background = false } = {}) => {
     if (loading || isLoadingMore) return;
 
     if (append) {
       if (!hasMore || postsRef.current.length === 0) return;
-      setIsLoadingMore(true);
+      if (!background) setIsLoadingMore(true);
     } else {
-      setLoading(true);
+      if (!background) setLoading(true);
     }
 
     try {
@@ -161,8 +169,9 @@ export function FeedProvider({ children }: { children: ReactNode }) {
       const withMeta = await mapRecords(Array.isArray(records) ? (records as PostRecord[]) : []);
 
       if (refresh) {
-        const nextPosts = withMeta.length > 0 ? mergePostsById(withMeta, postsRef.current) : postsRef.current;
+        const nextPosts = postsRef.current.length === 0 ? withMeta : prependNewPosts(withMeta);
         syncPosts(nextPosts);
+        setLastFetchTime(Date.now());
       } else if (append) {
         const nextPosts = [...postsRef.current, ...withMeta];
         syncPosts(nextPosts);
@@ -171,25 +180,25 @@ export function FeedProvider({ children }: { children: ReactNode }) {
         setLastFetchTime(Date.now());
       }
 
-      if (!refresh) {
+      if (append) {
         setHasMore(withMeta.length === PAGE_SIZE);
       }
     } catch (err) {
       console.error("FeedProvider: failed to load posts", err);
     } finally {
-      setLoading(false);
-      setIsLoadingMore(false);
+      if (!background) setLoading(false);
+      if (!background) setIsLoadingMore(false);
     }
-  };
+  }; 
 
   const fetchIfNeeded = async (force = false) => {
     if (!force) return;
     try {
-      await loadPostsPage({ refresh: true });
+      await loadPostsPage({ refresh: true, background: true });
     } catch (err) {
       console.error("FeedProvider: failed to refetch posts", err);
     }
-  };
+  }; 
 
   // Fetch the first page once when provider mounts, but let cached posts render immediately.
   useEffect(() => {
@@ -199,9 +208,11 @@ export function FeedProvider({ children }: { children: ReactNode }) {
       setLastFetchTime(Date.now());
     }
 
-    void loadPostsPage({ append: false, refresh: true });
+    // Refresh silently in the background so cached posts render instantly.
+    // Only prepend genuinely new posts rather than replacing the feed.
+    void loadPostsPage({ append: false, refresh: true, background: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); 
 
   // Listen for manual refresh events dispatched from other UI (e.g. Navbar)
   useEffect(() => {
@@ -223,6 +234,32 @@ export function FeedProvider({ children }: { children: ReactNode }) {
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, [loading, isLoadingMore, hasMore]);
+
+  // Refresh feed when the user returns to the tab or focuses the window,
+  // but do it silently and not more often than every 30s.
+  useEffect(() => {
+    let lastTrigger = 0;
+    const maybeRefresh = () => {
+      const now = Date.now();
+      if (lastFetchTime && now - lastFetchTime < 30_000) return;
+      if (now - lastTrigger < 10_000) return;
+      lastTrigger = now;
+      void loadPostsPage({ refresh: true, background: true });
+    };
+
+    const onFocus = () => maybeRefresh();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") maybeRefresh();
+    };
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastFetchTime]);
 
   // setPosts wrapper keeps both local state and query cache in sync
   const setPosts = (updater: SetStateAction<Post[]>) => {

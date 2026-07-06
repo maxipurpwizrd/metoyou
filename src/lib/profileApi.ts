@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { optimizeImageFile, mimeToExtension } from "./imageUtils";
 import { normalizeLanguage } from "./i18n";
 import type { ProfileData } from "../utils/profileStorage";
 
@@ -89,11 +90,14 @@ export async function uploadProfileImage(file: File) {
     const userId = authData?.user?.id;
     if (!userId) return null;
 
+    // Optimize image before upload
+    const optimized = await optimizeImageFile(file, 1200, 0.8);
+    const ext = mimeToExtension(optimized.type || file.type || "image/jpeg");
     const timestamp = Date.now();
-    const filename = `${userId}/${timestamp}_${file.name}`;
-    const { error } = await supabase.storage.from("profile-avatars").upload(filename, file, {
-      contentType: file.type,
-    });
+    const filename = `${userId}/${timestamp}_${Math.random().toString(36).slice(2)}.${ext}`;
+    const { error } = await supabase.storage.from("profile-avatars").upload(filename, optimized, {
+      contentType: optimized.type || file.type,
+    } as any);
     if (error) throw error;
 
     const { data: urlData } = supabase.storage.from("profile-avatars").getPublicUrl(filename);
