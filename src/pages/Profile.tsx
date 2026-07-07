@@ -98,11 +98,6 @@ export default function Profile() {
     }
   };
 
-  const updateProfile = (updated: ProfileData) => {
-    setProfile(updated);
-    saveProfile(updated);
-  };
-
   const profilePic = profile.profilePic;
   const bio = profile.bio;
   const selectedInterests = Array.isArray(profile.interests) ? profile.interests : [];

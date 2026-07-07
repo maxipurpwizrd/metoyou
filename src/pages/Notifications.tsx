@@ -98,45 +98,8 @@ export default function Notifications() {
     void performBackgroundRefresh();
 
     // Realtime subscription: merge incoming events into cache/state
-    const channel = subscribeToNotifications(userId, (event) => {
-      if (!mountedRef.current) return;
-      try {
-        setNotifications((prev) => {
-          const byId = new Map(prev.map((p) => [p.id, p] as const));
-          const existing = byId.get(event.id);
-          if (!existing) {
-            const next = [event, ...prev].sort((a, b) => {
-              const aTime = a.timestamp ? Number(a.timestamp) : 0;
-              const bTime = b.timestamp ? Number(b.timestamp) : 0;
-              return bTime - aTime;
-            });
-            try {
-              sessionStorage.setItem(cacheKey, JSON.stringify(next));
-              sessionStorage.setItem(lastKey, String(Date.now()));
-            } catch (e) {}
-            return next;
-          }
-
-          // update existing
-          if (existing.read !== event.read || existing.message !== event.message || existing.timestamp !== event.timestamp) {
-            byId.set(event.id, event);
-            const next = Array.from(byId.values()).sort((a, b) => {
-              const aTime = a.timestamp ? Number(a.timestamp) : 0;
-              const bTime = b.timestamp ? Number(b.timestamp) : 0;
-              return bTime - aTime;
-            });
-            try {
-              sessionStorage.setItem(cacheKey, JSON.stringify(next));
-              sessionStorage.setItem(lastKey, String(Date.now()));
-            } catch (e) {}
-            return next;
-          }
-
-          return prev;
-        });
-      } catch (e) {
-        console.warn("Failed to merge notification event", e);
-      }
+    const channel = subscribeToNotifications(userId, () => {
+      void performBackgroundRefresh();
     });
 
     // mark read once (non-blocking)

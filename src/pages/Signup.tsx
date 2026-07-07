@@ -12,6 +12,8 @@ export default function Signup() {
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
+  const [gender, setGender] = useState("");
   const [loading, setLoading] = useState(false);
   const [languageStep, setLanguageStep] = useState<"choose-lang" | "choose-english-variant" | "continue">("choose-lang");
   const [selectedLanguage, setSelectedLanguage] = useState<Language>(language);
@@ -20,7 +22,7 @@ export default function Signup() {
     e?.preventDefault();
     setLoading(true);
     try {
-      await signUp(email, password, firstName, lastName, selectedLanguage);
+      await signUp(email, password, firstName, lastName, selectedLanguage, dateOfBirth, gender);
       setLanguage(selectedLanguage);
       alert("Account created 🔥");
       navigate("/login");
@@ -138,6 +140,28 @@ export default function Signup() {
             className="w-full rounded-2xl border px-3 py-2 mb-4"
             placeholder={t("signup.lastName")}
           />
+
+          <label className="block text-sm mb-2">{t("signup.dob")}</label>
+          <input
+            value={dateOfBirth}
+            onChange={(e) => setDateOfBirth(e.target.value)}
+            type="date"
+            className="w-full rounded-2xl border px-3 py-2 mb-4"
+          />
+
+          <label className="block text-sm mb-2">{t("signup.gender")}</label>
+          <select
+            value={gender}
+            onChange={(e) => setGender(e.target.value)}
+            className="w-full rounded-2xl border px-3 py-2 mb-4"
+          >
+            <option value="">{t("signup.genderSelect")}</option>
+            <option value="female">{t("signup.gender.female")}</option>
+            <option value="male">{t("signup.gender.male")}</option>
+            <option value="nonbinary">{t("signup.gender.nonbinary")}</option>
+            <option value="other">{t("signup.gender.other")}</option>
+            <option value="prefer_not_to_say">{t("signup.gender.preferNotToSay")}</option>
+          </select>
 
           <label className="block text-sm mb-2">{t("signup.email")}</label>
           <input

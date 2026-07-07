@@ -6,6 +6,7 @@ import { getProfile } from "../utils/profileStorage";
 
 import CreatePost from "../components/CreatePost";
 import PostCard from "../components/PostCard";
+import PostSkeleton from "../components/PostSkeleton";
 import { savePostToSupabase, deletePostFromSupabase, uploadAudioToSupabase } from "../lib/postApi";
 import { addComment, editComment, deleteComment } from "../lib/commentApi";
 import { likePost, unlikePost, hasUserLiked, getPostLikes } from "../lib/likeApi";
@@ -40,7 +41,7 @@ export default function Feed() {
     const saved = localStorage.getItem("metoyou-saved-posts");
     return saved ? (JSON.parse(saved) as string[]) : [];
   });
-  const listRef = useRef<List | null>(null);
+  const listRef = useRef<any>(null);
   const cache = useRef(
     new CellMeasurerCache({
       fixedWidth: true,
@@ -62,7 +63,7 @@ export default function Feed() {
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [currentTime, setCurrentTime] = useState<number>(() => Date.now());
   const [userReactions, setUserReactions] = useState<{ [storyId: number]: string | null }>({});
-  const { posts, setPosts, savedScrollY, setSavedScrollY, selectedPostId, setSelectedPostId } = useFeed();
+  const { posts, setPosts, savedScrollY, setSavedScrollY, selectedPostId, setSelectedPostId, loading } = useFeed();
   const filteredPosts = useMemo(
     () => posts.filter((post) => !mutedUsers.includes(post.author.id)),
     [posts, mutedUsers]
@@ -221,7 +222,29 @@ export default function Feed() {
   }, [setSelectedPostId]);
 
   const updatePostById = (postId: string | number, patch: Partial<Post>) => {
-    setPosts((prev) => prev.map((post) => (post.id === postId ? { ...post, ...patch } : post)));
+    const idStr = (x: any) => String(x);
+
+    setPosts((prev) => {
+      // If the patch includes a new `id` (server-assigned), we must ensure
+      // there are no duplicate posts that already have that id.
+      if (patch.id !== undefined && patch.id !== null) {
+        const updated = prev.map((post) => (idStr(post.id) === idStr(postId) ? { ...post, ...patch } : post));
+
+        // Remove duplicates while preserving first-seen order
+        const seen = new Set<string>();
+        const merged: Post[] = [];
+        for (const p of updated) {
+          const key = idStr(p.id);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          merged.push(p);
+        }
+
+        return merged;
+      }
+
+      return prev.map((post) => (idStr(post.id) === idStr(postId) ? { ...post, ...patch } : post));
+    });
   };
 
   const persistPost = async (
@@ -290,12 +313,13 @@ export default function Feed() {
         persisted: true,
       });
 
+      const completedPostId = saved.id ?? postId;
       window.setTimeout(() => {
-        updatePostById(postId, {
+        updatePostById(completedPostId, {
           uploadState: undefined,
           uploadProgress: undefined,
         });
-      }, 2000);
+      }, 3000);
 
       return true;
     } catch (err) {
@@ -545,7 +569,7 @@ export default function Feed() {
           <button
             type="button"
             onClick={handleStoryClick}
-            className="min-w-[92px] h-[132px] md:min-w-[122px] md:h-[176px] shrink-0 bg-white/80 backdrop-blur-xs border-2 border-dashed border-pink-300 text-pink-500 shadow-md flex flex-col items-center justify-center hover:scale-[1.02] active:scale-95 transition-all snap-start"
+            className="min-w-[106px] h-[152px] md:min-w-[140px] md:h-[200px] shrink-0 bg-white/80 backdrop-blur-xs border-2 border-dashed border-pink-300 text-pink-500 shadow-md flex flex-col items-center justify-center hover:scale-[1.02] active:scale-95 transition-all snap-start"
             style={{ borderRadius: "50% 50% 28% 28% / 18% 18% 70% 70%" }}
           >
             <span className="text-2xl md:text-3xl font-light mb-0.5 md:mb-1">+</span>
@@ -557,7 +581,7 @@ export default function Feed() {
             <div
               key={story.id}
               onClick={() => openStoryAtIndex(index)}
-              className={`min-w-[92px] h-[132px] md:min-w-[122px] md:h-[176px] shrink-0 relative overflow-hidden shadow-md text-white cursor-pointer hover:scale-[1.02] transition-transform snap-start ${story.viewedAt ? 'opacity-70 ring-1 ring-white/20' : ''}`}
+              className={`min-w-[106px] h-[152px] md:min-w-[140px] md:h-[200px] shrink-0 relative overflow-hidden shadow-md text-white cursor-pointer hover:scale-[1.02] transition-transform snap-start ${story.viewedAt ? 'opacity-70 ring-1 ring-white/20' : ''}`}
               style={{ borderRadius: "50% 50% 28% 28% / 18% 18% 70% 70%" }}
             >
               {story.image ? (
@@ -593,226 +617,244 @@ export default function Feed() {
             <div className="fixed inset-0 bg-black/5 z-0 pointer-events-none backdrop-blur-xs"></div>
           )}
 
-          <WindowScroller>
-            {({ height, isScrolling, onChildScroll, scrollTop }) => (
-              <AutoSizer disableHeight>
-                {({ width }) => (
-                  <List
-                    autoHeight
-                    width={width}
-                    height={height}
-                    rowCount={filteredPosts.length}
-                    rowHeight={cache.current.rowHeight}
-                    deferredMeasurementCache={cache.current}
-                    overscanRowCount={3}
-                    rowRenderer={({ index, key, parent, style }) => {
-                      const post = filteredPosts[index];
-                      const isSelected = selectedPostId === post.id;
+          {loading && filteredPosts.length === 0 ? (
+            <div className="space-y-4">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <PostSkeleton key={i} />
+              ))}
+            </div>
+          ) : (
+            <WindowScroller>
+              {({ height, isScrolling, onChildScroll, scrollTop }: any) => (
+                <AutoSizer disableHeight>
+                  {({ width }: any) => (
+                    <List
+                      autoHeight
+                      width={width}
+                      height={height}
+                      rowCount={filteredPosts.length}
+                      rowHeight={cache.current.rowHeight}
+                      deferredMeasurementCache={cache.current}
+                      overscanRowCount={3}
+                      rowRenderer={({ index, key, parent, style }: any) => {
+                        const post = filteredPosts[index];
+                        const isSelected = selectedPostId === post.id;
 
-                      return (
-                        <CellMeasurer
-                          cache={cache.current}
-                          columnIndex={0}
-                          key={key}
-                          parent={parent}
-                          rowIndex={index}
-                        >
-                          {({ registerChild }) => (
-                            <div
-                              ref={registerChild}
-                              style={{ ...style, width: "100%" }}
-                              className="mb-4"
-                            >
+                        return (
+                          <CellMeasurer
+                            cache={cache.current}
+                            columnIndex={0}
+                            key={key}
+                            parent={parent}
+                            rowIndex={index}
+                          >
+                            {({ registerChild }: any) => (
                               <div
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedPostId(post.id);
-                                }}
-                                className={`transition-all duration-300 ${
-                                  isSelected
-                                    ? "scale-[1.02] z-20 shadow-xl"
-                                    : selectedPostId !== null
-                                    ? "blur-xs opacity-40 scale-[0.98] pointer-events-none"
-                                    : ""
-                                }`}
+                                ref={registerChild}
+                                style={{ ...style, width: "100%" }}
+                                className="mb-4"
                               >
-                                <PostCard
-                                  author={post.author}
-                                  postId={post.id}
-                                  authorId={post.authorId ?? post.author.id}
-                                  time={post.time}
-                                  text={post.text}
-                                  image={post.image}
-                                  video={post.video}
-                                  comments={post.comments}
-                                  likes={post.likes ?? 0}
-                                  liked={Boolean(post.liked)}
-                                  isSelected={isSelected}
-                                  onToggleLike={async () => {
-                                    const profile = getProfile();
-                                    if (!profile) return;
-                                    const userId = profile.id;
-
-                                    const currentlyLiked = await hasUserLiked(String(post.id), userId);
-                                    if (currentlyLiked) {
-                                      await unlikePost(String(post.id), userId);
-                                    } else {
-                                      await likePost(String(post.id), userId);
-                                    }
-
-                                    const likesData = await getPostLikes(String(post.id));
-                                    const likesCount = (likesData || []).length;
-                                    const userLikedNow = likesData.some((l) => l.user_id === userId);
-
-                                    setPosts((prevPosts) =>
-                                      prevPosts.map((p) =>
-                                        p.id === post.id
-                                          ? { ...p, likes: likesCount, likes_count: likesCount, liked: Boolean(userLikedNow) }
-                                          : p
-                                      )
-                                    );
+                                <div
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedPostId(post.id);
                                   }}
-                                  onSelectPost={() => setSelectedPostId(post.id)}
-                                  onClosePost={() => setSelectedPostId(null)}
-                                  onRepost={() => {
-                                    setPosts((prev) => [
-                                      {
-                                        ...post,
-                                        id: Date.now(),
-                                        author: { id: "user_001", username: "Maxi" },
-                                        time: "Just now",
-                                        highlighted: false,
-                                      },
-                                      ...prev,
-                                    ]);
-                                  }}
-                                  onDeletePost={async () => {
-                                    if (post.persisted) {
-                                      try {
-                                        await deletePostFromSupabase(String(post.id));
-                                      } catch (err) {
-                                        console.error("Failed to delete post from Supabase", err);
+                                  className={`transition-all duration-300 ${
+                                    isSelected
+                                      ? "scale-[1.02] z-20 shadow-xl"
+                                      : selectedPostId !== null
+                                      ? "blur-xs opacity-40 scale-[0.98] pointer-events-none"
+                                      : ""
+                                  }`}
+                                >
+                                  <PostCard
+                                    author={post.author}
+                                    postId={post.id}
+                                    authorId={post.authorId ?? post.author.id}
+                                    time={post.time}
+                                    text={post.text}
+                                    image={post.image}
+                                    video={post.video}
+                                    comments={post.comments}
+                                    likes={post.likes ?? 0}
+                                    liked={Boolean(post.liked)}
+                                    isSelected={isSelected}
+                                    onToggleLike={async () => {
+                                      const profile = getProfile();
+                                      if (!profile) return;
+                                      const userId = profile.id;
+
+                                      const currentlyLiked = await hasUserLiked(String(post.id), userId);
+                                      if (currentlyLiked) {
+                                        await unlikePost(String(post.id), userId);
+                                      } else {
+                                        await likePost(String(post.id), userId);
                                       }
-                                    }
-                                    setPosts((prev) => prev.filter((p) => p.id !== post.id));
-                                    if (selectedPostId === post.id) setSelectedPostId(null);
-                                  }}
-                                  onRetryPost={() => {
-                                    void retryPost(post.id);
-                                  }}
-                                  onEditPost={() => {
-                                    const newText = window.prompt("Edit post text:", post.text || "");
-                                    if (newText !== null) {
-                                      setPosts((prev) => prev.map((p) => (p.id === post.id ? { ...p, text: newText } : p)));
-                                    }
-                                  }}
-                                  onDeleteImage={() => {
-                                    setPosts((prev) => prev.map((p) => (p.id === post.id ? { ...p, image: undefined } : p)));
-                                  }}
-                                  onDeleteVideo={() => {
-                                    setPosts((prev) => prev.map((p) => (p.id === post.id ? { ...p, video: undefined } : p)));
-                                  }}
-                                  onSavePost={() => {
-                                    setSavedPosts((prev) =>
-                                      prev.includes(String(post.id)) ? prev : [...prev, String(post.id)]
-                                    );
-                                    alert("Post saved!");
-                                  }}
-                                  onHighlight={() => {
-                                    setPosts((prevPosts) =>
-                                      prevPosts.map((p) =>
-                                        p.id === post.id ? { ...p, highlighted: !p.highlighted } : p
-                                      )
-                                    );
-                                  }}
-                                  onInteractionActivity={setAutoCloseSuppressed}
-                                  audio={post.audio}
-                                  highlighted={Boolean(post.highlighted)}
-                                  uploadState={post.uploadState}
-                                  uploadProgress={post.uploadProgress}
-                                  onMuteUser={() => {
-                                    setMutedUsers((prev) =>
-                                      prev.includes(post.author.id) ? prev : [...prev, post.author.id]
-                                    );
-                                    if (selectedPostId === post.id) setSelectedPostId(null);
-                                    alert("User muted");
-                                  }}
-                                  onAddComment={async (comment) => {
-                                    const profile = getProfile();
-                                    if (!profile) return;
 
-                                    const added = await addComment(String(post.id), profile.id, comment.text, comment.voice);
-                                    setPosts((prevPosts) =>
-                                      prevPosts.map((p) =>
-                                        p.id === post.id
-                                          ? {
-                                              ...p,
-                                              comments: [
-                                                ...(p.comments || []),
-                                                {
-                                                  id: added?.id ?? Date.now(),
-                                                  user: { id: profile.id, username: profile.username ?? profile.id },
-                                                  text: added?.text ?? comment.text ?? "",
-                                                  voice: comment.voice,
-                                                  likes: 0,
-                                                },
-                                              ],
-                                            }
-                                          : p
-                                      )
-                                    );
-                                  }}
-                                  onDeleteComment={async (commentId) => {
-                                    await deleteComment(String(commentId));
-                                    setPosts((prevPosts) =>
-                                      prevPosts.map((p) =>
-                                        p.id === post.id
-                                          ? { ...p, comments: p.comments?.filter((c) => c.id !== commentId) || [] }
-                                          : p
-                                      )
-                                    );
-                                  }}
-                                  onEditComment={async (commentId, newText) => {
-                                    await editComment(String(commentId), newText);
-                                    setPosts((prevPosts) =>
-                                      prevPosts.map((p) =>
-                                        p.id === post.id
-                                          ? { ...p, comments: p.comments?.map((c) => (c.id === commentId ? { ...c, text: newText } : c)) || [] }
-                                          : p
-                                      )
-                                    );
-                                  }}
-                                  onLikeComment={(commentId) => {
-                                    setPosts((prevPosts) =>
-                                      prevPosts.map((p) =>
-                                        p.id === post.id
-                                          ? {
-                                              ...p,
-                                              comments: p.comments?.map((c) =>
-                                                c.id === commentId ? { ...c, likes: c.likes + 1 } : c
-                                              ) || [],
-                                            }
-                                          : p
-                                      )
-                                    );
-                                  }}
-                                />
+                                      const likesData = await getPostLikes(String(post.id));
+                                      const likesCount = (likesData || []).length;
+                                      const userLikedNow = likesData.some((l) => l.user_id === userId);
+
+                                      setPosts((prevPosts) =>
+                                        prevPosts.map((p) =>
+                                          p.id === post.id
+                                            ? { ...p, likes: likesCount, likes_count: likesCount, liked: Boolean(userLikedNow) }
+                                            : p
+                                        )
+                                      );
+                                    }}
+                                    onSelectPost={() => setSelectedPostId(post.id)}
+                                    onClosePost={() => setSelectedPostId(null)}
+                                    onRepost={() => {
+                                      setPosts((prev) => [
+                                        {
+                                          ...post,
+                                          id: Date.now(),
+                                          author: { id: "user_001", username: "Maxi" },
+                                          time: "Just now",
+                                          highlighted: false,
+                                        },
+                                        ...prev,
+                                      ]);
+                                    }}
+                                    onDeletePost={async () => {
+                                      if (post.persisted) {
+                                        try {
+                                          await deletePostFromSupabase(String(post.id));
+                                        } catch (err) {
+                                          console.error("Failed to delete post from Supabase", err);
+                                        }
+                                      }
+                                      setPosts((prev) => prev.filter((p) => p.id !== post.id));
+                                      if (selectedPostId === post.id) setSelectedPostId(null);
+                                    }}
+                                    onRetryPost={() => {
+                                      void retryPost(post.id);
+                                    }}
+                                    onEditPost={() => {
+                                      const newText = window.prompt("Edit post text:", post.text || "");
+                                      if (newText !== null) {
+                                        setPosts((prev) => prev.map((p) => (p.id === post.id ? { ...p, text: newText } : p)));
+                                      }
+                                    }}
+                                    onDeleteImage={() => {
+                                      setPosts((prev) => prev.map((p) => (p.id === post.id ? { ...p, image: undefined } : p)));
+                                    }}
+                                    onDeleteVideo={() => {
+                                      setPosts((prev) => prev.map((p) => (p.id === post.id ? { ...p, video: undefined } : p)));
+                                    }}
+                                    onSavePost={() => {
+                                      setSavedPosts((prev) =>
+                                        prev.includes(String(post.id)) ? prev : [...prev, String(post.id)]
+                                      );
+                                      alert("Post saved!");
+                                    }}
+                                    onHighlight={() => {
+                                      setPosts((prevPosts) =>
+                                        prevPosts.map((p) =>
+                                          p.id === post.id ? { ...p, highlighted: !p.highlighted } : p
+                                        )
+                                      );
+                                    }}
+                                    onInteractionActivity={setAutoCloseSuppressed}
+                                    audio={post.audio}
+                                    highlighted={Boolean(post.highlighted)}
+                                    uploadState={post.uploadState}
+                                    uploadProgress={post.uploadProgress}
+                                    onMediaLoad={() => {
+                                      try {
+                                        // Clear cached measurement for this row and recompute height
+                                        cache.current.clear(index, 0);
+                                        listRef.current?.recomputeRowHeights(index);
+                                        console.debug("Feed: media loaded, recomputed row", index, post.id);
+                                      } catch (e) {
+                                        // ignore
+                                      }
+                                    }}
+                                    onMuteUser={() => {
+                                      setMutedUsers((prev) =>
+                                        prev.includes(post.author.id) ? prev : [...prev, post.author.id]
+                                      );
+                                      if (selectedPostId === post.id) setSelectedPostId(null);
+                                      alert("User muted");
+                                    }}
+                                    onAddComment={async (comment) => {
+                                      const profile = getProfile();
+                                      if (!profile) return;
+
+                                      const added = await addComment(String(post.id), profile.id, comment.text, comment.voice);
+                                      setPosts((prevPosts) =>
+                                        prevPosts.map((p) =>
+                                          p.id === post.id
+                                            ? {
+                                                ...p,
+                                                comments: [
+                                                  ...(p.comments || []),
+                                                  {
+                                                    id: added?.id ?? Date.now(),
+                                                    user: { id: profile.id, username: profile.username ?? profile.id },
+                                                    text: added?.text ?? comment.text ?? "",
+                                                    voice: comment.voice,
+                                                    likes: 0,
+                                                  },
+                                                ],
+                                              }
+                                            : p
+                                        )
+                                      );
+                                    }}
+                                    onDeleteComment={async (commentId) => {
+                                      await deleteComment(String(commentId));
+                                      setPosts((prevPosts) =>
+                                        prevPosts.map((p) =>
+                                          p.id === post.id
+                                            ? { ...p, comments: p.comments?.filter((c) => c.id !== commentId) || [] }
+                                            : p
+                                        )
+                                      );
+                                    }}
+                                    onEditComment={async (commentId, newText) => {
+                                      await editComment(String(commentId), newText);
+                                      setPosts((prevPosts) =>
+                                        prevPosts.map((p) =>
+                                          p.id === post.id
+                                            ? { ...p, comments: p.comments?.map((c) => (c.id === commentId ? { ...c, text: newText } : c)) || [] }
+                                            : p
+                                        )
+                                      );
+                                    }}
+                                    onLikeComment={(commentId) => {
+                                      setPosts((prevPosts) =>
+                                        prevPosts.map((p) =>
+                                          p.id === post.id
+                                            ? {
+                                                ...p,
+                                                comments: p.comments?.map((c) =>
+                                                  c.id === commentId ? { ...c, likes: c.likes + 1 } : c
+                                                ) || [],
+                                              }
+                                            : p
+                                        )
+                                      );
+                                    }}
+                                  />
+                                </div>
                               </div>
-                            </div>
-                          )}
-                        </CellMeasurer>
-                      );
-                    }}
-                    onScroll={onChildScroll}
-                    scrollTop={scrollTop}
-                    isScrolling={isScrolling}
-                    ref={listRef}
-                    style={{ outline: "none" }}
-                  />
-                )}
-              </AutoSizer>
-            )}
-          </WindowScroller>
+                            )}
+                          </CellMeasurer>
+                        );
+                      }}
+                      onScroll={onChildScroll}
+                      scrollTop={scrollTop}
+                      isScrolling={isScrolling}
+                      ref={listRef}
+                      style={{ outline: "none" }}
+                    />
+                  )}
+                </AutoSizer>
+              )}
+            </WindowScroller>
+          )}
         </div>
       </div>
 
@@ -915,7 +957,7 @@ export default function Feed() {
           <div className="absolute inset-0 bg-black/50 backdrop-blur-xs" onClick={() => {setStoryEditorOpen(false); setSelectedImage(null); setStoryText(""); setStoryDuration(24); setStoryMusic(undefined); setStoryVoice(undefined);}}></div>
 
           <div className="relative w-full max-w-xs bg-white rounded-2xl p-4 shadow-2xl space-y-4">
-            <div className="w-full h-40 overflow-hidden rounded-xl bg-slate-100">
+            <div className="w-full aspect-square overflow-hidden rounded-xl bg-slate-100">
               <img src={selectedImage} alt="preview" className="w-full h-full object-cover" />
             </div>
 

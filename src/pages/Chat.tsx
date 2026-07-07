@@ -44,6 +44,10 @@ export default function Chat() {
   const subscriptionRef = useRef<RealtimeChannel | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewUrlRef = useRef<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const isUserAtBottomRef = useRef(true);
+  const previousMessageCountRef = useRef(0);
 
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
@@ -374,11 +378,10 @@ export default function Chat() {
     let uploadBlob: Blob | File = file;
     try {
       if (file.type.startsWith("image/")) {
-        const { optimizeImageFile, mimeToExtension } = await import("../lib/imageUtils");
+        const { optimizeImageFile } = await import("../lib/imageUtils");
         uploadBlob = await optimizeImageFile(file, 1200, 0.8);
       }
     } catch (e) {
-      // If optimization fails, fallback to original file
       console.warn("Image optimization failed, uploading original file", e);
       uploadBlob = file;
     }
@@ -606,6 +609,42 @@ export default function Chat() {
     };
   }, []);
 
+  // Detect when user scrolls manually
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      // Check if user is near bottom (within 100px)
+      const isNearBottom = 
+        container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+      isUserAtBottomRef.current = isNearBottom;
+    };
+
+    container.addEventListener("scroll", handleScroll, { passive: true });
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  // Auto-scroll only if user is already at bottom or messages just loaded
+  useEffect(() => {
+    const messageCountChanged = previousMessageCountRef.current !== messages.length;
+    previousMessageCountRef.current = messages.length;
+
+    // Only auto-scroll if:
+    // 1. This is initial load (no previous messages), OR
+    // 2. User is already at the bottom, OR
+    // 3. A new message was just added (not a reload)
+    if (
+      messageCountChanged &&
+      (isUserAtBottomRef.current || previousMessageCountRef.current <= 1)
+    ) {
+      // Defer scroll to next frame to ensure DOM is updated
+      requestAnimationFrame(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      });
+    }
+  }, [messages]);
+
   const vibesProMessages: VibesProMessageType[] = messages.map((msg) => ({
     id: msg.id,
     text: msg.text ?? "",
@@ -770,7 +809,7 @@ export default function Chat() {
       </div>
 
       {/* Messages Container */}
-      <div className="flex-1 overflow-y-auto pt-28 md:pt-32 pb-28 md:pb-32 px-3 md:px-6">
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto pt-28 md:pt-32 pb-28 md:pb-32 px-3 md:px-6">
         <div className="max-w-xl mx-auto">
 
           {/* Messages */}
@@ -789,6 +828,7 @@ export default function Chat() {
                   />
                 ))
               )}
+              <div ref={messagesEndRef} />
             </div>
           ) : (
             <div className="bg-white/5 backdrop-blur-3xl border border-white/10 rounded-4xl p-8 text-center text-white/60 shadow-lg">

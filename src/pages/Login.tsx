@@ -48,6 +48,8 @@ export default function Login() {
           snapshots_count: 0,
           vibes_count: 0,
           language: selectedLanguage,
+          dateOfBirth: "",
+          gender: "",
         };
         await upsertProfileToSupabase(newProfile as any);
         saveProfile(newProfile as any);

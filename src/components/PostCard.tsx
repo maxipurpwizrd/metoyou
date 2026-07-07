@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { Mic, Square } from "lucide-react";
 import ImageViewer from "./ImageViewer";
 import { getProfile } from "../utils/profileStorage";
 import { useAutoplayVideo } from "../hooks/useAutoplayVideo";
@@ -39,6 +40,7 @@ type Props = {
   audio?: string;
   uploadState?: "uploading" | "completed" | "waiting-network" | "failed";
   uploadProgress?: number;
+  onMediaLoad?: () => void;
   onAddComment?: (comment: { id: number; text?: string; voice?: string }) => void;
   onDeleteComment?: (commentId: number) => void;
   onEditComment?: (commentId: number, newText: string) => void;
@@ -74,6 +76,7 @@ export default function PostCard({
   audio,
   uploadState,
   uploadProgress,
+  onMediaLoad,
   onAddComment,
   onDeleteComment,
   onEditComment,
@@ -97,6 +100,7 @@ export default function PostCard({
   const [editingText, setEditingText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
+  const [isReadingModeOpen, setIsReadingModeOpen] = useState(false);
   const MAX_RECORDING_SECONDS = 60;
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -109,6 +113,8 @@ export default function PostCard({
   const recordingTimerRef = useRef<number | null>(null);
   const recordingTimeoutRef = useRef<number | null>(null);
   const activeVoiceUrlRef = useRef<string | null>(null);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+  const loadTimeoutRef = useRef<number | null>(null);
 
   // Video autoplay state
   const [isMuted, setIsMuted] = useState(true);
@@ -131,6 +137,46 @@ export default function PostCard({
     threshold: 0.5,
   });
 
+  // Smart image loading: start loading when element is near-visible (300px threshold)
+  // and set timeout to handle slow/failed loads gracefully
+  useEffect(() => {
+    if (!image || !imgRef.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting && imgRef.current && !imgRef.current.src) {
+            imgRef.current.src = image;
+
+            // Set a 8 second timeout - if image hasn't loaded by then, mark as ready anyway
+            if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);
+            loadTimeoutRef.current = window.setTimeout(() => {
+              if (!mediaReady && imgRef.current) {
+                setMediaReady(true);
+              }
+              loadTimeoutRef.current = null;
+            }, 8000);
+
+            observer.unobserve(imgRef.current);
+          }
+        });
+      },
+      { rootMargin: "300px" } // Start loading 300px before element is visible
+    );
+
+    if (imgRef.current) {
+      observer.observe(imgRef.current);
+    }
+
+    return () => {
+      observer.disconnect();
+      if (loadTimeoutRef.current) {
+        clearTimeout(loadTimeoutRef.current);
+        loadTimeoutRef.current = null;
+      }
+    };
+  }, [image, mediaReady]);
+
   const audioRef = useAutoplayAudio({
     audioId: audioElementId,
     threshold: 0.6,
@@ -138,7 +184,31 @@ export default function PostCard({
   });
 
   const hasVisualMedia = Boolean(image || video);
-  const showMedia = Boolean(image || video || audio);
+  const showMedia = Boolean(image || video || audio || text);
+
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      const isTextOnly = Boolean(text && !image && !video && !audio);
+      if (isTextOnly) {
+        console.debug("PostCard: mount text-only", postId);
+      }
+      return () => {
+        if (isTextOnly) console.debug("PostCard: unmount text-only", postId);
+      };
+    }
+    return undefined;
+  }, [postId, text, image, video, audio]);
+
+  useEffect(() => {
+    if (!isReadingModeOpen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isReadingModeOpen]);
 
   useEffect(() => {
     const onScroll = () => setShowMenu(false);
@@ -401,9 +471,17 @@ export default function PostCard({
     setVoiceComment(undefined);
   };
 
+  const normalizedText = text?.trim() ?? "";
+  const isLongCaption = Boolean(normalizedText) && (normalizedText.length > 220 || normalizedText.split(/\r?\n/).length > 5);
+  const captionPreviewText = isLongCaption
+    ? normalizedText.length > 220
+      ? `${normalizedText.slice(0, 220).trimEnd()}…`
+      : `${normalizedText.split(/\r?\n/).slice(0, 7).join("\n")}…`
+    : normalizedText;
+
   return (
     <div
-      className={`bg-white/70 backdrop-blur-sm border border-white/40 rounded-[28px] shadow-sm p-5 md:p-6 mb-4 transition-all duration-300 ${
+      className={`relative bg-white/70 backdrop-blur-sm border border-white/40 rounded-[28px] shadow-sm p-5 md:p-6 mb-4 transition-all duration-300 ${
         isSelected ? "shadow-lg ring-1 ring-purple-200/50" : "hover:bg-white/80"
       } md:backdrop-blur-md md:rounded-3xl md:shadow-xs md:p-7`}
     >
@@ -658,10 +736,14 @@ export default function PostCard({
                       playsInline
                       preload="metadata"
                       className="w-full h-full object-contain bg-black/5"
-                      onLoadedData={() => setMediaReady(true)}
+                      onLoadedData={() => {
+                        setMediaReady(true);
+                        onMediaLoad?.();
+                      }}
                       onError={() => {
                         setMediaReady(true);
                         setMediaErrored(true);
+                        onMediaLoad?.();
                       }}
                     />
                     <button
@@ -678,14 +760,25 @@ export default function PostCard({
                   </>
                 ) : (
                   <img
-                    src={image}
+                    ref={imgRef}
                     alt={`${author.username}'s post`}
-                    loading="lazy"
                     className="w-full h-full object-contain bg-black/5 cursor-pointer active:scale-98 transition-transform"
-                    onLoad={() => setMediaReady(true)}
+                    onLoad={() => {
+                      setMediaReady(true);
+                      if (loadTimeoutRef.current) {
+                        clearTimeout(loadTimeoutRef.current);
+                        loadTimeoutRef.current = null;
+                      }
+                      onMediaLoad?.();
+                    }}
                     onError={() => {
                       setMediaReady(true);
                       setMediaErrored(true);
+                      if (loadTimeoutRef.current) {
+                        clearTimeout(loadTimeoutRef.current);
+                        loadTimeoutRef.current = null;
+                      }
+                      onMediaLoad?.();
                     }}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -710,9 +803,27 @@ export default function PostCard({
               </div>
 
               {/* RIGHT: Caption & Interactions (55% on mobile, full width on desktop) */}
-              <div className="w-[55%] md:w-full flex flex-col justify-between">
-                <div className="max-h-24 md:max-h-32 overflow-y-auto pr-1 text-sm md:text-[15px] font-medium text-slate-700 leading-relaxed whitespace-pre-wrap break-words">
-                  {text}
+              <div className="w-[55%] md:w-full flex flex-col justify-between self-stretch min-h-0">
+                <div className="flex-1 min-h-0 rounded-2xl border border-slate-100/80 bg-white/70 p-2.5 shadow-sm">
+                  <div className="h-full max-h-36 md:max-h-60 overflow-y-auto pr-1 text-base md:text-lg font-medium text-slate-700 leading-relaxed whitespace-pre-wrap wrap-break-word">
+                    {isLongCaption ? (
+                      <>
+                        <div className="whitespace-pre-wrap wrap-break-word">{captionPreviewText}</div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setIsReadingModeOpen(true);
+                          }}
+                          className="mt-2 inline-flex items-center rounded-full bg-slate-800 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-white"
+                        >
+                          More
+                        </button>
+                      </>
+                    ) : (
+                      <div className="whitespace-pre-wrap wrap-break-word">{normalizedText}</div>
+                    )}
+                  </div>
                 </div>
 
                 {audio && !image && !video && (
@@ -740,7 +851,10 @@ export default function PostCard({
                   </button>
                   <button
                     type="button"
-                    onClick={() => onSelectPost?.()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectPost?.();
+                    }}
                     className="py-1.5 md:py-2.5 text-xs font-bold text-blue-600 hover:bg-blue-50/40 text-center transition-colors rounded-lg border border-blue-200/50 md:border-slate-100"
                   >
                     💬 {comments?.length || 0}
@@ -750,9 +864,11 @@ export default function PostCard({
             </div>
           ) : (
             <div className="space-y-3">
-              <p className="text-sm font-medium text-slate-700 leading-relaxed whitespace-pre-wrap px-0.5">
-                {text}
-              </p>
+              <div className="rounded-2xl border border-slate-100/80 bg-white/70 p-2.5 shadow-sm">
+                <div className="max-h-60 overflow-y-auto pr-1 text-base md:text-lg font-medium text-slate-700 leading-relaxed whitespace-pre-wrap wrap-break-word">
+                  {text}
+                </div>
+              </div>
 
               {audio && !video && (
                 <div className="rounded-xl border border-white/40 bg-white/60 p-2 shadow-sm">
@@ -780,7 +896,10 @@ export default function PostCard({
                 <div className="w-px bg-slate-100"></div>
                 <button
                   type="button"
-                  onClick={() => onSelectPost?.()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelectPost?.();
+                  }}
                   className="flex-1 py-2.5 text-xs font-bold text-blue-600 hover:bg-blue-50/40 text-center transition-colors"
                 >
                   💬 {comments?.length || 0} Comments
@@ -790,6 +909,36 @@ export default function PostCard({
           )}
         </div>
       ) : null}
+
+      {isReadingModeOpen && (
+        <div className="fixed inset-0 z-80 flex items-center justify-center px-3 py-4 sm:px-6">
+          <button
+            type="button"
+            onClick={() => setIsReadingModeOpen(false)}
+            className="absolute inset-0 bg-slate-950/25 backdrop-blur-xl"
+            aria-label="Close reading mode"
+          />
+          <div className="relative z-10 w-full max-w-160 max-h-[85vh] rounded-[28px] border border-white/60 bg-white/95 p-4 shadow-2xl sm:p-5">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-slate-800">{author.username}</p>
+                <p className="text-[11px] text-slate-400">{time}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsReadingModeOpen(false)}
+                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-600"
+              >
+                Show Photo
+              </button>
+            </div>
+
+            <div className="max-h-[16rem] overflow-y-auto rounded-2xl bg-slate-50/80 p-3.5 text-lg md:text-xl leading-7 text-slate-700 whitespace-pre-wrap wrap-break-word shadow-inner sm:p-4">
+              {normalizedText}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Inline Comments Section Extension */}
       {isSelected && (
@@ -894,12 +1043,12 @@ export default function PostCard({
           {/* Bottom Interactive Comment Composer Bar */}
           <div className="bg-slate-50 rounded-2xl p-2.5 border border-slate-100 space-y-2">
             <div className="flex gap-2">
-              <input
-                type="text"
+              <textarea
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
                 placeholder="Write a comment..."
-                className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs outline-none focus:border-pink-300 transition-colors placeholder:text-slate-400"
+                rows={3}
+                className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs outline-none focus:border-pink-300 transition-colors placeholder:text-slate-400 resize-none max-h-30 overflow-y-auto"
                 onFocus={() => onInteractionActivity?.(true)}
                 onBlur={() => onInteractionActivity?.(false)}
               />
@@ -913,11 +1062,12 @@ export default function PostCard({
                     void startRecording();
                   }
                 }}
-                className={`w-8 h-8 shrink-0 rounded-xl font-bold text-xs flex items-center justify-center shadow-2xs transition-colors ${
-                  isRecording ? "bg-red-500 text-white animate-pulse" : "bg-blue-50 text-blue-600 hover:bg-blue-100"
+                className={`h-11 w-11 rounded-full flex items-center justify-center shrink-0 transition shadow-md ${
+                  isRecording ? "bg-red-500 text-white shadow-lg shadow-red-500/40 animate-pulse scale-105" : "bg-blue-500 text-white hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/30 active:scale-95"
                 }`}
+                title={isRecording ? "Stop recording" : "Start recording"}
               >
-                {isRecording ? "⏹" : "🎤"}
+                {isRecording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
               </button>
 
               <button

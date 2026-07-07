@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-
+import { Mic, Square } from "lucide-react";
+import { getProfile } from "../utils/profileStorage";
 import { uploadVideo, type UploadProgress } from "../lib/videoApi";
 
 
@@ -428,8 +429,16 @@ export default function CreatePost({ onPost }: Props) {
       currentAnalyser.getByteFrequencyData(dataArray);
 
       canvasCtx.clearRect(0, 0, width, height);
-      canvasCtx.fillStyle = "rgba(255, 255, 255, 0.16)";
-      canvasCtx.strokeStyle = "#f43f5e";
+      
+      // Create gradient for vibrant colors
+      const gradient = canvasCtx.createLinearGradient(0, 0, width, 0);
+      gradient.addColorStop(0, "#ec4899");
+      gradient.addColorStop(0.5, "#a855f7");
+      gradient.addColorStop(1, "#3b82f6");
+      
+      canvasCtx.fillStyle = gradient;
+      canvasCtx.shadowColor = "rgba(236, 72, 153, 0.4)";
+      canvasCtx.shadowBlur = 8;
       canvasCtx.lineWidth = 2;
       canvasCtx.beginPath();
 
@@ -730,13 +739,13 @@ export default function CreatePost({ onPost }: Props) {
 
           <div className="w-11 h-11 rounded-2xl bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 flex items-center justify-center text-white font-bold shrink-0">
 
-            M
+            {(getProfile()?.username ?? "M")[0].toUpperCase()}
 
           </div>
 
           <div>
 
-            <p className="font-semibold text-slate-900">Maxi</p>
+            <p className="font-semibold text-slate-900">{getProfile()?.username ?? "User"}</p>
 
             <p className="text-sm text-slate-600">Posting to your feed</p>
 
@@ -1080,13 +1089,13 @@ export default function CreatePost({ onPost }: Props) {
 
               disabled={Boolean(audio) && !isRecording}
 
-              className={`w-11 h-11 rounded-xl shadow-md flex items-center justify-center text-xl hover:scale-105 transition ${
+              className={`h-11 w-11 rounded-full shadow-md flex items-center justify-center shrink-0 transition ${
 
                 isRecording
 
-                  ? "bg-red-500 text-white animate-pulse"
+                  ? "bg-red-500 text-white shadow-lg shadow-red-500/40 animate-pulse scale-105"
 
-                  : "bg-white"
+                  : "bg-blue-500 text-white hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/30 active:scale-95"
 
               } ${Boolean(audio) && !isRecording ? "opacity-50 cursor-not-allowed" : ""}`}
 
@@ -1094,7 +1103,7 @@ export default function CreatePost({ onPost }: Props) {
 
             >
 
-              {isRecording ? "⏹" : "🎤"}
+              {isRecording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
 
             </button>
 

@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode, type SetStateAction } from "react";
 import { useQueryClient } from '@tanstack/react-query';
 import { fetchPostsFromSupabase, type PostRecord } from "../lib/postApi";
+import { useAuth } from "../hooks/useAuth";
 
 export type User = {
   id: string;
@@ -86,6 +87,7 @@ export function useFeed() {
 }
 
 export function FeedProvider({ children }: { children: ReactNode }) {
+  const { user, isLoading: authLoading } = useAuth();
   const [posts, setPostsState] = useState<Post[]>(() => readCachedFeed());
   const [loading, setLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -95,21 +97,59 @@ export function FeedProvider({ children }: { children: ReactNode }) {
   const [selectedPostId, setSelectedPostId] = useState<string | number | null>(null);
   const queryClient = useQueryClient();
   const postsRef = useRef<Post[]>([]);
+  const isMountedRef = useRef(true);
+  const isFetchingRef = useRef(false);
+  const currentRequestId = useRef(0);
+  const isDev = import.meta.env.DEV;
+  const skipCachedFeed = typeof window !== "undefined" && window.localStorage.getItem("metoyou.skipCachedFeed") === "1";
+  if (isDev && typeof window !== "undefined") console.debug("[FeedContext] skipCachedFeed=", skipCachedFeed);
 
   useEffect(() => {
     postsRef.current = posts;
     writeCachedFeed(posts);
   }, [posts]);
 
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const devLog = (...args: unknown[]) => {
+    if (isDev) {
+      console.debug("[FeedContext]", ...args);
+    }
+  };
+
+  const getRelativeTime = (dateString: string): string => {
+    try {
+      const date = new Date(dateString);
+      const now = new Date();
+      const diff = now.getTime() - date.getTime();
+      const minutes = Math.floor(diff / 60000);
+      const hours = Math.floor(diff / 3600000);
+      const days = Math.floor(diff / 86400000);
+
+      if (minutes < 1) return "just now";
+      if (minutes < 60) return `${minutes}m ago`;
+      if (hours < 24) return `${hours}h ago`;
+      if (days < 7) return `${days}d ago`;
+      return date.toLocaleDateString();
+    } catch {
+      return "just now";
+    }
+  };
+
   const mapRecords = async (records: PostRecord[] | null | undefined) => {
     const safeRecords = Array.isArray(records) ? records : [];
 
     return safeRecords.map((r: PostRecord) => ({
       id: r.id,
-      author: { id: r.author_id, username: r.profiles?.username ?? r.author_id },
+      author: { id: r.author_id, username: r.profiles?.username ?? r.author_id, avatar: r.profiles?.profile_pic ?? undefined },
       authorId: r.author_id,
       author_id: r.author_id,
-      time: new Date(r.created_at).toLocaleString(),
+      time: getRelativeTime(r.created_at),
       created_at: r.created_at,
       text: r.text ?? "",
       image: r.image_url ?? undefined,
@@ -122,36 +162,65 @@ export function FeedProvider({ children }: { children: ReactNode }) {
       liked: false,
       highlighted: Boolean(r.highlighted),
     } as Post));
-  };
-  const syncPosts = (nextPosts: Post[]) => {
-    setPostsState(nextPosts);
-    queryClient.setQueryData(["feed"], nextPosts);
-    postsRef.current = nextPosts;
+  };  const syncPosts = (nextPosts: Post[]) => {
+    setPosts(nextPosts);
   };
 
-  const mergePostsById = (incoming: Post[], existing: Post[]) => {
-    const seen = new Set<string | number>();
-    const merged: Post[] = [];
+  const normalizeId = (id: string | number) => String(id);
 
-    for (const post of [...incoming, ...existing]) {
-      if (seen.has(post.id)) continue;
-      seen.add(post.id);
-      merged.push(post);
-    }
+  const mergePostsById = (incoming: Post[], existing: Post[], prependIncoming = false) => {
+    const normalized = (post: Post) => normalizeId(post.id);
+    const map = new Map<string, Post>();
+    const order: string[] = [];
 
-    return merged;
+    const addPost = (post: Post) => {
+      const postId = normalized(post);
+      if (map.has(postId)) {
+        const existingPost = map.get(postId)!;
+        const mergedPost = { ...existingPost, ...post };
+        if (isDev && JSON.stringify(existingPost) !== JSON.stringify(mergedPost)) {
+          devLog("mergePostsById duplicate updated", postId, { existingPost, incomingPost: post, mergedPost });
+        }
+        map.set(postId, mergedPost);
+      } else {
+        map.set(postId, post);
+        order.push(postId);
+      }
+    };
+
+    const first = prependIncoming ? incoming : existing;
+    const second = prependIncoming ? existing : incoming;
+
+    for (const post of first) addPost(post);
+    for (const post of second) addPost(post);
+
+    return order.map((id) => map.get(id)!);
   };
 
   const prependNewPosts = (incoming: Post[]) => {
-    if (incoming.length === 0) return postsRef.current;
-    const existingIds = new Set(postsRef.current.map((post) => post.id));
-    const newPosts = incoming.filter((post) => !existingIds.has(post.id));
-    if (newPosts.length === 0) return postsRef.current;
-    return [...newPosts, ...postsRef.current];
+    if (incoming.length === 0) {
+      devLog("prependNewPosts no incoming posts");
+      return postsRef.current;
+    }
+
+    const nextPosts = mergePostsById(incoming, postsRef.current, true);
+    if (nextPosts.length === postsRef.current.length) {
+      devLog("prependNewPosts skipped duplicates", incoming.map((post) => post.id));
+    } else {
+      devLog("prependNewPosts merged posts", {
+        incomingIds: incoming.map((post) => post.id),
+        resultingCount: nextPosts.length,
+      });
+    }
+    return nextPosts;
   };
 
   const loadPostsPage = async ({ append = false, refresh = false, background = false } = {}) => {
-    if (loading || isLoadingMore) return;
+    if (!user || authLoading) return;
+    if (isFetchingRef.current) {
+      devLog("loadPostsPage skipped due to active request", { append, refresh, background });
+      return;
+    }
 
     if (append) {
       if (!hasMore || postsRef.current.length === 0) return;
@@ -159,6 +228,9 @@ export function FeedProvider({ children }: { children: ReactNode }) {
     } else {
       if (!background) setLoading(true);
     }
+
+    const requestId = ++currentRequestId.current;
+    isFetchingRef.current = true;
 
     try {
       const oldestCursor = append ? postsRef.current[postsRef.current.length - 1]?.created_at : undefined;
@@ -168,16 +240,24 @@ export function FeedProvider({ children }: { children: ReactNode }) {
         : await fetchPostsFromSupabase({ limit: PAGE_SIZE, before: oldestCursor });
       const withMeta = await mapRecords(Array.isArray(records) ? (records as PostRecord[]) : []);
 
+      if (!isMountedRef.current || currentRequestId.current !== requestId) {
+        devLog("loadPostsPage ignored stale response", requestId);
+        return;
+      }
+
       if (refresh) {
         const nextPosts = postsRef.current.length === 0 ? withMeta : prependNewPosts(withMeta);
         syncPosts(nextPosts);
         setLastFetchTime(Date.now());
+        devLog("loadPostsPage refresh applied", { count: nextPosts.length, source: background ? "background" : "refresh" });
       } else if (append) {
-        const nextPosts = [...postsRef.current, ...withMeta];
+        const nextPosts = mergePostsById(withMeta, postsRef.current, false);
         syncPosts(nextPosts);
+        devLog("loadPostsPage append applied", { appendCount: withMeta.length, totalCount: nextPosts.length });
       } else {
         syncPosts(withMeta);
         setLastFetchTime(Date.now());
+        devLog("loadPostsPage replace applied", { count: withMeta.length });
       }
 
       if (append) {
@@ -186,6 +266,9 @@ export function FeedProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.error("FeedProvider: failed to load posts", err);
     } finally {
+      if (currentRequestId.current === requestId) {
+        isFetchingRef.current = false;
+      }
       if (!background) setLoading(false);
       if (!background) setIsLoadingMore(false);
     }
@@ -202,17 +285,20 @@ export function FeedProvider({ children }: { children: ReactNode }) {
 
   // Fetch the first page once when provider mounts, but let cached posts render immediately.
   useEffect(() => {
-    const cachedPosts = readCachedFeed();
-    if (cachedPosts.length > 0) {
-      syncPosts(cachedPosts);
-      setLastFetchTime(Date.now());
+    if (!skipCachedFeed) {
+      const cachedPosts = readCachedFeed();
+      if (cachedPosts.length > 0) {
+        syncPosts(cachedPosts);
+        setLastFetchTime(Date.now());
+      }
     }
 
-    // Refresh silently in the background so cached posts render instantly.
-    // Only prepend genuinely new posts rather than replacing the feed.
-    void loadPostsPage({ append: false, refresh: true, background: true });
+    // Only load remote posts once auth is established.
+    if (!authLoading && user) {
+      void loadPostsPage({ append: false, refresh: true, background: true });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); 
+  }, [authLoading, user]); 
 
   // Listen for manual refresh events dispatched from other UI (e.g. Navbar)
   useEffect(() => {
@@ -262,13 +348,46 @@ export function FeedProvider({ children }: { children: ReactNode }) {
   }, [lastFetchTime]);
 
   // setPosts wrapper keeps both local state and query cache in sync
+  const dedupePosts = (candidate: Post[]) => {
+    const map = new Map<string, Post>();
+    const order: string[] = [];
+
+    for (const post of candidate) {
+      const postId = normalizeId(post.id);
+      if (map.has(postId)) {
+        map.set(postId, { ...map.get(postId)!, ...post });
+        if (isDev) {
+          devLog("dedupePosts merged duplicate", postId, post);
+        }
+      } else {
+        map.set(postId, post);
+        order.push(postId);
+      }
+    }
+
+    return order.map((id) => map.get(id)!);
+  };
+
   const setPosts = (updater: SetStateAction<Post[]>) => {
     setPostsState((prev) => {
       const next = typeof updater === "function" ? (updater as any)(prev) : updater;
+      const deduped = dedupePosts(next);
+      // Dev-only tracing for text-only posts: detect added/removed/updated
+      if (isDev) {
+        const prevTextOnly = prev.filter((p) => p.text && !p.image && !p.video && !p.audio).map((p) => normalizeId(p.id));
+        const nextTextOnly = deduped.filter((p) => p.text && !p.image && !p.video && !p.audio).map((p) => normalizeId(p.id));
+        const removed = prevTextOnly.filter((id) => !nextTextOnly.includes(id));
+        const added = nextTextOnly.filter((id) => !prevTextOnly.includes(id));
+        const remained = nextTextOnly.filter((id) => prevTextOnly.includes(id));
+        if (added.length) devLog("text-posts added", added);
+        if (removed.length) devLog("text-posts removed", removed);
+        if (remained.length) devLog("text-posts still-present", remained.length);
+      }
+
       try {
-        queryClient.setQueryData(["feed"], next);
+        queryClient.setQueryData(["feed"], deduped);
       } catch (e) {}
-      return next;
+      return deduped;
     });
   };
 

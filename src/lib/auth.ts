@@ -7,12 +7,19 @@ export async function login(email: string, password: string) {
   return data;
 }
 
+export async function logout() {
+  const { error } = await supabase.auth.signOut();
+  if (error) throw error;
+}
+
 export async function signUp(
   email: string,
   password: string,
   firstName?: string,
   lastName?: string,
-  language?: string
+  language?: string,
+  dateOfBirth?: string,
+  gender?: string
 ) {
   const username = `${firstName || ""} ${lastName || ""}`.trim();
   const normalizedLanguage = normalizeLanguage(language);
@@ -44,16 +51,13 @@ export async function signUp(
         vibes_count: 0,
         snapshots_count: 0,
         language: normalizedLanguage,
+        date_of_birth: dateOfBirth ?? null,
+        gender: gender ?? null,
       });
 
-    if (profileError) {
-      console.log("PROFILE INSERT ERROR:", profileError);
-    }
+    if (profileError) throw profileError;
   }
 
   return data;
 }
 
-export async function logout() {
-  await supabase.auth.signOut();
-}

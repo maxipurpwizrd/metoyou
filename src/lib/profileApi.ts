@@ -3,9 +3,11 @@ import { optimizeImageFile, mimeToExtension } from "./imageUtils";
 import { normalizeLanguage } from "./i18n";
 import type { ProfileData } from "../utils/profileStorage";
 
-type DbProfile = Omit<ProfileData, "profilePic"> & {
+type DbProfile = Omit<ProfileData, "profilePic" | "dateOfBirth" | "gender"> & {
   profile_pic: string | null;
   first_name?: string | null;
+  date_of_birth?: string | null;
+  gender?: string | null;
 };
 
 export async function fetchProfileFromSupabase(userId?: string) {
@@ -28,6 +30,8 @@ export async function fetchProfileFromSupabase(userId?: string) {
       ...result,
       profilePic: result.profile_pic,
       interests: Array.isArray(result.interests) ? result.interests : [],
+      dateOfBirth: result.date_of_birth ?? undefined,
+      gender: result.gender ?? undefined,
     } as ProfileData;
   } catch (e) {
     console.error("fetchProfileFromSupabase error", e);
@@ -38,10 +42,12 @@ export async function fetchProfileFromSupabase(userId?: string) {
 export async function upsertProfileToSupabase(profile: ProfileData) {
   try {
     const normalizedLanguage = normalizeLanguage(profile.language);
-    const { profilePic, firstName, ...rest } = profile;
+    const { profilePic, firstName, dateOfBirth, gender, ...rest } = profile;
     const dbProfile = {
       ...rest,
       first_name: firstName ?? null,
+      date_of_birth: dateOfBirth ?? null,
+      gender: gender ?? null,
       language: normalizedLanguage,
       interests: profile.interests ?? [],
       profile_pic: profilePic,
@@ -56,6 +62,8 @@ export async function upsertProfileToSupabase(profile: ProfileData) {
     return {
       ...result,
       profilePic: result.profile_pic,
+      dateOfBirth: result.date_of_birth ?? undefined,
+      gender: result.gender ?? undefined,
     } as ProfileData;
   } catch (e) {
     console.error("upsertProfileToSupabase error", e);
@@ -76,6 +84,8 @@ export async function fetchProfileByUsername(username?: string) {
       ...result,
       profilePic: result.profile_pic,
       interests: Array.isArray(result.interests) ? result.interests : [],
+      dateOfBirth: result.date_of_birth ?? undefined,
+      gender: result.gender ?? undefined,
     } as ProfileData;
   } catch (e) {
     console.error("fetchProfileByUsername error", e);

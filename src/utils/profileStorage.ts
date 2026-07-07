@@ -11,6 +11,8 @@ export type ProfileData = {
   interests: string[];
   email: string;
   language?: string;
+  dateOfBirth?: string;
+  gender?: string;
   hommies_count: number;
   snapshots_count: number;
   vibes_count: number;
@@ -26,6 +28,8 @@ export const DEFAULT_PROFILE: ProfileData = {
   interests: [],
   email: "maxi@example.com",
   language: "en-basic",
+  dateOfBirth: "",
+  gender: "",
   hommies_count: 0,
   snapshots_count: 0,
   vibes_count: 0,
