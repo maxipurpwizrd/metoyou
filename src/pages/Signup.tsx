@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { signUp } from "../lib/auth";
 import { useLanguage } from "../contexts/LanguageContext";
@@ -13,16 +13,50 @@ export default function Signup() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState("");
+  const [selectedDay, setSelectedDay] = useState("");
+  const [selectedYear, setSelectedYear] = useState("");
   const [gender, setGender] = useState("");
   const [loading, setLoading] = useState(false);
   const [languageStep, setLanguageStep] = useState<"choose-lang" | "choose-english-variant" | "continue">("choose-lang");
   const [selectedLanguage, setSelectedLanguage] = useState<Language>(language);
 
+  const monthOptions = useMemo(() => [
+    { value: "01", label: "January" },
+    { value: "02", label: "February" },
+    { value: "03", label: "March" },
+    { value: "04", label: "April" },
+    { value: "05", label: "May" },
+    { value: "06", label: "June" },
+    { value: "07", label: "July" },
+    { value: "08", label: "August" },
+    { value: "09", label: "September" },
+    { value: "10", label: "October" },
+    { value: "11", label: "November" },
+    { value: "12", label: "December" },
+  ], []);
+
+  const dayOptions = useMemo(() => Array.from({ length: 30 }, (_, index) => String(index + 1).padStart(2, "0")), []);
+
+  const yearOptions = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    return Array.from({ length: 100 }, (_, index) => String(currentYear - index));
+  }, []);
+
+  const birthDateValue = useMemo(() => {
+    if (!selectedYear || !selectedMonth || !selectedDay) return "";
+    return `${selectedYear}-${selectedMonth}-${selectedDay}`;
+  }, [selectedDay, selectedMonth, selectedYear]);
+
+  useMemo(() => {
+    setDateOfBirth(birthDateValue);
+  }, [birthDateValue]);
+
   async function handleSignup(e?: FormEvent) {
     e?.preventDefault();
     setLoading(true);
     try {
-      await signUp(email, password, firstName, lastName, selectedLanguage, dateOfBirth, gender);
+      await signUp(email, password, firstName, lastName, selectedLanguage, birthDateValue, gender);
       setLanguage(selectedLanguage);
       alert("Account created 🔥");
       navigate("/login");
@@ -142,12 +176,47 @@ export default function Signup() {
           />
 
           <label className="block text-sm mb-2">{t("signup.dob")}</label>
-          <input
-            value={dateOfBirth}
-            onChange={(e) => setDateOfBirth(e.target.value)}
-            type="date"
-            className="w-full rounded-2xl border px-3 py-2 mb-4"
-          />
+          <div className="grid grid-cols-1 gap-3 mb-4">
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="w-full rounded-2xl border px-3 py-2"
+            >
+              <option value="">Month</option>
+              {monthOptions.map((month) => (
+                <option key={month.value} value={month.value}>
+                  {month.label}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={selectedDay}
+              onChange={(e) => setSelectedDay(e.target.value)}
+              className="w-full rounded-2xl border px-3 py-2"
+            >
+              <option value="">Day</option>
+              {dayOptions.map((day) => (
+                <option key={day} value={day}>
+                  {day}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(e.target.value)}
+              className="w-full rounded-2xl border px-3 py-2"
+            >
+              <option value="">Year</option>
+              {yearOptions.map((year) => (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              ))}
+            </select>
+          </div>
+          <input type="hidden" name="dateOfBirth" value={dateOfBirth} />
 
           <label className="block text-sm mb-2">{t("signup.gender")}</label>
           <select

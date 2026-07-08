@@ -7,6 +7,7 @@ export type User = {
   id: string;
   username: string;
   avatar?: string;
+  is_vibes_pro?: boolean;
 };
 
 export type Comment = {
@@ -146,7 +147,12 @@ export function FeedProvider({ children }: { children: ReactNode }) {
 
     return safeRecords.map((r: PostRecord) => ({
       id: r.id,
-      author: { id: r.author_id, username: r.profiles?.username ?? r.author_id, avatar: r.profiles?.profile_pic ?? undefined },
+      author: {
+        id: r.author_id,
+        username: r.profiles?.username ?? r.author_id,
+        avatar: r.profiles?.profile_pic ?? undefined,
+        is_vibes_pro: Boolean(r.profiles?.is_vibes_pro),
+      },
       authorId: r.author_id,
       author_id: r.author_id,
       time: getRelativeTime(r.created_at),

@@ -16,6 +16,8 @@ type Props = {
   text: string;
   image?: string;
   video?: string;
+  isVibesPro?: boolean;
+  variant?: "default" | "gold";
 
   comments?: Comment[];
   likes: number;
@@ -56,6 +58,8 @@ export default function PostCard({
   text,
   image,
   video,
+  isVibesPro = false,
+  variant = "default",
   comments,
   likes,
   liked = false,
@@ -478,13 +482,41 @@ export default function PostCard({
       ? `${normalizedText.slice(0, 220).trimEnd()}…`
       : `${normalizedText.split(/\r?\n/).slice(0, 7).join("\n")}…`
     : normalizedText;
+  const isPremiumTheme = Boolean(isVibesPro || variant === "gold" || author?.is_vibes_pro);
 
   return (
-    <div
-      className={`relative bg-white/70 backdrop-blur-sm border border-white/40 rounded-[28px] shadow-sm p-5 md:p-6 mb-4 transition-all duration-300 ${
-        isSelected ? "shadow-lg ring-1 ring-purple-200/50" : "hover:bg-white/80"
-      } md:backdrop-blur-md md:rounded-3xl md:shadow-xs md:p-7`}
-    >
+    <>
+      {isPremiumTheme && (
+        <style>{`
+          @keyframes goldShimmer {
+            0% { transform: translateX(-120%); }
+            100% { transform: translateX(220%); }
+          }
+        `}</style>
+      )}
+      <div
+        className={`relative overflow-hidden rounded-[28px] p-5 mb-4 transition-all duration-300 md:rounded-3xl md:p-7 ${
+          isPremiumTheme
+            ? "border border-amber-200/80 bg-[linear-gradient(135deg,rgba(255,249,196,0.96)_0%,rgba(255,224,130,0.92)_38%,rgba(245,158,11,0.85)_100%)] shadow-[0_0_0_1px_rgba(255,215,0,0.25),0_18px_60px_rgba(217,119,6,0.16)] backdrop-blur-xl"
+            : "bg-white/70 backdrop-blur-sm border border-white/40 shadow-sm md:backdrop-blur-md md:shadow-xs"
+        } ${
+          isSelected
+            ? isPremiumTheme
+              ? "shadow-[0_0_0_1px_rgba(250,204,21,0.35),0_0_30px_rgba(250,204,21,0.2)]"
+              : "shadow-lg ring-1 ring-purple-200/50"
+            : isPremiumTheme
+              ? "hover:shadow-[0_0_0_1px_rgba(250,204,21,0.32),0_14px_40px_rgba(217,119,6,0.16)]"
+              : "hover:bg-white/80"
+        }`}
+      >
+        {isPremiumTheme && (
+          <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]">
+            <div
+              className="absolute inset-y-0 left-[-35%] w-1/2 rotate-6 bg-linear-to-r from-transparent via-white/40 to-transparent"
+              style={{ animation: "goldShimmer 3.4s ease-in-out infinite" }}
+            />
+          </div>
+        )}
       <div className="transition-all duration-300" style={{ opacity: uploadState === "uploading" ? 0.6 : 1 }}>
       {/* Header Container */}
       <div className="flex items-center justify-between mb-4">
@@ -505,14 +537,22 @@ export default function PostCard({
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
               <h3
                 onClick={() => navigate(`/profile/${author.username}`)}
-                className="font-bold text-sm text-slate-800 cursor-pointer hover:text-pink-500 transition-colors truncate"
+                className={`font-bold text-sm cursor-pointer transition-colors truncate ${
+                  isPremiumTheme ? "text-amber-950 hover:text-amber-700" : "text-slate-800 hover:text-pink-500"
+                }`}
               >
                 {author.username}
               </h3>
-              <span className="text-[11px] text-slate-400 font-medium shrink-0">{time}</span>
+              {isPremiumTheme && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-amber-300/80 bg-white/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-800 shadow-sm">
+                  <span>👑</span>
+                  <span>VibesPro</span>
+                </span>
+              )}
+              <span className={`text-[11px] font-medium shrink-0 ${isPremiumTheme ? "text-amber-800/80" : "text-slate-400"}`}>{time}</span>
             </div>
             {highlighted && (
-              <span className="inline-block text-[9px] font-bold uppercase tracking-wider bg-amber-100 text-amber-700 rounded-md px-1.5 py-0.5 mt-0.5">
+              <span className={`inline-block text-[9px] font-bold uppercase tracking-wider rounded-md px-1.5 py-0.5 mt-0.5 ${isPremiumTheme ? "bg-amber-100/80 text-amber-800" : "bg-amber-100 text-amber-700"}`}>
                 ✨ Highlight
               </span>
             )}
@@ -529,7 +569,7 @@ export default function PostCard({
               e.stopPropagation();
               setShowMenu((prev) => !prev);
             }}
-            className="text-slate-400 hover:text-slate-600 font-bold text-lg w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors"
+            className={`font-bold text-lg w-8 h-8 flex items-center justify-center rounded-full transition-colors ${isPremiumTheme ? "text-amber-800 hover:text-amber-900 hover:bg-white/60" : "text-slate-400 hover:text-slate-600 hover:bg-slate-100"}`}
           >
             ⋯
           </button>
@@ -720,7 +760,7 @@ export default function PostCard({
           {hasVisualMedia ? (
             <div className="flex md:flex-col gap-3 md:gap-3.5">
               {/* LEFT: Media Container (45% on mobile, full width on desktop) */}
-              <div className="w-[45%] md:w-full shrink-0 rounded-2xl bg-linear-to-br from-pink-100 via-purple-100 to-blue-100 flex items-center justify-center overflow-hidden relative shadow-inner border border-white/20">
+              <div className={`w-[45%] md:w-full shrink-0 rounded-2xl flex items-center justify-center overflow-hidden relative shadow-inner border ${isPremiumTheme ? "border-amber-200/80 bg-[linear-gradient(135deg,rgba(255,250,205,0.95),rgba(253,230,138,0.9))]" : "bg-linear-to-br from-pink-100 via-purple-100 to-blue-100 border-white/20"}`}>
                 {!mediaReady && !mediaErrored && (
                   <div className="absolute inset-0 flex items-center justify-center bg-white/60 backdrop-blur-sm">
                     <div className="h-8 w-8 animate-spin rounded-full border-2 border-pink-300 border-t-transparent" />
@@ -804,7 +844,7 @@ export default function PostCard({
 
               {/* RIGHT: Caption & Interactions (55% on mobile, full width on desktop) */}
               <div className="w-[55%] md:w-full flex flex-col justify-between self-stretch min-h-0">
-                <div className="flex-1 min-h-0 rounded-2xl border border-slate-100/80 bg-white/70 p-2.5 shadow-sm">
+                <div className={`flex-1 min-h-0 rounded-2xl p-2.5 shadow-sm ${isPremiumTheme ? "border border-amber-200/80 bg-white/70 backdrop-blur-sm" : "border border-slate-100/80 bg-white/70"}`}>
                   <div className="h-full max-h-36 md:max-h-60 overflow-y-auto pr-1 text-base md:text-lg font-medium text-slate-700 leading-relaxed whitespace-pre-wrap wrap-break-word">
                     {isLongCaption ? (
                       <>
@@ -845,7 +885,7 @@ export default function PostCard({
                       e.stopPropagation();
                       onToggleLike?.();
                     }}
-                    className="py-1.5 md:py-2.5 text-xs font-bold text-pink-600 hover:bg-pink-50/40 text-center transition-colors rounded-lg border border-pink-200/50 md:border-slate-100"
+                    className={`py-1.5 md:py-2.5 text-xs font-bold text-center transition-colors rounded-lg border ${isPremiumTheme ? "text-amber-800 hover:bg-amber-100/70 border-amber-200/70" : "text-pink-600 hover:bg-pink-50/40 border-pink-200/50 md:border-slate-100"}`}
                   >
                     {liked ? "❤️" : "🤍"} {likes}
                   </button>
@@ -855,7 +895,7 @@ export default function PostCard({
                       e.stopPropagation();
                       onSelectPost?.();
                     }}
-                    className="py-1.5 md:py-2.5 text-xs font-bold text-blue-600 hover:bg-blue-50/40 text-center transition-colors rounded-lg border border-blue-200/50 md:border-slate-100"
+                    className={`py-1.5 md:py-2.5 text-xs font-bold text-center transition-colors rounded-lg border ${isPremiumTheme ? "text-amber-900 hover:bg-amber-100/70 border-amber-200/70" : "text-blue-600 hover:bg-blue-50/40 border-blue-200/50 md:border-slate-100"}`}
                   >
                     💬 {comments?.length || 0}
                   </button>
@@ -864,7 +904,7 @@ export default function PostCard({
             </div>
           ) : (
             <div className="space-y-3">
-              <div className="rounded-2xl border border-slate-100/80 bg-white/70 p-2.5 shadow-sm">
+              <div className={`rounded-2xl p-2.5 shadow-sm ${isPremiumTheme ? "border border-amber-200/80 bg-white/70 backdrop-blur-sm" : "border border-slate-100/80 bg-white/70"}`}>
                 <div className="max-h-60 overflow-y-auto pr-1 text-base md:text-lg font-medium text-slate-700 leading-relaxed whitespace-pre-wrap wrap-break-word">
                   {text}
                 </div>
@@ -882,14 +922,14 @@ export default function PostCard({
                 </div>
               )}
 
-              <div className="flex bg-white/50 rounded-xl border border-slate-100 overflow-hidden shadow-2xs">
+              <div className={`flex rounded-xl overflow-hidden shadow-2xs ${isPremiumTheme ? "border border-amber-200/80 bg-white/60" : "bg-white/50 border border-slate-100"}`}>
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     onToggleLike?.();
                   }}
-                  className="flex-1 py-2.5 text-xs font-bold text-pink-600 hover:bg-pink-50/40 text-center transition-colors"
+                  className={`flex-1 py-2.5 text-xs font-bold text-center transition-colors ${isPremiumTheme ? "text-amber-800 hover:bg-amber-100/70" : "text-pink-600 hover:bg-pink-50/40"}`}
                 >
                   {liked ? "❤️" : "🤍"} {likes} Likes
                 </button>
@@ -900,7 +940,7 @@ export default function PostCard({
                     e.stopPropagation();
                     onSelectPost?.();
                   }}
-                  className="flex-1 py-2.5 text-xs font-bold text-blue-600 hover:bg-blue-50/40 text-center transition-colors"
+                  className={`flex-1 py-2.5 text-xs font-bold text-center transition-colors ${isPremiumTheme ? "text-amber-900 hover:bg-amber-100/70" : "text-blue-600 hover:bg-blue-50/40"}`}
                 >
                   💬 {comments?.length || 0} Comments
                 </button>
@@ -918,22 +958,22 @@ export default function PostCard({
             className="absolute inset-0 bg-slate-950/25 backdrop-blur-xl"
             aria-label="Close reading mode"
           />
-          <div className="relative z-10 w-full max-w-160 max-h-[85vh] rounded-[28px] border border-white/60 bg-white/95 p-4 shadow-2xl sm:p-5">
+          <div className={`relative z-10 w-full max-w-160 max-h-[85vh] rounded-[28px] p-4 shadow-2xl sm:p-5 ${isPremiumTheme ? "border border-amber-200/80 bg-[linear-gradient(135deg,rgba(255,251,235,0.96),rgba(255,244,183,0.9))]" : "border border-white/60 bg-white/95"}`}>
             <div className="mb-3 flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-slate-800">{author.username}</p>
-                <p className="text-[11px] text-slate-400">{time}</p>
+                <p className={`truncate text-sm font-semibold ${isPremiumTheme ? "text-amber-950" : "text-slate-800"}`}>{author.username}</p>
+                <p className={`text-[11px] ${isPremiumTheme ? "text-amber-800/80" : "text-slate-400"}`}>{time}</p>
               </div>
               <button
                 type="button"
                 onClick={() => setIsReadingModeOpen(false)}
-                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-600"
+                className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold ${isPremiumTheme ? "border-amber-300/80 bg-white/70 text-amber-900" : "border-slate-200 bg-white text-slate-600"}`}
               >
                 Show Photo
               </button>
             </div>
 
-            <div className="max-h-[16rem] overflow-y-auto rounded-2xl bg-slate-50/80 p-3.5 text-lg md:text-xl leading-7 text-slate-700 whitespace-pre-wrap wrap-break-word shadow-inner sm:p-4">
+            <div className={`max-h-64 overflow-y-auto rounded-2xl p-3.5 text-lg md:text-xl leading-7 whitespace-pre-wrap wrap-break-word shadow-inner sm:p-4 ${isPremiumTheme ? "bg-white/70 text-amber-950" : "bg-slate-50/80 text-slate-700"}`}>
               {normalizedText}
             </div>
           </div>
@@ -1162,8 +1202,10 @@ export default function PostCard({
           onDeletePost={onDeletePost}
           onRepost={onRepost}
           onMuteUser={onMuteUser}
+          variant={isPremiumTheme ? "vibespro" : "default"}
         />
       )}
     </div>
+    </>
   );
 }

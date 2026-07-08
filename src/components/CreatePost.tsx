@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Mic, Square } from "lucide-react";
 import { getProfile } from "../utils/profileStorage";
 import { uploadVideo, type UploadProgress } from "../lib/videoApi";
+import { optimizeImageFile } from "../lib/imageUtils";
+import { getSupportedAudioRecorderOptions, optimizeVoiceNote } from "../lib/mediaOptimizer";
 
 
 
@@ -122,34 +124,27 @@ export default function CreatePost({ onPost }: Props) {
       return;
 
     }
+    void (async () => {
+      try {
+        const optimized = await optimizeImageFile(file, 1080, 0.8, 300 * 1024);
+        const reader = new FileReader();
 
+        reader.onloadend = () => {
+          setImage(reader.result as string);
+          setVideo(undefined);
+        };
 
+        reader.onerror = () => {
+          alert("Failed to read image file");
+        };
 
-    const reader = new FileReader();
-
-
-
-    reader.onloadend = () => {
-
-      setImage(reader.result as string);
-
-      setVideo(undefined); // Clear video when adding image
-
-    };
-
-
-
-    reader.onerror = () => {
-
-      alert("Failed to read image file");
-
-    };
-
-
-
-    reader.readAsDataURL(file);
-
-  };
+        reader.readAsDataURL(optimized);
+      } catch (err) {
+        console.warn("Image optimization failed", err);
+        alert("Image could not be compressed to the allowed size. Please choose a smaller image.");
+      }
+    })();
+};
 
 
 
@@ -321,51 +316,31 @@ export default function CreatePost({ onPost }: Props) {
       return;
     }
 
-    // Validate file size (max 10MB for audio)
-
     if (file.size > 10 * 1024 * 1024) {
-
       alert("Audio must be less than 10MB");
-
       return;
-
     }
-
-    // Validate file type
 
     if (!file.type.startsWith("audio/")) {
-
       alert("Please select a valid audio file");
-
       return;
-
     }
 
-    // Optimize image in-browser before converting to data URL
     void (async () => {
       try {
-        const { optimizeImageFile } = await import("../lib/imageUtils");
-        const optimized = await optimizeImageFile(file, 1200, 0.8);
+        const optimized = await optimizeVoiceNote(file, 5 * 1024 * 1024);
         const reader = new FileReader();
         reader.onloadend = () => {
-          setImage(reader.result as string);
-          setVideo(undefined); // Clear video when adding image
-        };
-        reader.onerror = () => {
-          alert("Failed to read image file");
-        };
-        reader.readAsDataURL(optimized as Blob);
-      } catch (err) {
-        console.warn("Image optimization failed, falling back to original", err);
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setImage(reader.result as string);
+          setAudio(reader.result as string);
           setVideo(undefined);
         };
         reader.onerror = () => {
-          alert("Failed to read image file");
+          alert("Failed to read audio file");
         };
-        reader.readAsDataURL(file);
+        reader.readAsDataURL(optimized);
+      } catch (err) {
+        console.warn("Audio optimization failed", err);
+        alert("Voice note could not be compressed to the allowed size. Please choose a smaller recording.");
       }
     })();
 
@@ -469,7 +444,8 @@ export default function CreatePost({ onPost }: Props) {
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-      const recorder = new MediaRecorder(stream);
+      const { mimeType, audioBitsPerSecond } = getSupportedAudioRecorderOptions();
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType, audioBitsPerSecond } : undefined);
 
       mediaRecorderRef.current = recorder;
       mediaStreamRef.current = stream;
@@ -481,14 +457,19 @@ export default function CreatePost({ onPost }: Props) {
 
       };
 
-      recorder.onstop = () => {
-
-        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-
-        const audioUrl = URL.createObjectURL(audioBlob);
-
-        setAudio(audioUrl);
-
+      recorder.onstop = async () => {
+        try {
+          const sourceMimeType = audioChunksRef.current[0]?.type || "audio/webm";
+          const audioBlob = new Blob(audioChunksRef.current, { type: sourceMimeType });
+          const optimizedBlob = await optimizeVoiceNote(audioBlob, 5 * 1024 * 1024);
+          const audioUrl = URL.createObjectURL(optimizedBlob);
+          setAudio(audioUrl);
+        } catch (err) {
+          console.error("Voice optimization failed", err);
+          const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+          const audioUrl = URL.createObjectURL(audioBlob);
+          setAudio(audioUrl);
+        }
       };
 
       if (recordingTimerRef.current) {

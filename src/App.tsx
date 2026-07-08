@@ -14,6 +14,10 @@ import Chat from "./pages/Chat";
 import Messages from "./pages/Messages";
 import Notifications from "./pages/Notifications";
 import Search from "./pages/Search";
+import AdminDashboard from "./pages/AdminDashboard";
+import AdminPosts from "./pages/AdminPosts";
+import AdminUsers from "./pages/AdminUsers";
+import VibesProUpgrade from "./pages/VibesProUpgrade";
 import RequireAuth from "./components/RequireAuth";
 
 function App() {
@@ -31,10 +35,14 @@ function App() {
               <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
               <Route path="/profile/:username" element={<RequireAuth><Profile /></RequireAuth>} />
               <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
+              <Route path="/settings/vibes-pro" element={<RequireAuth><VibesProUpgrade /></RequireAuth>} />
               <Route path="/messages" element={<RequireAuth><Messages /></RequireAuth>} />
               <Route path="/chat" element={<RequireAuth><Chat /></RequireAuth>} />
               <Route path="/notifications" element={<RequireAuth><Notifications /></RequireAuth>} />
               <Route path="/search" element={<RequireAuth><Search /></RequireAuth>} />
+              <Route path="/admin-dashboard" element={<RequireAuth><AdminDashboard /></RequireAuth>} />
+              <Route path="/admin-users" element={<RequireAuth><AdminUsers /></RequireAuth>} />
+              <Route path="/admin-posts" element={<RequireAuth><AdminPosts /></RequireAuth>} />
                 </Routes>
             </BrowserRouter>
         </ChatProvider>

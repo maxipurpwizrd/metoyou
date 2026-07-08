@@ -7,7 +7,7 @@ import { getProfile } from "../utils/profileStorage";
 import CreatePost from "../components/CreatePost";
 import PostCard from "../components/PostCard";
 import PostSkeleton from "../components/PostSkeleton";
-import { savePostToSupabase, deletePostFromSupabase, uploadAudioToSupabase } from "../lib/postApi";
+import { savePostToSupabase, deletePostFromSupabase, uploadAudioToSupabase, uploadImageToSupabase } from "../lib/postApi";
 import { addComment, editComment, deleteComment } from "../lib/commentApi";
 import { likePost, unlikePost, hasUserLiked, getPostLikes } from "../lib/likeApi";
 
@@ -272,14 +272,25 @@ export default function Feed() {
     const progressInterval = startProgress();
 
     try {
-      const audioUrl = payload.audio
-        ? await uploadAudioToSupabase(payload.audio, profile.id)
-        : undefined;
+      let imageUrl: string | undefined;
+      let audioUrl: string | undefined;
+
+      if (payload.image) {
+        imageUrl = await uploadImageToSupabase(payload.image, profile.id, (percent) => {
+          onProgress?.(Math.max(0, Math.min(100, percent)));
+        });
+      }
+
+      if (payload.audio) {
+        audioUrl = await uploadAudioToSupabase(payload.audio, profile.id, (percent) => {
+          onProgress?.(Math.max(0, Math.min(100, percent)));
+        });
+      }
 
       const saved = await savePostToSupabase({
         author_id: profile.id,
         text: payload.text ?? null,
-        image_url: payload.image ?? null,
+        image_url: imageUrl ?? payload.image ?? null,
         video_url: payload.video ?? null,
         audio_url: audioUrl ?? null,
         media_type: payload.video ? "video" : payload.image ? "image" : audioUrl ? "audio" : null,
@@ -299,7 +310,7 @@ export default function Feed() {
         time: "Just now",
         created_at: saved.created_at ?? new Date().toISOString(),
         text: saved.text ?? payload.text ?? "",
-        image: saved.image_url ?? payload.image ?? undefined,
+        image: saved.image_url ?? imageUrl ?? payload.image ?? undefined,
         video: saved.video_url ?? payload.video ?? undefined,
         audio: saved.audio_url ?? audioUrl ?? payload.audio,
         comments: [],
@@ -657,6 +668,7 @@ export default function Feed() {
                                 <div
                                   onClick={(e) => {
                                     e.stopPropagation();
+                                    setAutoCloseSuppressed(true);
                                     setSelectedPostId(post.id);
                                   }}
                                   className={`transition-all duration-300 ${
@@ -669,6 +681,7 @@ export default function Feed() {
                                 >
                                   <PostCard
                                     author={post.author}
+                                    isVibesPro={Boolean(post.author.is_vibes_pro)}
                                     postId={post.id}
                                     authorId={post.authorId ?? post.author.id}
                                     time={post.time}
@@ -703,7 +716,10 @@ export default function Feed() {
                                         )
                                       );
                                     }}
-                                    onSelectPost={() => setSelectedPostId(post.id)}
+                                    onSelectPost={() => {
+                                      setAutoCloseSuppressed(true);
+                                      setSelectedPostId(post.id);
+                                    }}
                                     onClosePost={() => setSelectedPostId(null)}
                                     onRepost={() => {
                                       setPosts((prev) => [

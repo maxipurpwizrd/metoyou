@@ -258,6 +258,28 @@ export default function Settings() {
                 Swipe through your profile, security, display and support options with ease.
               </p>
             </div>
+
+            {!Boolean(profile.vibes_pro ?? profile.is_vibes_pro) && (
+              <div className="rounded-3xl border border-amber-200/70 bg-gradient-to-br from-amber-50 via-white to-orange-50 p-5 shadow-xl">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold uppercase tracking-[0.3em] text-amber-600">VibesPro</p>
+                    <h2 className="mt-2 text-xl font-black text-slate-900">Unlock premium features</h2>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      Subscribe for $4.99/month to unlock VibesPro gating and the upcoming premium experience.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => navigate("/settings/vibes-pro")}
+                    className="inline-flex items-center justify-center rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white shadow-lg transition hover:bg-slate-800"
+                  >
+                    Upgrade to VibesPro
+                  </button>
+                </div>
+              </div>
+            )}
+
           </div>
         </div>
 
@@ -552,7 +574,11 @@ export default function Settings() {
                 </div>
                 <ArrowRight className="w-5 h-5 text-slate-500" />
               </button>
-              <button className="w-full flex items-center justify-between gap-4 rounded-3xl border border-white/40 bg-white/15 px-5 py-4 text-left shadow-lg transition hover:bg-white/30">
+              <button
+                type="button"
+                onClick={() => navigate("/admin-dashboard")}
+                className="w-full flex items-center justify-between gap-4 rounded-3xl border border-white/40 bg-white/15 px-5 py-4 text-left shadow-lg transition hover:bg-white/30"
+              >
                 <div className="flex items-center gap-3">
                   <div className="grid place-items-center w-11 h-11 rounded-2xl bg-gradient-to-br from-purple-500 via-blue-500 to-pink-500 text-white">
                     <LayoutDashboard className="w-5 h-5" />
@@ -561,6 +587,7 @@ export default function Settings() {
                 </div>
                 <ArrowRight className="w-5 h-5 text-slate-500" />
               </button>
+
               <div className="rounded-3xl border border-white/40 bg-white/15 px-5 py-4 shadow-inner">
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3">

@@ -107,6 +107,8 @@ export default function ImageViewer({ images, initialIndex = 0, onClose, postId,
   };
 
   useEffect(() => {
+    const isMobileViewport = typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches && window.innerWidth < 900;
+
     const onDocClick = (e: MouseEvent) => {
       const target = e.target as Node;
       if (
@@ -116,6 +118,10 @@ export default function ImageViewer({ images, initialIndex = 0, onClose, postId,
         !menuButtonRef.current.contains(target)
       ) {
         setShowMenu(false);
+      }
+
+      if (isMobileViewport) {
+        return;
       }
 
       if (
@@ -128,7 +134,7 @@ export default function ImageViewer({ images, initialIndex = 0, onClose, postId,
     };
 
     const onScroll = () => {
-      if (isCommentComposerFocusedRef.current) return;
+      if (isCommentComposerFocusedRef.current || isMobileViewport) return;
       setShowMenu(false);
       setShowComments(false);
     };

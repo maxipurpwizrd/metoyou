@@ -17,6 +17,13 @@ type VibesProProfilePageProps = {
   onFollow?: () => void;
   onMessage?: () => void;
   viewingOwn?: boolean;
+  onUploadPortrait?: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onSavePortrait?: () => void;
+  onCancelPortrait?: () => void;
+  onAdjustPortraitPosition?: (position: string) => void;
+  portraitPosition?: string;
+  isUploadingPortrait?: boolean;
+  previewPortraitActive?: boolean;
 };
 
 export default function VibesProProfilePage({
@@ -31,6 +38,13 @@ export default function VibesProProfilePage({
   onFollow,
   onMessage,
   viewingOwn = false,
+  onUploadPortrait,
+  onSavePortrait,
+  onCancelPortrait,
+  onAdjustPortraitPosition,
+  portraitPosition = 'center',
+  isUploadingPortrait = false,
+  previewPortraitActive = false,
 }: VibesProProfilePageProps) {
   const mappedPosts = useMemo(() => posts, [posts]);
   const [selectedPostId, setSelectedPostId] = useState<string | number | null>(null);
@@ -53,7 +67,7 @@ export default function VibesProProfilePage({
   return (
     <div className="min-h-screen overflow-hidden bg-black">
       <div className="flex min-h-screen flex-col">
-        <div className="flex-shrink-0">
+        <div className="shrink-0">
           <VibesProHero
             username={username}
             portraitUrl={portraitUrl ?? '/default-avatar.png'}
@@ -65,6 +79,13 @@ export default function VibesProProfilePage({
             onFollow={onFollow}
             onMessage={onMessage}
             viewingOwn={viewingOwn}
+            onUploadPortrait={onUploadPortrait}
+            onSavePortrait={onSavePortrait}
+            onCancelPortrait={onCancelPortrait}
+            onAdjustPortraitPosition={onAdjustPortraitPosition}
+            portraitPosition={portraitPosition}
+            isUploadingPortrait={isUploadingPortrait}
+            previewPortraitActive={previewPortraitActive}
           />
         </div>
 

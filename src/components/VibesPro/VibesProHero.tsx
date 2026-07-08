@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { useRef } from 'react';
 import type { VibesProHeroProps } from './types';
 import FollowButton from '../social/FollowButton';
 import throneTemplate from './assets/throne-template.png';
@@ -14,43 +15,95 @@ export default function VibesProHero({
   onFollow,
   onMessage,
   viewingOwn = false,
+  onUploadPortrait,
+  onSavePortrait,
+  onCancelPortrait,
+  onAdjustPortraitPosition,
+  portraitPosition = 'center',
+  isUploadingPortrait = false,
+  previewPortraitActive = false,
 }: VibesProHeroProps) {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const hasPortrait = Boolean(portraitUrl && portraitUrl !== '/default-avatar.png');
+
   return (
     <section className="sticky top-0 z-50 h-[58vh] min-h-[58vh] overflow-hidden bg-black text-white">
-      <img src={throneTemplate} alt="Throne background" loading="lazy" className="absolute inset-0 h-full w-full object-cover" />
-      <div className="absolute inset-0 bg-linear-to-b from-black/20 via-black/30 to-black/70" />
+      {!hasPortrait && (
+        <img src={throneTemplate} alt="Throne background" loading="lazy" className="absolute inset-0 h-full w-full object-cover" />
+      )}
+      {hasPortrait ? (
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,215,0,0.24),transparent_40%),linear-gradient(180deg,rgba(0,0,0,0.25),rgba(0,0,0,0.75))]" />
+      ) : (
+        <div className="absolute inset-0 bg-linear-to-b from-black/20 via-black/30 to-black/70" />
+      )}
 
-      <div className="absolute inset-0 pointer-events-none">
+      <div className="absolute inset-0 pointer-events-none z-15">
         <div className="absolute inset-2 rounded-4xl border border-amber-200/50 shadow-[0_0_0_1px_rgba(255,215,0,0.12)]" />
         <div className="absolute inset-5 rounded-[28px] border border-amber-400/20" />
       </div>
 
-      <div className="absolute inset-0 z-10 flex items-center justify-center px-6">
-        <div className="relative flex items-center justify-center">
-          {portraitUrl && !portraitUrl.includes('/default-avatar.png') ? (
+      <div className="absolute inset-0 z-10">
+        <div className="absolute inset-5 overflow-hidden rounded-[28px] bg-black/20 shadow-[0_20px_60px_rgba(0,0,0,0.55)] sm:inset-5">
+          {hasPortrait ? (
             <img
               src={portraitUrl}
               alt={`${username} royal portrait`}
-              className="h-[58%] w-auto max-w-[82%] object-contain drop-shadow-[0_20px_40px_rgba(0,0,0,0.55)] rounded-full"
+              className="h-full w-full object-cover object-center"
+              style={{ objectPosition: portraitPosition }}
             />
           ) : (
-            <div className="h-[58%] w-[58%] max-w-[82%] rounded-full border border-white/10 bg-black/20 flex items-center justify-center">
-              {/* empty circle placeholder for owner to upload portrait */}
+            <div className="flex h-full w-full items-center justify-center">
+              {/* empty frame placeholder for owner to upload portrait */}
             </div>
           )}
+        </div>
 
-          {viewingOwn && (
+        {viewingOwn && (
+          <div className="absolute bottom-3 right-3 flex flex-col gap-2">
             <button
               type="button"
-              onClick={() => window.alert('Open portrait upload')}
-              className="absolute rounded-full bg-black/50 border border-white/20 p-3 text-white shadow-md"
-              aria-label="Update throne portrait"
+              onClick={() => fileInputRef.current?.click()}
+              className="rounded-full border border-white/20 bg-black/50 p-3 text-white shadow-md backdrop-blur-sm"
+              aria-label="Upload throne portrait"
             >
               📷
             </button>
-          )}
-        </div>
+            {previewPortraitActive && (
+              <div className="rounded-2xl border border-amber-200/40 bg-black/65 p-2 text-[11px] shadow-lg backdrop-blur-sm">
+                <div className="flex items-center gap-1">
+                  <button type="button" onClick={() => onAdjustPortraitPosition?.('left')} className="rounded-full px-2 py-1 text-white/90 hover:bg-white/10">◀</button>
+                  <button type="button" onClick={() => onAdjustPortraitPosition?.('center')} className="rounded-full px-2 py-1 text-white/90 hover:bg-white/10">●</button>
+                  <button type="button" onClick={() => onAdjustPortraitPosition?.('right')} className="rounded-full px-2 py-1 text-white/90 hover:bg-white/10">▶</button>
+                </div>
+                <div className="mt-1 flex items-center justify-center gap-1">
+                  <button type="button" onClick={() => onAdjustPortraitPosition?.('top')} className="rounded-full px-2 py-1 text-white/90 hover:bg-white/10">↑</button>
+                  <button type="button" onClick={() => onAdjustPortraitPosition?.('center')} className="rounded-full px-2 py-1 text-white/90 hover:bg-white/10">↕</button>
+                  <button type="button" onClick={() => onAdjustPortraitPosition?.('bottom')} className="rounded-full px-2 py-1 text-white/90 hover:bg-white/10">↓</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {previewPortraitActive && viewingOwn && (
+        <div className="absolute inset-x-0 bottom-28 z-20 flex justify-center">
+          <div className="flex gap-2 rounded-full border border-amber-200/40 bg-black/60 px-3 py-2 text-xs shadow-lg backdrop-blur-sm">
+            <button type="button" onClick={onCancelPortrait} className="rounded-full border border-white/20 px-3 py-1 text-white/90 hover:bg-white/10">Cancel</button>
+            <button type="button" onClick={onSavePortrait} className="rounded-full bg-amber-400 px-3 py-1 font-semibold text-amber-950">
+              {isUploadingPortrait ? 'Uploading…' : 'Save portrait'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={onUploadPortrait}
+        className="hidden"
+      />
 
       <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between p-4 sm:p-5">
         <button

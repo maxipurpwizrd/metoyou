@@ -1,6 +1,8 @@
 import { supabase } from "./supabase";
+import { mimeToExtension } from "./imageUtils";
 
 export const AUDIO_STORAGE_BUCKET = "post-audio";
+export const IMAGE_STORAGE_BUCKET = "posts-images";
 
 export type PostRecord = {
   id: string;
@@ -17,6 +19,7 @@ export type PostRecord = {
   profiles?: {
     username?: string;
     profile_pic?: string;
+    is_vibes_pro?: boolean | null;
   } | null;
 };
 
@@ -45,7 +48,46 @@ function inferAudioExtension(mimeType: string) {
   }
 }
 
-export async function uploadAudioToSupabase(audio: string, authorId: string) {
+async function uploadBlobToSupabase(
+  blob: Blob,
+  bucket: string,
+  authorId: string,
+  extension: string,
+  mimeType: string,
+  onProgress?: (percent: number) => void
+) {
+  const filePath = `${authorId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`;
+
+  const { error } = await supabase.storage.from(bucket).upload(filePath, blob, {
+    contentType: mimeType,
+    upsert: false,
+    onUploadProgress: (event: { loaded: number; total?: number | null }) => {
+      const percent = event.total ? Math.round((event.loaded / event.total) * 100) : 100;
+      onProgress?.(percent);
+    },
+  } as never);
+
+  if (error) throw error;
+
+  const { data: publicUrlData } = supabase.storage.from(bucket).getPublicUrl(filePath);
+  return publicUrlData.publicUrl ?? null;
+}
+
+export async function uploadImageToSupabase(image: string, authorId: string, onProgress?: (percent: number) => void) {
+  if (!image) return undefined;
+
+  if (image.startsWith("http://") || image.startsWith("https://")) {
+    return image;
+  }
+
+  const response = await fetch(image);
+  const blob = await response.blob();
+  const mimeType = blob.type || "image/jpeg";
+  const extension = mimeToExtension(mimeType);
+  return uploadBlobToSupabase(blob, IMAGE_STORAGE_BUCKET, authorId, extension, mimeType, onProgress);
+}
+
+export async function uploadAudioToSupabase(audio: string, authorId: string, onProgress?: (percent: number) => void) {
   if (!audio) return undefined;
 
   if (audio.startsWith("http://") || audio.startsWith("https://")) {
@@ -56,17 +98,7 @@ export async function uploadAudioToSupabase(audio: string, authorId: string) {
   const blob = await response.blob();
   const mimeType = blob.type || inferAudioMimeType(audio);
   const extension = inferAudioExtension(mimeType);
-  const filePath = `${authorId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`;
-
-  const { error } = await supabase.storage.from(AUDIO_STORAGE_BUCKET).upload(filePath, blob, {
-    contentType: mimeType,
-    upsert: false,
-  });
-
-  if (error) throw error;
-
-  const { data: publicUrlData } = supabase.storage.from(AUDIO_STORAGE_BUCKET).getPublicUrl(filePath);
-  return publicUrlData.publicUrl ?? null;
+  return uploadBlobToSupabase(blob, AUDIO_STORAGE_BUCKET, authorId, extension, mimeType, onProgress);
 }
 
 /**
@@ -126,7 +158,7 @@ export async function fetchPostsFromSupabase(options?: {
     let builder = supabase
       .from("posts")
       .select(
-        `id, author_id, text, image_url, video_url, audio_url, media_type, likes_count, comments_count, highlighted, created_at, profiles(username, profile_pic)`
+        `id, author_id, text, image_url, video_url, audio_url, media_type, likes_count, comments_count, highlighted, created_at, profiles(username, profile_pic, is_vibes_pro)`
       )
       .order("created_at", { ascending: false })
       .limit(limit);

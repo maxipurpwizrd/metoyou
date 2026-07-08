@@ -70,6 +70,13 @@ export type VibesProHeroProps = {
   onMessage?: () => void;
   onGift?: () => void;
   viewingOwn?: boolean;
+  onUploadPortrait?: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onSavePortrait?: () => void;
+  onCancelPortrait?: () => void;
+  onAdjustPortraitPosition?: (position: string) => void;
+  portraitPosition?: string;
+  isUploadingPortrait?: boolean;
+  previewPortraitActive?: boolean;
 };
 
 export type VibesProPortraitProps = {

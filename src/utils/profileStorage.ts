@@ -8,6 +8,10 @@ export type ProfileData = {
   profilePic: string | null;
   vibes_pro_portrait?: string | null;
   is_vibes_pro?: boolean;
+  vibes_pro?: boolean;
+  vibes_pro_until?: string | null;
+  stripe_customer_id?: string | null;
+  stripe_subscription_id?: string | null;
   interests: string[];
   email: string;
   language?: string;
@@ -25,6 +29,11 @@ export const DEFAULT_PROFILE: ProfileData = {
   username: "Maxi",
   bio: "Building MeToYou from the ground up.",
   profilePic: null,
+  is_vibes_pro: false,
+  vibes_pro: false,
+  vibes_pro_until: null,
+  stripe_customer_id: null,
+  stripe_subscription_id: null,
   interests: [],
   email: "maxi@example.com",
   language: "en-basic",

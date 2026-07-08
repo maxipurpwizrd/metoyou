@@ -1,5 +1,7 @@
 export const MAX_IMAGE_WIDTH = 1080;
 export const MAX_IMAGE_SIZE_BYTES = 300 * 1024;
+export const TARGET_AUDIO_BITRATE_BPS = 64 * 1024;
+export const MAX_AUDIO_SIZE_BYTES = 5 * 1024 * 1024;
 
 export async function optimizeImageFile(
   file: File,
@@ -43,8 +45,17 @@ export async function optimizeImageFile(
     }
   }
 
-  if (bestBlob && bestBlob.size <= targetSizeBytes) {
-    return bestBlob;
+  if (bestBlob) {
+    if (bestBlob.size <= targetSizeBytes) {
+      return bestBlob;
+    }
+
+    const fallbackBlob = file.slice(0, file.size, file.type || "image/jpeg");
+    if (fallbackBlob.size <= targetSizeBytes) {
+      return fallbackBlob;
+    }
+
+    throw new Error(`Image is still larger than ${Math.round(targetSizeBytes / 1024)}KB after compression`);
   }
 
   const fallbackBlob = file.slice(0, file.size, file.type || "image/jpeg");
@@ -55,17 +66,32 @@ export async function optimizeImageFile(
   throw new Error(`Image is still larger than ${Math.round(targetSizeBytes / 1024)}KB after compression`);
 }
 
-export function mimeToExtension(mime: string) {
-  switch (mime) {
-    case "image/webp":
-      return "webp";
-    case "image/jpeg":
-      return "jpg";
-    case "image/png":
-      return "png";
-    default:
-      return "bin";
+export function getSupportedAudioRecorderOptions() {
+  if (typeof window === "undefined" || typeof MediaRecorder === "undefined") {
+    return { mimeType: undefined as string | undefined, audioBitsPerSecond: TARGET_AUDIO_BITRATE_BPS };
   }
+
+  const preferredMimeTypes = [
+    "audio/webm;codecs=opus",
+    "audio/ogg;codecs=opus",
+    "audio/webm",
+  ];
+
+  for (const mimeType of preferredMimeTypes) {
+    if (MediaRecorder.isTypeSupported(mimeType)) {
+      return { mimeType, audioBitsPerSecond: TARGET_AUDIO_BITRATE_BPS };
+    }
+  }
+
+  return { mimeType: undefined as string | undefined, audioBitsPerSecond: TARGET_AUDIO_BITRATE_BPS };
+}
+
+export async function optimizeVoiceNote(file: Blob, maxSizeBytes = MAX_AUDIO_SIZE_BYTES): Promise<Blob> {
+  if (file.size <= maxSizeBytes) {
+    return file;
+  }
+
+  throw new Error(`Voice note is larger than ${Math.round(maxSizeBytes / 1024)}KB after compression`);
 }
 
 function canvasToBlob(canvas: HTMLCanvasElement, mimeType: string, quality: number): Promise<Blob | null> {

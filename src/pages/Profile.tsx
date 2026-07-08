@@ -45,6 +45,11 @@ export default function Profile() {
   const [viewerAuthorUsername, setViewerAuthorUsername] = useState<string | undefined>(undefined);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [portraitPreviewUrl, setPortraitPreviewUrl] = useState<string | null>(null);
+  const [portraitPreviewFile, setPortraitPreviewFile] = useState<File | null>(null);
+  const [portraitPosition, setPortraitPosition] = useState('center');
+  const [isUploadingPortrait, setIsUploadingPortrait] = useState(false);
+  const vibesProFileInputRef = useRef<HTMLInputElement | null>(null);
   const [isFollowing, setIsFollowing] = useState(false);
   const [isFollowedBy, setIsFollowedBy] = useState(false);
   const [followersCount, setFollowersCount] = useState(profile.hommies_count ?? 0);
@@ -99,6 +104,71 @@ export default function Profile() {
   };
 
   const profilePic = profile.profilePic;
+  const previewPortraitActive = Boolean(portraitPreviewUrl && portraitPreviewFile);
+
+  const handleVibesProPortraitFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (portraitPreviewUrl?.startsWith("blob:")) {
+      URL.revokeObjectURL(portraitPreviewUrl);
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    setPortraitPreviewUrl(objectUrl);
+    setPortraitPreviewFile(file);
+    setPortraitPosition("center");
+  };
+
+  const handleSaveVibesProPortrait = async () => {
+    if (!portraitPreviewFile) return;
+
+    setIsUploadingPortrait(true);
+    try {
+      const uploadedUrl = await uploadProfileImage(portraitPreviewFile);
+      if (!uploadedUrl) {
+        alert("Unable to upload profile image. Try again.");
+        return;
+      }
+
+      const updatedProfile = { ...profile, vibes_pro_portrait: uploadedUrl, profilePic: profile.profilePic ?? uploadedUrl };
+      setProfile(updatedProfile);
+      saveProfile(updatedProfile);
+
+      if (viewingOwn) {
+        await upsertProfileToSupabase(updatedProfile);
+      }
+
+      if (portraitPreviewUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(portraitPreviewUrl);
+      }
+      setPortraitPreviewUrl(null);
+      setPortraitPreviewFile(null);
+      setPortraitPosition("center");
+    } catch (error) {
+      console.error("VibesPro portrait upload failed", error);
+      alert("VibesPro portrait upload failed.");
+    } finally {
+      setIsUploadingPortrait(false);
+      if (vibesProFileInputRef.current) {
+        vibesProFileInputRef.current.value = "";
+      }
+    }
+  };
+
+  const handleCancelVibesProPortrait = () => {
+    if (portraitPreviewUrl?.startsWith("blob:")) {
+      URL.revokeObjectURL(portraitPreviewUrl);
+    }
+    setPortraitPreviewUrl(null);
+    setPortraitPreviewFile(null);
+    setPortraitPosition("center");
+  };
+
+  const handleAdjustVibesProPortraitPosition = (nextPosition: string) => {
+    setPortraitPosition(nextPosition);
+  };
+
   const bio = profile.bio;
   const selectedInterests = Array.isArray(profile.interests) ? profile.interests : [];
   const username = profile.username;
@@ -355,6 +425,13 @@ export default function Profile() {
               viewingOwn={viewingOwn}
               onFollow={handleFollowToggle}
               onMessage={handleMessage}
+              onUploadPortrait={handleVibesProPortraitFileChange}
+              onSavePortrait={handleSaveVibesProPortrait}
+              onCancelPortrait={handleCancelVibesProPortrait}
+              onAdjustPortraitPosition={handleAdjustVibesProPortraitPosition}
+              portraitPosition={portraitPosition}
+              isUploadingPortrait={isUploadingPortrait}
+              previewPortraitActive={previewPortraitActive}
             />
           </div>
         ) : (
@@ -542,6 +619,7 @@ export default function Profile() {
                 postId={viewerPostId ?? undefined}
                 authorId={viewerAuthorId}
                 authorUsername={viewerAuthorUsername}
+                variant={profile?.is_vibes_pro ? "vibespro" : "default"}
                 onEditPost={() => {
                   const newText = window.prompt("Edit post text:", viewerImages[viewerIndex] ? undefined : "");
                   if (newText !== null) {

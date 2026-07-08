@@ -8,6 +8,10 @@ type DbProfile = Omit<ProfileData, "profilePic" | "dateOfBirth" | "gender"> & {
   first_name?: string | null;
   date_of_birth?: string | null;
   gender?: string | null;
+  vibes_pro?: boolean | null;
+  vibes_pro_until?: string | null;
+  stripe_customer_id?: string | null;
+  stripe_subscription_id?: string | null;
 };
 
 export async function fetchProfileFromSupabase(userId?: string) {
@@ -28,7 +32,7 @@ export async function fetchProfileFromSupabase(userId?: string) {
     const result = data as DbProfile;
     return {
       ...result,
-      profilePic: result.profile_pic,
+      profilePic: typeof result.profile_pic === "string" ? result.profile_pic : null,
       interests: Array.isArray(result.interests) ? result.interests : [],
       dateOfBirth: result.date_of_birth ?? undefined,
       gender: result.gender ?? undefined,
@@ -45,12 +49,10 @@ export async function upsertProfileToSupabase(profile: ProfileData) {
     const { profilePic, firstName, dateOfBirth, gender, ...rest } = profile;
     const dbProfile = {
       ...rest,
-      first_name: firstName ?? null,
       date_of_birth: dateOfBirth ?? null,
       gender: gender ?? null,
       language: normalizedLanguage,
       interests: profile.interests ?? [],
-      profile_pic: profilePic,
     } as DbProfile;
 
     const { data, error } = await supabase.from("profiles").upsert(dbProfile).select().maybeSingle();
@@ -61,7 +63,12 @@ export async function upsertProfileToSupabase(profile: ProfileData) {
     const result = data as DbProfile;
     return {
       ...result,
-      profilePic: result.profile_pic,
+      profilePic: typeof result.profile_pic === "string" ? result.profile_pic : null,
+      is_vibes_pro: Boolean(result.vibes_pro ?? result.is_vibes_pro),
+      vibes_pro: Boolean(result.vibes_pro ?? result.is_vibes_pro),
+      vibes_pro_until: result.vibes_pro_until ?? null,
+      stripe_customer_id: result.stripe_customer_id ?? null,
+      stripe_subscription_id: result.stripe_subscription_id ?? null,
       dateOfBirth: result.date_of_birth ?? undefined,
       gender: result.gender ?? undefined,
     } as ProfileData;
@@ -82,7 +89,7 @@ export async function fetchProfileByUsername(username?: string) {
     const result = data as DbProfile;
     return {
       ...result,
-      profilePic: result.profile_pic,
+      profilePic: typeof result.profile_pic === "string" ? result.profile_pic : null,
       interests: Array.isArray(result.interests) ? result.interests : [],
       dateOfBirth: result.date_of_birth ?? undefined,
       gender: result.gender ?? undefined,

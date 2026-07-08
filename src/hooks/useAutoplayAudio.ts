@@ -24,9 +24,7 @@ export function useAutoplayAudio({
           const isVisible = entry.intersectionRatio >= threshold;
           onVisibilityChange?.(isVisible);
 
-          if (isVisible) {
-            MediaManager.play(audioElement);
-          } else {
+          if (!isVisible) {
             MediaManager.stop(audioElement);
           }
         });

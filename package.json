@@ -26,6 +26,7 @@
     "react-use-measure": "^2.1.7",
     "react-virtualized": "^9.22.6",
     "react-window": "^2.2.7",
+    "stripe": "^22.3.0",
     "tailwindcss": "^4.3.0"
   },
   "devDependencies": {
@@ -33,6 +34,7 @@
     "@types/node": "^24.12.3",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "@vercel/node": "^5.8.22",
     "@vitejs/plugin-react": "^6.0.1",
     "eslint": "^10.3.0",
     "eslint-plugin-react-hooks": "^7.1.1",
