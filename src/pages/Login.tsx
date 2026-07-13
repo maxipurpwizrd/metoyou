@@ -67,7 +67,7 @@ export default function Login() {
 
   if (languageStep === "choose-lang") {
     return (
-      <div className="min-h-screen bg-linear-to-br from-pink-100 via-purple-100 to-blue-100 p-6 pt-32">
+      <div className="app-screen bg-linear-to-br from-pink-100 via-purple-100 to-blue-100 p-6 pt-32">
         <div className="max-w-md mx-auto">
           <div className="bg-white/60 backdrop-blur-xl rounded-2xl p-6 shadow-xl border border-white/60">
             <h1 className="text-4xl font-black text-center mb-2">{t("app.title")}</h1>
@@ -110,7 +110,7 @@ export default function Login() {
 
   if (languageStep === "choose-english-variant") {
     return (
-      <div className="min-h-screen bg-linear-to-br from-pink-100 via-purple-100 to-blue-100 p-6 pt-32">
+      <div className="app-screen bg-linear-to-br from-pink-100 via-purple-100 to-blue-100 p-6 pt-32">
         <div className="max-w-md mx-auto">
           <div className="bg-white/60 backdrop-blur-xl rounded-2xl p-6 shadow-xl border border-white/60">
             <h1 className="text-4xl font-black text-center mb-2">{t("app.title")}</h1>
@@ -150,7 +150,7 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-pink-100 via-purple-100 to-blue-100 p-6 pt-32">
+    <div className="app-screen bg-linear-to-br from-pink-100 via-purple-100 to-blue-100 p-6 pt-32">
       <div className="max-w-md mx-auto">
         <form onSubmit={handleLogin} className="bg-white/60 backdrop-blur-xl rounded-2xl p-6 shadow-xl border border-white/60">
           <h1 className="text-4xl font-black text-center mb-2">{t("app.title")}</h1>

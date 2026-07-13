@@ -242,7 +242,7 @@ export default function Settings() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 p-6 pb-24">
+    <div className="app-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 p-6 pb-24">
       <div className="max-w-6xl mx-auto">
         <div className="flex flex-col gap-4 mb-8">
           <div className="inline-flex items-center gap-3 rounded-full bg-white/30 backdrop-blur-2xl border border-white/50 px-4 py-2 shadow-xl text-sm font-semibold text-slate-700">
@@ -343,7 +343,7 @@ export default function Settings() {
                   </div>
                   <div>
                     <p className="font-semibold text-slate-900">Profile Picture</p>
-                    <p className="text-sm text-slate-500">{profilePictureUrl ? "Custom avatar set" : "Add or change photo"}</p>
+                    <p className="text-sm text-slate-500">{profilePictureUrl ? "Custom profile picture set" : "Add or change photo"}</p>
                   </div>
                 </div>
                 <ArrowRight className="w-5 h-5 text-slate-500" />

@@ -287,7 +287,7 @@ export default function AdminPosts() {
 
   if (isCheckingAccess) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 p-4 pb-16 text-slate-900 sm:p-6">
+      <div className="app-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 p-4 pb-16 text-slate-900 sm:p-6">
         <div className="mx-auto flex max-w-5xl flex-col gap-4">
           <button type="button" onClick={() => navigate(-1)} className="inline-flex w-fit items-center gap-2 rounded-full border border-white/60 bg-white/80 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm backdrop-blur">
             <ArrowLeft className="h-4 w-4" />
@@ -305,7 +305,7 @@ export default function AdminPosts() {
 
   if (!hasAdminAccess) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 p-4 pb-16 text-slate-900 sm:p-6">
+      <div className="app-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 p-4 pb-16 text-slate-900 sm:p-6">
         <div className="mx-auto flex max-w-5xl flex-col gap-4">
           <button type="button" onClick={() => navigate(-1)} className="inline-flex w-fit items-center gap-2 rounded-full border border-white/60 bg-white/80 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm backdrop-blur">
             <ArrowLeft className="h-4 w-4" />
@@ -321,7 +321,7 @@ export default function AdminPosts() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 p-4 pb-16 text-slate-900 sm:p-6">
+    <div className="app-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 p-4 pb-16 text-slate-900 sm:p-6">
       <div className="mx-auto flex max-w-5xl flex-col gap-4">
         <button type="button" onClick={() => navigate(-1)} className="inline-flex w-fit items-center gap-2 rounded-full border border-white/60 bg-white/80 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm backdrop-blur">
           <ArrowLeft className="h-4 w-4" />
@@ -468,20 +468,22 @@ export default function AdminPosts() {
             <div className="mb-3 flex justify-end">
               <button type="button" onClick={() => setSelectedAdminPost(null)} className="rounded-full bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">Close</button>
             </div>
-            <PostCard
-              author={{ id: selectedAdminPost.authorId, username: selectedAdminPost.username, avatar: selectedAdminPost.profilePic ?? undefined }}
-              postId={selectedAdminPost.id}
-              authorId={selectedAdminPost.authorId}
-              time={new Date(selectedAdminPost.createdAt).toLocaleString()}
-              text={selectedAdminPost.text ?? ""}
-              image={selectedAdminPost.imageUrl ?? undefined}
-              video={selectedAdminPost.videoUrl ?? undefined}
-              audio={selectedAdminPost.audioUrl ?? undefined}
-              comments={[]}
-              likes={selectedAdminPost.likesCount}
-              isSelected
-              onClosePost={() => setSelectedAdminPost(null)}
-            />
+            <div className="px-1 sm:px-2">
+              <PostCard
+                author={{ id: selectedAdminPost.authorId, username: selectedAdminPost.username, avatar: selectedAdminPost.profilePic ?? undefined }}
+                postId={selectedAdminPost.id}
+                authorId={selectedAdminPost.authorId}
+                time={new Date(selectedAdminPost.createdAt).toLocaleString()}
+                text={selectedAdminPost.text ?? ""}
+                image={selectedAdminPost.imageUrl ?? undefined}
+                video={selectedAdminPost.videoUrl ?? undefined}
+                audio={selectedAdminPost.audioUrl ?? undefined}
+                comments={[]}
+                likes={selectedAdminPost.likesCount}
+                isSelected
+                onClosePost={() => setSelectedAdminPost(null)}
+              />
+            </div>
           </div>
         </div>
       ) : null}

@@ -42,7 +42,7 @@ export default function VibesProUpgrade() {
   }
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(255,215,0,0.2),_transparent_40%),linear-gradient(135deg,_#0f172a,_#1e293b)] p-6 pb-24 text-white">
+    <div className="app-screen bg-[radial-gradient(circle_at_top,_rgba(255,215,0,0.2),_transparent_40%),linear-gradient(135deg,_#0f172a,_#1e293b)] p-6 pb-24 text-white">
       <div className="mx-auto flex max-w-5xl flex-col gap-6">
         <button
           type="button"

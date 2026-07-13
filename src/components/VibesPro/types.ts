@@ -71,12 +71,28 @@ export type VibesProHeroProps = {
   onGift?: () => void;
   viewingOwn?: boolean;
   onUploadPortrait?: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onRequestPortraitUpload?: () => void;
+  onConfirmPortraitUpload?: () => void;
+  onCancelPortraitUpload?: () => void;
+  onChooseCropPortrait?: (shouldCrop: boolean) => void;
   onSavePortrait?: () => void;
   onCancelPortrait?: () => void;
   onAdjustPortraitPosition?: (position: string) => void;
   portraitPosition?: string;
   isUploadingPortrait?: boolean;
   previewPortraitActive?: boolean;
+  showPortraitConfirm?: boolean;
+  showCropConfirm?: boolean;
+  showCropPreview?: boolean;
+  cropPreviewUrl?: string | null;
+  cropZoom?: number;
+  cropOffsetX?: number;
+  cropOffsetY?: number;
+  onApplyCropPreview?: () => void;
+  onCancelCropPreview?: () => void;
+  onCropZoomChange?: (value: number) => void;
+  onCropOffsetXChange?: (value: number) => void;
+  onCropOffsetYChange?: (value: number) => void;
 };
 
 export type VibesProPortraitProps = {

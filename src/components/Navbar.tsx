@@ -25,8 +25,8 @@ export default function Navbar() {
     };
   }, [user]);
   return (
-    <div className="fixed top-0 left-0 right-0 z-50 bg-linear-to-br from-blue-100 via-pink-100 to-purple-100 border-b border-white/30 h-20 px-3 sm:px-4">
-      <div className="max-w-3xl mx-auto h-full">
+    <div className="fixed top-0 left-0 right-0 z-50 bg-linear-to-br from-blue-100 via-pink-100 to-purple-100 border-b border-white/30 h-20 px-2 sm:px-3 pt-[env(safe-area-inset-top)]">
+      <div className="max-w-3xl mx-auto h-full px-1 sm:px-2">
         <div className="bg-white/20 backdrop-blur-3xl border border-white/30 rounded-[36px] shadow-sm h-full flex items-center justify-between px-5 py-3">
 
           {/* Logo */}

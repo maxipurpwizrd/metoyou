@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Message } from "../lib/messageApi";
+import { updateMessageReactions } from "../lib/messageApi";
 
 type Props = {
   message: Message;
@@ -201,6 +202,13 @@ export default function ChatBubble({ message, mine = false }: Props) {
       next[emoji] = [...list, "me"];
       return next;
     });
+
+    // Save reactions to database and broadcast to other users
+    setReactions((updated) => {
+      void updateMessageReactions(message.id, updated);
+      return updated;
+    });
+
     setShowReactions(false);
   }
 

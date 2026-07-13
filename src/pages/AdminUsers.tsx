@@ -159,7 +159,7 @@ export default function AdminUsers() {
 
   if (isCheckingAccess) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 p-4 pb-16 text-slate-900 sm:p-6">
+      <div className="app-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 p-4 pb-16 text-slate-900 sm:p-6">
         <div className="mx-auto flex max-w-4xl flex-col gap-4">
           <button
             type="button"
@@ -181,7 +181,7 @@ export default function AdminUsers() {
 
   if (!hasAdminAccess) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 p-4 pb-16 text-slate-900 sm:p-6">
+      <div className="app-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 p-4 pb-16 text-slate-900 sm:p-6">
         <div className="mx-auto flex max-w-4xl flex-col gap-4">
           <button
             type="button"
@@ -201,7 +201,7 @@ export default function AdminUsers() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 p-4 pb-16 text-slate-900 sm:p-6">
+    <div className="app-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 p-4 pb-16 text-slate-900 sm:p-6">
       <div className="mx-auto flex max-w-5xl flex-col gap-4">
         <button
           type="button"

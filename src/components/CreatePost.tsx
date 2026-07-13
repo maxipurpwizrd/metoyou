@@ -634,7 +634,7 @@ export default function CreatePost({ onPost }: Props) {
 
     return (
 
-      <div className="bg-white/20 backdrop-blur-3xl border border-white/30 rounded-4xl shadow-2xl p-4 mb-6">
+      <div className="mx-1 sm:mx-2 bg-white/20 backdrop-blur-3xl border border-white/30 rounded-4xl shadow-2xl p-4 mb-6">
 
         <div
 

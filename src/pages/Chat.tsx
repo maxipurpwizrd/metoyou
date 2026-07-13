@@ -13,11 +13,15 @@ import {
   fetchMessages,
   findOrCreateConversation,
   subscribeToMessages,
+  subscribeToMessageStatusUpdates,
+  markMessagesAsRead,
+  updateConversationLastMessageTime,
   sendTypingIndicator,
   subscribeToTyping,
   joinPresence,
   leavePresence,
   subscribeToPresence,
+  mergeMessages,
   type Message,
 } from "../lib/messageApi";
 
@@ -42,12 +46,14 @@ export default function Chat() {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const subscriptionRef = useRef<RealtimeChannel | null>(null);
+  const statusUpdateSubscriptionRef = useRef<RealtimeChannel | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewUrlRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const isUserAtBottomRef = useRef(true);
   const previousMessageCountRef = useRef(0);
+  const messagesLoadVersionRef = useRef(0);
 
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
@@ -64,6 +70,7 @@ export default function Chat() {
   const recordingTimerRef = useRef<number | null>(null);
   const [presenceState, setPresenceState] = useState<Record<string, { last_active?: number; username?: string }>>({});
   const presenceChannelRef = useRef<RealtimeChannel | null>(null);
+  const presenceCleanupRef = useRef<(() => void) | null>(null);
 
   const recipientId = searchParams.get("recipient") ?? "";
   const recipientName = searchParams.get("username") ?? "Friend";
@@ -73,9 +80,20 @@ export default function Chat() {
     (user as AuthUserWithVibesFlag | null | undefined)?.user_metadata?.is_vibes_pro === true ||
     (user as AuthUserWithVibesFlag | null | undefined)?.app_metadata?.is_vibes_pro === true;
 
+  function createMessageId(prefix = "msg") {
+    const randomPart =
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+    return `${prefix}-${randomPart}`;
+  }
+
   useEffect(() => {
     if (!userId || !recipientId) {
-      setConversationId(null);
+      if (conversationId !== null) {
+        setConversationId(null);
+      }
       return;
     }
 
@@ -103,20 +121,25 @@ export default function Chat() {
     if (!conversationId) return;
 
     let mounted = true;
+    const loadVersion = ++messagesLoadVersionRef.current;
 
     const load = async () => {
-      // Check if we have cached messages first
       const cached = getCachedMessages(conversationId);
       if (cached && cached.length > 0) {
-        if (!mounted) return;
-        setMessages(cached);
+        if (!mounted || loadVersion !== messagesLoadVersionRef.current) return;
+        setMessages(mergeMessages(cached));
       }
 
-      // Fetch fresh messages from server
       const msgs = await fetchMessages(conversationId);
-      if (!mounted) return;
-      setMessages(msgs);
-      setCachedMessages(conversationId, msgs);
+      if (!mounted || loadVersion !== messagesLoadVersionRef.current) return;
+      const nextMessages = mergeMessages([...(cached ?? []), ...msgs]);
+      setMessages(nextMessages);
+      setCachedMessages(conversationId, nextMessages);
+
+      // Mark incoming messages as read when conversation is opened
+      if (userId) {
+        void markMessagesAsRead(conversationId, userId);
+      }
     };
 
     load();
@@ -127,15 +150,19 @@ export default function Chat() {
     }
 
     subscriptionRef.current = subscribeToMessages(conversationId, (newMessage) => {
-      console.log("Chat - realtime newMessage received:", newMessage);
-      setMessages((current) => {
-        if (current.some((message) => message.id === newMessage.id)) {
-          return current;
-        }
-        return [...current, newMessage];
-      });
-      // defer cache update to avoid updating context during render
+      setMessages((current) => mergeMessages([...current, newMessage]));
       Promise.resolve().then(() => addMessageToCache(conversationId, newMessage));
+    });
+
+    // Subscribe to message status updates (for read receipts)
+    if (statusUpdateSubscriptionRef.current) {
+      statusUpdateSubscriptionRef.current.unsubscribe();
+      statusUpdateSubscriptionRef.current = null;
+    }
+
+    statusUpdateSubscriptionRef.current = subscribeToMessageStatusUpdates(conversationId, (updatedMessage) => {
+      setMessages((current) => mergeMessages([...current, updatedMessage]));
+      Promise.resolve().then(() => addMessageToCache(conversationId, updatedMessage));
     });
 
     // typing subscription
@@ -152,6 +179,11 @@ export default function Chat() {
     });
 
     // presence subscription
+    if (presenceCleanupRef.current) {
+      presenceCleanupRef.current();
+      presenceCleanupRef.current = null;
+    }
+
     if (presenceChannelRef.current) {
       try {
         presenceChannelRef.current.unsubscribe();
@@ -165,28 +197,32 @@ export default function Chat() {
       void joinPresence(conversationId, userId, { username: recipientName }).then((channel) => {
         presenceChannelRef.current = channel;
         if (channel) {
-          const presenceSubscription = subscribeToPresence(conversationId, (state) => {
+          presenceCleanupRef.current = subscribeToPresence(conversationId, (state) => {
             setPresenceState(state);
-          });
-          try {
-            presenceSubscription.unsubscribe();
-          } catch (err) {
-            console.warn(err);
-          }
+          }).unsubscribe;
         }
       });
     }
 
     return () => {
       mounted = false;
+      messagesLoadVersionRef.current += 1;
       if (subscriptionRef.current) {
         subscriptionRef.current.unsubscribe();
         subscriptionRef.current = null;
+      }
+      if (statusUpdateSubscriptionRef.current) {
+        statusUpdateSubscriptionRef.current.unsubscribe();
+        statusUpdateSubscriptionRef.current = null;
       }
       try {
         typingChannel?.unsubscribe();
       } catch (err) {
         console.warn(err);
+      }
+      if (presenceCleanupRef.current) {
+        presenceCleanupRef.current();
+        presenceCleanupRef.current = null;
       }
       if (presenceChannelRef.current) {
         try {
@@ -228,11 +264,18 @@ export default function Chat() {
       return;
     }
 
-    if (!conversationId) {
-      setSendError("This chat is still loading. Please wait a moment and try again.");
-      return;
+    let resolvedConversationId = conversationId;
+    if (!resolvedConversationId) {
+      const createdConversation = await findOrCreateConversation(userId, recipientId);
+      if (!createdConversation) {
+        setSendError("This chat is still loading. Please wait a moment and try again.");
+        return;
+      }
+      resolvedConversationId = createdConversation.id;
+      setConversationId(createdConversation.id);
     }
 
+    messagesLoadVersionRef.current += 1;
     setSendError(null);
     setIsLoading(true);
     setUploadProgress(0);
@@ -265,7 +308,7 @@ export default function Chat() {
       optimisticAudioUrl = URL.createObjectURL(audioBlob);
       
       try {
-        const filePath = `${conversationId}/${Date.now()}.webm`;
+        const filePath = `${resolvedConversationId}/${createMessageId("audio")}.webm`;
         const { error } = await supabase.storage.from("messages").upload(filePath, audioBlob as Blob);
         if (error) {
           console.error(error);
@@ -284,27 +327,27 @@ export default function Chat() {
       }
     }
 
-    console.log("Chat - calling sendMessage with:", { conversationId, senderId: userId, text: inputText.trim() || undefined, imageUrl, audioUrl });
+    console.log("Chat - calling sendMessage with:", { conversationId: resolvedConversationId, senderId: userId, text: inputText.trim() || undefined, imageUrl, audioUrl });
 
     // Add optimistic message immediately if audio
-    const optimisticId = `optimistic-${Date.now()}`;
+    const optimisticId = createMessageId("optimistic");
     if (audioBlob && optimisticAudioUrl) {
       const optimisticMessage: Message = {
         id: optimisticId,
-        conversation_id: conversationId,
+        conversation_id: resolvedConversationId,
         sender_id: userId,
         text: inputText.trim() || undefined,
         audio_url: optimisticAudioUrl,
         created_at: new Date().toISOString(),
       };
       
-      setMessages((current) => [...current, optimisticMessage]);
+      setMessages((current) => mergeMessages([...current, optimisticMessage]));
       // defer cache update to avoid updating context during render
-      Promise.resolve().then(() => addMessageToCache(conversationId, optimisticMessage));
+      Promise.resolve().then(() => addMessageToCache(resolvedConversationId, optimisticMessage));
     }
 
     const newMessage = await sendMessage({
-      conversationId,
+      conversationId: resolvedConversationId,
       senderId: userId,
       text: inputText.trim() || undefined,
       imageUrl,
@@ -320,13 +363,13 @@ export default function Chat() {
       // Replace optimistic message with real one
       setMessages((current) => {
         const filtered = current.filter((msg) => msg.id !== optimisticId);
-        if (filtered.some((message) => message.id === newMessage.id)) {
-          return filtered;
-        }
-        return [...filtered, newMessage];
+        return mergeMessages([...filtered, newMessage]);
       });
       // defer cache update to avoid updating context during render
-      Promise.resolve().then(() => addMessageToCache(conversationId, newMessage));
+      Promise.resolve().then(() => addMessageToCache(resolvedConversationId, newMessage));
+      
+      // Update conversation's last activity timestamp to bubble it to the top of the list
+      void updateConversationLastMessageTime(resolvedConversationId, newMessage.created_at);
       
       if (previewUrlRef.current) {
         URL.revokeObjectURL(previewUrlRef.current);
@@ -444,7 +487,9 @@ export default function Chat() {
         try {
           const url = URL.createObjectURL(blob);
           setAudioPreviewUrl(url);
-        } catch (e) {}
+        } catch (err) {
+          console.warn("audio preview creation failed", err);
+        }
       };
       recorder.start();
       mediaRecorderRef.current = recorder;
@@ -470,8 +515,8 @@ export default function Chat() {
     mediaRecorderRef.current?.stop();
     try {
       mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
-    } catch (e) {
-      // ignore
+    } catch (err) {
+      console.warn("stopping audio stream failed", err);
     }
     mediaStreamRef.current = null;
     setIsRecording(false);
@@ -481,8 +526,8 @@ export default function Chat() {
     if (audioPreviewUrl) {
       try {
         URL.revokeObjectURL(audioPreviewUrl);
-      } catch (e) {
-        // ignore
+      } catch (err) {
+        console.warn("stopping audio stream failed", err);
       }
     }
     setAudioPreviewUrl(null);
@@ -537,7 +582,11 @@ export default function Chat() {
       .then((r) => r.arrayBuffer())
       .then((arrayBuffer) => {
         if (cancelled) return;
-        audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const AudioContextConstructor = window.AudioContext ?? (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (!AudioContextConstructor) {
+          return;
+        }
+        audioCtx = new AudioContextConstructor();
         return audioCtx.decodeAudioData(arrayBuffer);
       })
       .then((audioBuffer) => {
@@ -569,7 +618,9 @@ export default function Chat() {
         if (audioCtx) {
           try {
             audioCtx.close();
-          } catch (e) {}
+          } catch (err) {
+            console.warn("waveform cleanup failed", err);
+          }
         }
       });
 
@@ -578,7 +629,9 @@ export default function Chat() {
       if (audioCtx) {
         try {
           audioCtx.close();
-        } catch (e) {}
+        } catch (err) {
+          console.warn("waveform cleanup failed", err);
+        }
       }
     };
   }, [audioPreviewUrl]);
@@ -654,7 +707,7 @@ export default function Chat() {
 
   if (isVibesProUser) {
     return (
-      <div className="min-h-screen bg-linear-to-br from-slate-800 via-slate-700 to-blue-900 p-4 md:p-6">
+      <div className="app-screen bg-linear-to-br from-slate-800 via-slate-700 to-blue-900 p-4 md:p-6">
         <div className="mx-auto max-w-3xl">
           <VibesProChat
             messages={vibesProMessages}
@@ -684,7 +737,7 @@ export default function Chat() {
   }
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-slate-800 via-slate-700 to-blue-900 flex flex-col relative overflow-hidden">
+    <div className="app-screen bg-linear-to-br from-slate-800 via-slate-700 to-blue-900 flex flex-col relative overflow-hidden">
       {/* Paw Print Background */}
       <svg
         className="absolute inset-0 w-full h-full opacity-15 pointer-events-none"

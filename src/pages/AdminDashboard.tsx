@@ -876,7 +876,7 @@ export default function AdminDashboard() {
 
   if (isCheckingAccess) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 p-4 pb-16 text-slate-900 sm:p-6">
+      <div className="app-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 p-4 pb-16 text-slate-900 sm:p-6">
         <div className="mx-auto flex max-w-3xl flex-col gap-4">
           <button
             type="button"
@@ -899,7 +899,7 @@ export default function AdminDashboard() {
 
   if (!hasAdminAccess) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 p-4 pb-16 text-slate-900 sm:p-6">
+      <div className="app-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 p-4 pb-16 text-slate-900 sm:p-6">
         <div className="mx-auto flex max-w-3xl flex-col gap-4">
           <button
             type="button"
@@ -920,7 +920,7 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 p-4 pb-16 text-slate-900 sm:p-6">
+    <div className="app-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 p-4 pb-16 text-slate-900 sm:p-6">
       <div className="mx-auto flex max-w-6xl flex-col gap-4">
         <button
           type="button"

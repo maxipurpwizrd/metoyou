@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { getNotifications, markNotificationsRead, subscribeToNotifications, type Notification } from "../lib/notificationApi";
 
-export default function Notifications() {
+export default function Notifications(_props: { embedded?: boolean } = {}) {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -145,7 +145,7 @@ export default function Notifications() {
   };
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-blue-100 via-pink-100 to-purple-100 p-6">
+    <div className="app-screen bg-linear-to-br from-blue-100 via-pink-100 to-purple-100 p-6">
       <Navbar />
 
       <div className="max-w-2xl mx-auto pt-20 pb-24">

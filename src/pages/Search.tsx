@@ -34,7 +34,7 @@ export default function Search() {
     return () => clearTimeout(timer);
   }, [query]);
   return (
-    <div className="min-h-screen bg-linear-to-br from-blue-100 via-pink-100 to-purple-100 p-6 pb-24">
+    <div className="app-screen bg-linear-to-br from-blue-100 via-pink-100 to-purple-100 p-6 pb-24">
       <Navbar />
 
       <div className="max-w-2xl mx-auto pt-20">

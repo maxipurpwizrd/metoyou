@@ -11,7 +11,7 @@ const ThroneCard: FC<ThroneCardProps> = ({ username, imageUrl, isOnline = false 
   return (
     <div className="relative w-full h-65 rounded-[40px] overflow-hidden shadow-2xl">
       {/* Background image */}
-      <img src={imageUrl} alt={`${username} avatar`} loading="lazy" className="absolute inset-0 w-full h-full object-cover" />
+      <img src={imageUrl} alt={`${username} profile picture`} loading="lazy" className="absolute inset-0 w-full h-full object-cover" />
 
       {/* Throne template overlay */}
       <img src={throneTemplate} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-contain pointer-events-none z-10" />

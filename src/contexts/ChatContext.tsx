@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
 import type { Message } from "../lib/messageApi";
 
 interface ConversationCache {
@@ -19,15 +19,15 @@ const ChatContext = createContext<ChatContextType | undefined>(undefined);
 export function ChatProvider({ children }: { children: ReactNode }) {
   const [messageCache, setMessageCache] = useState<Map<string, ConversationCache>>(new Map());
 
-  const getCachedMessages = (conversationId: string) => {
+  const getCachedMessages = useCallback((conversationId: string) => {
     const cached = messageCache.get(conversationId);
     if (cached) {
       return cached.messages;
     }
     return null;
-  };
+  }, [messageCache]);
 
-  const setCachedMessages = (conversationId: string, messages: Message[]) => {
+  const setCachedMessages = useCallback((conversationId: string, messages: Message[]) => {
     setMessageCache((prev) => {
       const newCache = new Map(prev);
       newCache.set(conversationId, {
@@ -36,9 +36,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       });
       return newCache;
     });
-  };
+  }, []);
 
-  const addMessageToCache = (conversationId: string, message: Message) => {
+  const addMessageToCache = useCallback((conversationId: string, message: Message) => {
     setMessageCache((prev) => {
       const newCache = new Map(prev);
       const cached = newCache.get(conversationId);
@@ -58,11 +58,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
       return newCache;
     });
-  };
+  }, []);
 
-  const clearCache = () => {
+  const clearCache = useCallback(() => {
     setMessageCache(new Map());
-  };
+  }, []);
 
   return (
     <ChatContext.Provider

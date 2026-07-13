@@ -4,7 +4,7 @@ import MessageCard from "../components/MessageCard";
 import { useAuth } from "../hooks/useAuth";
 import { getMessageThreads, type MessageThread } from "../lib/messageApi";
 
-export default function Messages() {
+export default function Messages(_props: { embedded?: boolean } = {}) {
   const { user } = useAuth();
   const [threads, setThreads] = useState<MessageThread[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -67,41 +67,46 @@ export default function Messages() {
         const remote = await getMessageThreads(userId);
         if (!mountedRef.current || !remote) return;
 
-        // Merge remote threads with existing ones, updating only changed threads
-        const byId = new Map<string, MessageThread>();
-        threads.forEach((t) => byId.set(t.otherId, t));
+        setThreads((prevThreads) => {
+          const byId = new Map<string, MessageThread>();
+          prevThreads.forEach((t) => byId.set(t.otherId, t));
 
-        let changed = false;
-        remote.forEach((r) => {
-          const existing = byId.get(r.otherId);
-          if (!existing) {
-            byId.set(r.otherId, r);
-            changed = true;
-            return;
+          let changed = false;
+          remote.forEach((r) => {
+            const existing = byId.get(r.otherId);
+            if (!existing) {
+              byId.set(r.otherId, r);
+              changed = true;
+              return;
+            }
+
+            const existingTime = existing.lastTime ? new Date(existing.lastTime).getTime() : 0;
+            const remoteTime = r.lastTime ? new Date(r.lastTime).getTime() : 0;
+            if (remoteTime !== existingTime || r.lastText !== existing.lastText) {
+              byId.set(r.otherId, r);
+              changed = true;
+            }
+          });
+
+          if (!changed && hasCache) {
+            return prevThreads;
           }
 
-          const existingTime = existing.lastTime ? new Date(existing.lastTime).getTime() : 0;
-          const remoteTime = r.lastTime ? new Date(r.lastTime).getTime() : 0;
-          if (remoteTime !== existingTime || r.lastText !== existing.lastText) {
-            byId.set(r.otherId, r);
-            changed = true;
-          }
-        });
-
-        if (changed || !hasCache) {
           const merged = Array.from(byId.values()).sort((a, b) => {
             const aTime = a.lastTime ? new Date(a.lastTime).getTime() : 0;
             const bTime = b.lastTime ? new Date(b.lastTime).getTime() : 0;
             return bTime - aTime;
           });
-          setThreads(merged);
+
           try {
             sessionStorage.setItem(cacheKey, JSON.stringify(merged));
             sessionStorage.setItem(lastKey, String(Date.now()));
           } catch (e) {
             // ignore storage errors
           }
-        }
+
+          return merged;
+        });
       } catch (err) {
         console.warn("Failed to refresh message threads", err);
       } finally {
@@ -115,7 +120,7 @@ export default function Messages() {
   }, [user]);
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-pink-100 via-purple-100 to-blue-100 p-6 pb-24">
+    <div className="app-screen bg-linear-to-br from-pink-100 via-purple-100 to-blue-100 p-6 pb-24">
 
       <div className="max-w-xl mx-auto">
 

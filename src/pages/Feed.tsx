@@ -3,6 +3,7 @@ import { useMemo, useState, useEffect, useRef } from "react";
 import { AutoSizer, CellMeasurer, CellMeasurerCache, List, WindowScroller } from "react-virtualized";
 import { useFeed, type Post as FeedPost } from "../contexts/FeedContext";
 import { getProfile } from "../utils/profileStorage";
+import { VibesProFeed } from "../themes/vibespro";
 
 import CreatePost from "../components/CreatePost";
 import PostCard from "../components/PostCard";
@@ -27,7 +28,7 @@ type Story = {
   profilePic?: string;
 };
 
-export default function Feed() {
+export default function Feed(_props: { embedded?: boolean } = {}) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const musicInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -548,12 +549,17 @@ export default function Feed() {
     );
   };
 
-  return (
-    <div className="min-h-screen bg-linear-to-br from-blue-100 via-pink-100 to-purple-100 px-4 sm:px-6">
-      {/* Dynamic Floating Navbar Container */}
-      <Navbar />
+  // Check if user is VibesPro and render premium theme
+  const profile = getProfile();
+  const isVibesPro = profile?.is_vibes_pro === true;
 
-      <div className="max-w-md mx-auto pt-28 pb-24 space-y-5">
+  // Normal feed content that can be wrapped by VibesProFeed theme
+  const feedContent = (
+    <div className={`app-screen ${isVibesPro ? 'bg-[#0B0B0B]' : 'bg-linear-to-br from-blue-100 via-pink-100 to-purple-100'} px-4 sm:px-6`}>
+      {/* Dynamic Floating Navbar Container - only show if not VibesPro (VibesProFeed has its own navbar) */}
+      {!isVibesPro && <Navbar />}
+
+      <div className={`max-w-md mx-auto pb-24 space-y-5 ${isVibesPro ? 'pt-8' : 'pt-28'}`}>
         <input
           ref={fileInputRef}
           type="file"
@@ -663,7 +669,7 @@ export default function Feed() {
                               <div
                                 ref={registerChild}
                                 style={{ ...style, width: "100%" }}
-                                className="mb-4"
+                                className="mb-4 px-1 sm:px-2"
                               >
                                 <div
                                   onClick={(e) => {
@@ -1055,4 +1061,15 @@ export default function Feed() {
       )}
     </div>
   );
+
+  // Wrap with VibesProFeed if user is premium, otherwise return normal feed
+  if (isVibesPro) {
+    return (
+      <VibesProFeed>
+        {feedContent}
+      </VibesProFeed>
+    );
+  }
+
+  return feedContent;
 }
