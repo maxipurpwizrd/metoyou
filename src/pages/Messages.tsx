@@ -3,12 +3,16 @@ import { useEffect, useState, useRef } from "react";
 import MessageCard from "../components/MessageCard";
 import { useAuth } from "../hooks/useAuth";
 import { getMessageThreads, type MessageThread } from "../lib/messageApi";
+import { getProfile } from "../utils/profileStorage";
+import { VibesProFeed } from "../themes/vibespro";
 
 export default function Messages(_props: { embedded?: boolean } = {}) {
   const { user } = useAuth();
   const [threads, setThreads] = useState<MessageThread[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const mountedRef = useRef(true);
+  const profile = getProfile();
+  const isVibesPro = profile?.is_vibes_pro === true;
 
   // Restore/save scroll position for messages list per user
   useEffect(() => {
@@ -119,59 +123,78 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
     };
   }, [user]);
 
-  return (
-    <div className="app-screen bg-linear-to-br from-pink-100 via-purple-100 to-blue-100 p-6 pb-24">
+  const messagesContent = (
+    <div className={`app-screen ${isVibesPro ? 'bg-[#0B0B0B]' : 'bg-linear-to-br from-pink-100 via-purple-100 to-blue-100'} p-6 pb-24`}>
+      {!isVibesPro && (
+        <div className="max-w-xl mx-auto">
+          {/* Header for free tier */}
+          <div className="mb-8 text-center">
+            <div className="flex items-center justify-center gap-3 mb-4">
+              <Link
+                to="/feed"
+                className="text-slate-900 bg-white/80 shadow-sm rounded-full p-2 hover:bg-white transition"
+                aria-label="Go back"
+              >
+                ←
+              </Link>
+              <h1 className="text-4xl sm:text-5xl font-black text-transparent bg-clip-text bg-linear-to-r from-fuchsia-500 via-cyan-300 to-amber-300 shadow-[0_0_30px_rgba(255,255,255,0.35)]">
+                MeToYou 💎✨
+              </h1>
+            </div>
 
-      <div className="max-w-xl mx-auto">
+            <p className="text-slate-900 text-base sm:text-lg mt-3 leading-7">
+              Rainbow iced, diamond chain energy — chat flex hard.
+            </p>
 
-        {/* Header */}
-        <div className="mb-8 text-center">
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <Link
-              to="/feed"
-              className="text-slate-900 bg-white/80 shadow-sm rounded-full p-2 hover:bg-white transition"
-              aria-label="Go back"
-            >
-              ←
-            </Link>
-            <h1 className="text-4xl sm:text-5xl font-black text-transparent bg-clip-text bg-linear-to-r from-fuchsia-500 via-cyan-300 to-amber-300 shadow-[0_0_30px_rgba(255,255,255,0.35)]">
-              MeToYou 💎✨
-            </h1>
-          </div>
-
-          <p className="text-slate-900 text-base sm:text-lg mt-3 leading-7">
-            Rainbow iced, diamond chain energy — chat flex hard.
-          </p>
-
-          <div className="mt-3 inline-flex items-center gap-2 text-xs uppercase tracking-[0.25em] text-slate-700 justify-center">
-            <span className="inline-block px-3 py-1 rounded-full bg-linear-to-r from-fuchsia-500 via-cyan-300 to-amber-300 text-white shadow-lg shadow-fuchsia-200/40">
-              Diamond drip
-            </span>
-            <span className="inline-block px-3 py-1 rounded-full bg-white/90 text-slate-900 border border-slate-200 backdrop-blur-sm shadow-sm">
-              Ice cold
-            </span>
+            <div className="mt-3 inline-flex items-center gap-2 text-xs uppercase tracking-[0.25em] text-slate-700 justify-center">
+              <span className="inline-block px-3 py-1 rounded-full bg-linear-to-r from-fuchsia-500 via-cyan-300 to-amber-300 text-white shadow-lg shadow-fuchsia-200/40">
+                Diamond drip
+              </span>
+              <span className="inline-block px-3 py-1 rounded-full bg-white/90 text-slate-900 border border-slate-200 backdrop-blur-sm shadow-sm">
+                Ice cold
+              </span>
+            </div>
           </div>
         </div>
+      )}
+
+      <div className={`max-w-xl mx-auto ${isVibesPro ? 'pt-8' : ''}`}>
+        {isVibesPro && (
+          <h1 className="text-4xl sm:text-5xl font-black text-white mb-8">Messages</h1>
+        )}
 
         {/* Search Bar */}
-        <div className="bg-white/20 backdrop-blur-3xl border border-white/30 rounded-4xl p-4 shadow-2xl mb-6">
+        <div className={`rounded-4xl p-4 shadow-2xl mb-6 ${
+          isVibesPro
+            ? 'bg-[#181818] border border-[#D4AF37]/30'
+            : 'bg-white/20 backdrop-blur-3xl border border-white/30'
+        }`}>
           <input
             type="text"
-            placeholder="Search the squad..."
-            className="w-full bg-transparent outline-none"
+            placeholder="Search conversations..."
+            className={`w-full outline-none bg-transparent ${
+              isVibesPro ? 'text-white placeholder-white/50' : 'text-slate-900 placeholder-slate-700'
+            }`}
             disabled
           />
         </div>
 
         {/* Message List */}
-
         <div className="space-y-4">
           {isLoading ? (
-            <div className="bg-white/30 backdrop-blur-3xl border border-white/40 rounded-[28px] p-6 text-center text-slate-700 shadow-sm">
+            <div className={`rounded-[28px] p-6 text-center shadow-sm ${
+              isVibesPro
+                ? 'bg-[#181818] border border-[#D4AF37]/20 text-white/70'
+                : 'bg-white/30 backdrop-blur-3xl border border-white/40 text-slate-700'
+            }`}>
               Loading conversations...
             </div>
           ) : threads.length === 0 ? (
-            <div className="bg-white/30 backdrop-blur-3xl border border-white/40 rounded-[28px] p-6 text-center text-slate-700 shadow-sm">
+            <div className={`rounded-[28px] p-6 text-center shadow-sm ${
+              isVibesPro
+                ? 'bg-[#181818] border border-[#D4AF37]/20 text-white/70'
+                : 'bg-white/30 backdrop-blur-3xl border border-white/40 text-slate-700'
+            }`}>
               No conversations yet. Start messaging someone from a profile.
             </div>
           ) : (
@@ -179,22 +202,61 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
               <Link
                 key={thread.otherId}
                 to={`/chat?recipient=${thread.otherId}&username=${encodeURIComponent(thread.otherUsername)}`}
-                className="block"
+                className={`block rounded-4xl transition-all duration-200 ${
+                  isVibesPro
+                    ? 'hover:bg-[#1a1a1a] border border-[#D4AF37]/20 hover:border-[#D4AF37]/40 bg-[#181818]'
+                    : 'hover:bg-white/30'
+                }`}
               >
-                <MessageCard
-                  name={thread.otherUsername}
-                  message={thread.lastText ?? ""}
-                  time={thread.lastTime ?? ""}
-                  unread={Boolean(thread.lastText) && Boolean(thread.lastTime)}
-                />
+                <div className={`p-4 ${
+                  isVibesPro
+                    ? 'text-white'
+                    : 'text-slate-900'
+                }`}>
+                  <div className="flex items-center gap-3">
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold ${
+                      isVibesPro
+                        ? 'bg-linear-to-r from-[#D4AF37] to-[#F0C75E]'
+                        : 'bg-linear-to-r from-pink-400 via-purple-400 to-blue-400'
+                    }`}>
+                      {thread.otherUsername[0]?.toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`font-semibold truncate ${
+                        isVibesPro ? 'text-white' : 'text-slate-900'
+                      }`}>
+                        {thread.otherUsername}
+                      </p>
+                      <p className={`text-sm truncate ${
+                        isVibesPro ? 'text-white/60' : 'text-slate-600'
+                      }`}>
+                        {thread.lastText || "No messages yet"}
+                      </p>
+                    </div>
+                    {thread.lastTime && (
+                      <p className={`text-xs whitespace-nowrap ${
+                        isVibesPro ? 'text-white/40' : 'text-slate-500'
+                      }`}>
+                        {new Date(thread.lastTime).toLocaleDateString()}
+                      </p>
+                    )}
+                  </div>
+                </div>
               </Link>
             ))
           )}
         </div>
-
       </div>
-
-
     </div>
   );
+
+  if (isVibesPro) {
+    return (
+      <VibesProFeed>
+        {messagesContent}
+      </VibesProFeed>
+    );
+  }
+
+  return messagesContent;
 }

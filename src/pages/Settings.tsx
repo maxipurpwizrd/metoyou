@@ -253,10 +253,6 @@ export default function Settings() {
           <div className="grid gap-4">
             <div>
               <h1 className="text-4xl sm:text-5xl font-black tracking-tight text-slate-950">Settings <span aria-hidden>⚙️</span></h1>
-              <p className="mt-3 text-sm sm:text-base text-slate-600 max-w-2xl leading-7">
-                A liquid glass control center crafted for family, community and style.
-                Swipe through your profile, security, display and support options with ease.
-              </p>
             </div>
 
             {!Boolean(profile.vibes_pro ?? profile.is_vibes_pro) && (

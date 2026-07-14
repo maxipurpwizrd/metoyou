@@ -3,10 +3,15 @@ import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { getNotifications, markNotificationsRead, subscribeToNotifications, type Notification } from "../lib/notificationApi";
+import { getProfile } from "../utils/profileStorage";
+import { VibesProFeed } from "../themes/vibespro";
 
 export default function Notifications(_props: { embedded?: boolean } = {}) {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const profile = getProfile();
+  const isVibesPro = profile?.is_vibes_pro === true;
+  
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const mountedRef = useRef(true);
 
@@ -144,18 +149,26 @@ export default function Notifications(_props: { embedded?: boolean } = {}) {
     }
   };
 
-  return (
-    <div className="app-screen bg-linear-to-br from-blue-100 via-pink-100 to-purple-100 p-6">
-      <Navbar />
+  const notificationContent = (
+    <div className={`app-screen ${isVibesPro ? 'bg-[#0B0B0B]' : 'bg-linear-to-br from-blue-100 via-pink-100 to-purple-100'} p-6`}>
+      {!isVibesPro && <Navbar />}
 
-      <div className="max-w-2xl mx-auto pt-20 pb-24">
-        <h1 className="text-4xl sm:text-5xl font-black text-slate-950 mb-8">
+      <div className={`max-w-2xl mx-auto ${isVibesPro ? 'pt-8' : 'pt-20'} pb-24`}>
+        <h1 className={`text-4xl sm:text-5xl font-black mb-8 ${
+          isVibesPro ? 'text-white' : 'text-slate-950'
+        }`}>
           Notifications
         </h1>
 
         {notifications.length === 0 ? (
-          <div className="bg-white/20 backdrop-blur-3xl border border-white/30 rounded-4xl shadow-2xl p-10 text-center">
-            <p className="text-slate-600 text-lg">No notifications yet</p>
+          <div className={`rounded-4xl shadow-2xl p-10 text-center ${
+            isVibesPro
+              ? 'bg-[#181818] border border-[#D4AF37]/20'
+              : 'bg-white/20 backdrop-blur-3xl border border-white/30'
+          }`}>
+            <p className={isVibesPro ? 'text-white/70' : 'text-slate-600'}>
+              No notifications yet
+            </p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -167,8 +180,16 @@ export default function Notifications(_props: { embedded?: boolean } = {}) {
                     navigate(`/feed`);
                   }
                 }}
-                className={`bg-white/20 backdrop-blur-3xl border border-white/30 rounded-4xl shadow-2xl px-5 py-4 transition-all duration-200 cursor-pointer hover:bg-white/30 ${
-                  !notif.read ? "border-pink-400/50 bg-pink-50/20" : ""
+                className={`rounded-4xl shadow-2xl px-5 py-4 transition-all duration-200 cursor-pointer ${
+                  isVibesPro
+                    ? `bg-[#181818] border ${
+                        !notif.read
+                          ? 'border-[#D4AF37] bg-[#181818]'
+                          : 'border-[#D4AF37]/20 hover:border-[#D4AF37]/40'
+                      }`
+                    : `bg-white/20 backdrop-blur-3xl border border-white/30 hover:bg-white/30 ${
+                        !notif.read ? 'border-pink-400/50 bg-pink-50/20' : ''
+                      }`
                 }`}
               >
                 <div className="flex items-center gap-3">
@@ -176,10 +197,16 @@ export default function Notifications(_props: { embedded?: boolean } = {}) {
                     <img
                       src={notif.avatar}
                       alt={notif.user}
-                      className="w-11 h-11 rounded-2xl object-cover shrink-0"
+                      className={`w-11 h-11 rounded-2xl object-cover shrink-0 ${
+                        isVibesPro ? 'ring-2 ring-[#D4AF37]/30' : ''
+                      }`}
                     />
                   ) : (
-                    <div className="w-11 h-11 rounded-2xl bg-linear-to-r from-pink-400 via-purple-400 to-blue-400 flex items-center justify-center text-white font-bold text-sm shrink-0">
+                    <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-white font-bold text-sm shrink-0 ${
+                      isVibesPro
+                        ? 'bg-linear-to-r from-[#D4AF37] to-[#F0C75E]'
+                        : 'bg-linear-to-r from-pink-400 via-purple-400 to-blue-400'
+                    }`}>
                       {notif.user[0]}
                     </div>
                   )}
@@ -188,29 +215,39 @@ export default function Notifications(_props: { embedded?: boolean } = {}) {
                     <div className="flex items-center gap-2">
                       <span className="text-2xl">{getEmoji(notif.type)}</span>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm text-slate-900 font-semibold">
+                        <p className={`text-sm font-semibold ${
+                          isVibesPro ? 'text-white' : 'text-slate-900'
+                        }`}>
                           <span
                             onClick={() =>
                               navigate(`/profile/${notif.user}`)
                             }
-                            className="text-pink-600 hover:text-pink-700 cursor-pointer"
+                            className={`hover:opacity-80 cursor-pointer ${
+                              isVibesPro
+                                ? 'text-[#D4AF37]'
+                                : 'text-pink-600 hover:text-pink-700'
+                            }`}
                           >
                             {notif.user}
                           </span>
-                          <span className="text-slate-700">
+                          <span className={isVibesPro ? 'text-white/80' : 'text-slate-700'}>
                             {" "}{notif.message}
                           </span>
                         </p>
                       </div>
                     </div>
 
-                    <p className="text-xs text-slate-600 mt-2">
+                    <p className={`text-xs mt-2 ${
+                      isVibesPro ? 'text-white/50' : 'text-slate-600'
+                    }`}>
                       {getTimeString(notif.timestamp)}
                     </p>
                   </div>
 
                   {!notif.read && (
-                    <div className="w-2 h-2 rounded-full bg-pink-500 shrink-0"></div>
+                    <div className={`w-2 h-2 rounded-full shrink-0 ${
+                      isVibesPro ? 'bg-[#D4AF37]' : 'bg-pink-500'
+                    }`}></div>
                   )}
                 </div>
               </div>
@@ -220,4 +257,14 @@ export default function Notifications(_props: { embedded?: boolean } = {}) {
       </div>
     </div>
   );
+
+  if (isVibesPro) {
+    return (
+      <VibesProFeed>
+        {notificationContent}
+      </VibesProFeed>
+    );
+  }
+
+  return notificationContent;
 }
