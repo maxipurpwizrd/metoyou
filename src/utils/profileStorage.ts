@@ -1,26 +1,6 @@
 import { normalizeLanguage } from "../lib/i18n";
-
-export type ProfileData = {
-  id: string;
-  username: string;
-  firstName?: string;
-  bio: string;
-  profilePic: string | null;
-  vibes_pro_portrait?: string | null;
-  is_vibes_pro?: boolean;
-  vibes_pro?: boolean;
-  vibes_pro_until?: string | null;
-  stripe_customer_id?: string | null;
-  stripe_subscription_id?: string | null;
-  interests: string[];
-  email: string;
-  language?: string;
-  dateOfBirth?: string;
-  gender?: string;
-  hommies_count: number;
-  snapshots_count: number;
-  vibes_count: number;
-};
+export type { ProfileData } from "../types/profile";
+import type { ProfileData } from "../types/profile";
 
 const PROFILE_KEY = "metoyou-profile";
 

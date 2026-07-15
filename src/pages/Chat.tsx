@@ -10,7 +10,7 @@ import { useChat } from "../contexts/ChatContext";
 import { supabase } from "../lib/supabase";
 import {
   sendMessage,
-  fetchMessages,
+  fetchMessagesPage,
   findOrCreateConversation,
   subscribeToMessages,
   subscribeToMessageStatusUpdates,
@@ -22,6 +22,8 @@ import {
   leavePresence,
   subscribeToPresence,
   mergeMessages,
+  editMessage,
+  deleteMessage,
   type Message,
 } from "../lib/messageApi";
 
@@ -45,6 +47,10 @@ export default function Chat() {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
   const subscriptionRef = useRef<RealtimeChannel | null>(null);
   const statusUpdateSubscriptionRef = useRef<RealtimeChannel | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -122,19 +128,26 @@ export default function Chat() {
 
     let mounted = true;
     const loadVersion = ++messagesLoadVersionRef.current;
+    const pageSize = 30;
 
     const load = async () => {
+      setHasMoreMessages(false);
+      setIsLoadingOlderMessages(false);
+
       const cached = getCachedMessages(conversationId);
       if (cached && cached.length > 0) {
         if (!mounted || loadVersion !== messagesLoadVersionRef.current) return;
         setMessages(mergeMessages(cached));
       }
 
-      const msgs = await fetchMessages(conversationId);
+      const initialPage = await fetchMessagesPage(conversationId, undefined, pageSize + 1);
       if (!mounted || loadVersion !== messagesLoadVersionRef.current) return;
-      const nextMessages = mergeMessages([...(cached ?? []), ...msgs]);
+
+      const visibleMessages = initialPage.slice(0, pageSize);
+      const nextMessages = mergeMessages([...(cached ?? []), ...visibleMessages]);
       setMessages(nextMessages);
       setCachedMessages(conversationId, nextMessages);
+      setHasMoreMessages(initialPage.length > pageSize);
 
       // Mark incoming messages as read when conversation is opened
       if (userId) {
@@ -352,6 +365,8 @@ export default function Chat() {
       text: inputText.trim() || undefined,
       imageUrl,
       audioUrl,
+      replyToId: replyingTo?.id ?? null,
+      replyToText: replyingTo?.text ?? null,
     });
 
     console.log("Chat - sendMessage returned:", newMessage);
@@ -385,9 +400,11 @@ export default function Chat() {
       setInputText("");
       setPreviewUrl(null);
       setAudioBlob(null);
+      setReplyingTo(null);
       setSendError(null);
     } else {
       setMessages((current) => current.filter((msg) => msg.id !== optimisticId));
+      setReplyingTo(null);
       if (optimisticAudioUrl) {
         URL.revokeObjectURL(optimisticAudioUrl);
       }
@@ -662,6 +679,42 @@ export default function Chat() {
     };
   }, []);
 
+  async function loadOlderMessages() {
+    if (!conversationId || !userId || isLoadingOlderMessages || !hasMoreMessages || messages.length === 0) return;
+
+    const oldestMessage = messages[0];
+    if (!oldestMessage?.created_at) return;
+
+    setIsLoadingOlderMessages(true);
+    const olderMessages = await fetchMessagesPage(conversationId, oldestMessage.created_at, 30);
+
+    if (olderMessages.length === 0) {
+      setHasMoreMessages(false);
+      setIsLoadingOlderMessages(false);
+      return;
+    }
+
+    setMessages((current) => {
+      const merged = mergeMessages([...olderMessages, ...current]);
+      setCachedMessages(conversationId, merged);
+      return merged;
+    });
+
+    setHasMoreMessages(olderMessages.length >= 30);
+    setIsLoadingOlderMessages(false);
+
+    requestAnimationFrame(() => {
+      const container = messagesContainerRef.current;
+      if (container) {
+        const previousHeight = container.scrollHeight;
+        requestAnimationFrame(() => {
+          const heightDelta = container.scrollHeight - previousHeight;
+          container.scrollTop = heightDelta;
+        });
+      }
+    });
+  }
+
   // Detect when user scrolls manually
   useEffect(() => {
     const container = messagesContainerRef.current;
@@ -672,11 +725,15 @@ export default function Chat() {
       const isNearBottom = 
         container.scrollHeight - container.scrollTop - container.clientHeight < 100;
       isUserAtBottomRef.current = isNearBottom;
+
+      if (container.scrollTop < 220 && hasMoreMessages && !isLoadingOlderMessages) {
+        void loadOlderMessages();
+      }
     };
 
     container.addEventListener("scroll", handleScroll, { passive: true });
     return () => container.removeEventListener("scroll", handleScroll);
-  }, []);
+  }, [conversationId, hasMoreMessages, isLoadingOlderMessages, messages.length]);
 
   // Auto-scroll only if user is already at bottom or messages just loaded
   useEffect(() => {
@@ -704,6 +761,36 @@ export default function Chat() {
     role: msg.sender_id === userId ? "user" : "assistant",
     createdAt: msg.created_at ?? undefined,
   }));
+
+  async function handleEditMessage(messageId: string, newText: string) {
+    if (!userId) return;
+    const updated = await editMessage(messageId, newText, userId);
+    if (updated) {
+      setMessages((current) => mergeMessages(current.map(msg => msg.id === messageId ? updated : msg)));
+      Promise.resolve().then(() => addMessageToCache(conversationId ?? "", updated));
+    } else {
+      alert("Failed to edit message. You can only edit your own messages.");
+    }
+  }
+
+  async function handleDeleteMessage(messageId: string) {
+    if (!userId) return;
+    const success = await deleteMessage(messageId, userId);
+    if (success) {
+      setMessages((current) => current.filter(msg => msg.id !== messageId));
+      if (conversationId) {
+        Promise.resolve().then(() => {
+          const cache = getCachedMessages(conversationId);
+          if (cache) {
+            const updated = cache.filter(msg => msg.id !== messageId);
+            setCachedMessages(conversationId, updated);
+          }
+        });
+      }
+    } else {
+      alert("Failed to delete message. You can only delete your own messages.");
+    }
+  }
 
   if (isVibesProUser) {
     return (
@@ -864,23 +951,54 @@ export default function Chat() {
       {/* Messages Container */}
       <div ref={messagesContainerRef} className="flex-1 overflow-y-auto pt-28 md:pt-32 pb-28 md:pb-32 px-3 md:px-6">
         <div className="max-w-xl mx-auto">
+          {recipientId && (
+            <div className="mb-3 rounded-2xl border border-white/10 bg-white/10 px-3 py-2 backdrop-blur-xl">
+              <input
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search this conversation"
+                className="w-full bg-transparent text-sm text-white placeholder:text-white/50 outline-none"
+              />
+            </div>
+          )}
 
           {/* Messages */}
           {recipientId ? (
             <div className="space-y-4">
+              {isLoadingOlderMessages && (
+                <div className="text-center text-white/50 text-sm py-2">Loading older messages…</div>
+              )}
               {messages.length === 0 ? (
                 <div className="text-center text-white/50 py-8">
                   No messages yet. Start the conversation! 💬
                 </div>
-              ) : (
-                messages.map((msg) => (
+              ) : (() => {
+                const filteredMessages = searchQuery.trim()
+                  ? messages.filter((msg) => {
+                      const text = `${msg.text ?? ""} ${msg.reply_to_text ?? ""}`.toLowerCase();
+                      return text.includes(searchQuery.trim().toLowerCase());
+                    })
+                  : messages;
+
+                if (filteredMessages.length === 0) {
+                  return (
+                    <div className="text-center text-white/50 py-8">
+                      No messages match your search. 🔎
+                    </div>
+                  );
+                }
+
+                return filteredMessages.map((msg) => (
                   <ChatBubble
                     key={msg.id}
                     mine={msg.sender_id === userId}
                     message={msg}
+                    onEdit={handleEditMessage}
+                    onDelete={handleDeleteMessage}
+                    onReply={(message) => setReplyingTo(message)}
                   />
-                ))
-              )}
+                ));
+              })()}
               <div ref={messagesEndRef} />
             </div>
           ) : (
@@ -895,6 +1013,17 @@ export default function Chat() {
       {/* Fixed Message Box at Bottom */}
       <div className="fixed bottom-0 left-0 right-0 z-50 bg-linear-to-br from-slate-800 via-slate-700 to-blue-900 p-3 md:p-6 border-t border-white/20">
         <div className="max-w-xl mx-auto">
+          {replyingTo && (
+            <div className="mb-3 rounded-2xl border border-white/10 bg-white/10 px-3 py-2 text-sm text-white/80 flex items-center justify-between">
+              <div className="min-w-0">
+                <div className="text-[11px] uppercase tracking-[0.2em] text-white/50">Replying to</div>
+                <div className="truncate">{replyingTo.text ?? "message"}</div>
+              </div>
+              <button onClick={() => setReplyingTo(null)} className="ml-2 rounded-full p-1 hover:bg-white/10" aria-label="Cancel reply">
+                <X size={16} />
+              </button>
+            </div>
+          )}
           {audioBlob ? (
             <div className="mb-3 p-3 rounded-2xl bg-white/10 flex items-center gap-3">
               <button

@@ -11,11 +11,19 @@ import PostSkeleton from "../components/PostSkeleton";
 import { savePostToSupabase, deletePostFromSupabase, uploadAudioToSupabase, uploadImageToSupabase } from "../lib/postApi";
 import { addComment, editComment, deleteComment } from "../lib/commentApi";
 import { likePost, unlikePost, hasUserLiked, getPostLikes } from "../lib/likeApi";
+import {
+  createStoryToSupabase,
+  fetchStoriesFromSupabase,
+  subscribeToStories,
+  updateStoryReactionsInSupabase,
+  type StoryRecord,
+  type StoryType,
+} from "../lib/storyApi";
 
 type Post = FeedPost ;
 
 type Story = {
-  id: number;
+  id: string;
   name: string;
   text?: string;
   image?: string;
@@ -26,7 +34,35 @@ type Story = {
   reactions?: { [emoji: string]: string[] };
   viewedAt?: number;
   profilePic?: string;
+  storyType: StoryType;
+  authorId?: string;
+  createdAt?: string;
 };
+
+const getStoryPreviewText = (text?: string) => {
+  if (!text) return "";
+
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (normalized.length <= 80) return normalized;
+
+  return `${normalized.slice(0, 77).trimEnd()}...`;
+};
+
+const mapStoryRecord = (story: StoryRecord): Story => ({
+  id: story.id,
+  name: story.author_username,
+  text: story.text ?? undefined,
+  image: story.image_url ?? undefined,
+  music: undefined,
+  voice: story.voice_url ?? undefined,
+  duration: `${story.duration_hours}h`,
+  expiresAt: new Date(story.expires_at).getTime(),
+  reactions: story.reactions as { [emoji: string]: string[] } | undefined,
+  profilePic: story.author_profile_pic ?? undefined,
+  storyType: story.story_type,
+  authorId: story.author_id,
+  createdAt: story.created_at,
+});
 
 export default function Feed(_props: { embedded?: boolean } = {}) {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -57,13 +93,15 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
 
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [storyEditorOpen, setStoryEditorOpen] = useState<boolean>(false);
+  const [storyChoiceOpen, setStoryChoiceOpen] = useState<boolean>(false);
+  const [storyMode, setStoryMode] = useState<"text" | "photo" | null>(null);
   const [storyText, setStoryText] = useState<string>(" ");
   const [storyDuration, setStoryDuration] = useState<number>(24);
   const [storyMusic, setStoryMusic] = useState<string | undefined>(undefined);
   const [storyVoice, setStoryVoice] = useState<string | undefined>(undefined);
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [currentTime, setCurrentTime] = useState<number>(() => Date.now());
-  const [userReactions, setUserReactions] = useState<{ [storyId: number]: string | null }>({});
+  const [userReactions, setUserReactions] = useState<Record<string, string | null>>({});
   const { posts, setPosts, savedScrollY, setSavedScrollY, selectedPostId, setSelectedPostId, loading } = useFeed();
   const filteredPosts = useMemo(
     () => posts.filter((post) => !mutedUsers.includes(post.author.id)),
@@ -77,34 +115,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
   const suppressAutoCloseRef = useRef(false);
   const autoCloseTimeoutRef = useRef<number | null>(null);
 
-  const [stories, setStories] = useState<Story[]>(() => {
-    const savedStories = localStorage.getItem("metoyou-stories");
-    if (savedStories) return JSON.parse(savedStories);
-
-    return [
-      {
-        id: 1,
-        name: "Jay",
-        text: "🔥",
-        duration: "24h",
-        expiresAt: Date.now() + 24 * 60 * 60 * 1000,
-      },
-      {
-        id: 2,
-        name: "Mike",
-        text: "😎",
-        duration: "24h",
-        expiresAt: Date.now() + 24 * 60 * 60 * 1000,
-      },
-      {
-        id: 3,
-        name: "Sarah",
-        text: "❤️",
-        duration: "24h",
-        expiresAt: Date.now() + 24 * 60 * 60 * 1000,
-      },
-    ];
-  });
+  const [stories, setStories] = useState<Story[]>([]);
 
   useEffect(() => {
     localStorage.setItem("metoyou-saved-posts", JSON.stringify(savedPosts));
@@ -115,15 +126,49 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
   }, [mutedUsers]);
 
   useEffect(() => {
-    localStorage.setItem("metoyou-stories", JSON.stringify(stories));
-  }, [stories]);
-
-  useEffect(() => {
     const interval = setInterval(() => {
       setCurrentTime(Date.now());
     }, 60000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const hydrateStories = async () => {
+      const remoteStories = await fetchStoriesFromSupabase();
+      if (!isActive) return;
+      setStories(remoteStories.map(mapStoryRecord));
+    };
+
+    void hydrateStories();
+
+    const channel = subscribeToStories((remoteStories) => {
+      if (!isActive) return;
+      setStories(remoteStories.map(mapStoryRecord));
+    });
+
+    return () => {
+      isActive = false;
+      channel.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedStory) {
+      document.body.style.overflow = "";
+      document.documentElement.style.overflow = "";
+      return;
+    }
+
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = "";
+      document.documentElement.style.overflow = "";
+    };
+  }, [selectedStory]);
 
   // Restore saved scroll position when entering the Feed and save on unmount
   useEffect(() => {
@@ -432,7 +477,24 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
   };
 
   const handleStoryClick = () => {
-    fileInputRef.current?.click();
+    setStoryChoiceOpen(true);
+  };
+
+  const openStoryEditor = (mode: "text" | "photo") => {
+    setStoryMode(mode);
+    setStoryChoiceOpen(false);
+
+    if (mode === "photo") {
+      fileInputRef.current?.click();
+      return;
+    }
+
+    setStoryEditorOpen(true);
+    setSelectedImage(null);
+    setStoryText("");
+    setStoryDuration(24);
+    setStoryMusic(undefined);
+    setStoryVoice(undefined);
   };
 
   const handleStoryImage = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -449,28 +511,33 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
     reader.readAsDataURL(file);
   };
 
-  const handleCreateStory = () => {
-    if (!selectedImage) return;
+  const handleCreateStory = async () => {
+    if (!selectedImage && !storyText.trim()) return;
 
     const profile = getProfile();
-    const displayName = profile?.username || "Maxi";
+    if (!profile) return;
 
-    setStories((prevStories) => [
-      {
-        id: Date.now(),
-        name: displayName,
-        text: storyText,
-        music: storyMusic,
-        voice: storyVoice,
-        image: selectedImage,
-        duration: `${storyDuration}h`,
-        expiresAt: Date.now() + storyDuration * 60 * 60 * 1000,
-        profilePic: profile?.profilePic ?? undefined,
-      },
-      ...prevStories,
-    ]);
+    const displayName = profile?.username || "Maxi";
+    const storyType: StoryType = selectedImage ? "photo" : storyVoice ? "voice" : "text";
+
+    const createdStory = await createStoryToSupabase({
+      authorId: profile.id,
+      username: displayName,
+      profilePic: profile.profilePic ?? null,
+      text: storyText.trim() || undefined,
+      image: selectedImage ?? undefined,
+      voice: storyVoice,
+      storyType,
+      durationHours: storyDuration,
+    });
+
+    if (createdStory) {
+      setStories((prevStories) => [mapStoryRecord(createdStory), ...prevStories.filter((story) => story.id !== createdStory.id)]);
+    }
 
     setStoryEditorOpen(false);
+    setStoryChoiceOpen(false);
+    setStoryMode(null);
     setSelectedImage(null);
     setStoryText("");
     setStoryDuration(24);
@@ -515,43 +582,42 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
     return `${hours}h ${minutes}m`;
   };
 
-  const handleReaction = (storyId: number, emoji: string) => {
+  const handleReaction = async (storyId: string, emoji: string) => {
+    const targetStory = stories.find((story) => story.id === storyId);
+    if (!targetStory) return;
+
+    const currentReaction = userReactions[storyId];
+    const isToggling = currentReaction === emoji;
+    const newReactions = targetStory.reactions ? { ...targetStory.reactions } : {};
+
+    if (currentReaction) {
+      if (!newReactions[currentReaction]) newReactions[currentReaction] = [];
+      newReactions[currentReaction] = newReactions[currentReaction].filter((user) => user !== "You");
+      if (newReactions[currentReaction].length === 0) {
+        delete newReactions[currentReaction];
+      }
+    }
+
+    if (!isToggling) {
+      if (!newReactions[emoji]) newReactions[emoji] = [];
+      newReactions[emoji] = [...newReactions[emoji], "You"];
+    }
+
     setStories((prevStories) =>
-      prevStories.map((story) => {
-        if (story.id !== storyId) return story;
-
-        const currentReaction = userReactions[storyId];
-        const isToggling = currentReaction === emoji;
-        const newReactions = story.reactions ? { ...story.reactions } : {};
-
-        if (currentReaction) {
-          if (!newReactions[currentReaction]) newReactions[currentReaction] = [];
-          newReactions[currentReaction] = newReactions[currentReaction].filter(
-            (user) => user !== "You"
-          );
-          if (newReactions[currentReaction].length === 0) {
-            delete newReactions[currentReaction];
-          }
-        }
-
-        if (!isToggling) {
-          if (!newReactions[emoji]) newReactions[emoji] = [];
-          newReactions[emoji] = [...newReactions[emoji], "You"];
-        }
-
-        setUserReactions((prev) => ({
-          ...prev,
-          [storyId]: isToggling ? null : emoji,
-        }));
-
-        return { ...story, reactions: newReactions };
-      })
+      prevStories.map((story) => (story.id === storyId ? { ...story, reactions: newReactions } : story))
     );
+    setSelectedStory((prev) => (prev && prev.id === storyId ? { ...prev, reactions: newReactions } : prev));
+    setUserReactions((prev) => ({
+      ...prev,
+      [storyId]: isToggling ? null : emoji,
+    }));
+
+    await updateStoryReactionsInSupabase(storyId, newReactions);
   };
 
   // Check if user is VibesPro and render premium theme
-  const profile = getProfile();
-  const isVibesPro = profile?.is_vibes_pro === true;
+  const currentUserProfile = getProfile();
+  const isVibesPro = currentUserProfile?.is_vibes_pro === true;
 
   // Normal feed content that can be wrapped by VibesProFeed theme
   const feedContent = (
@@ -586,7 +652,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
           <button
             type="button"
             onClick={handleStoryClick}
-            className="min-w-[106px] h-[152px] md:min-w-[140px] md:h-[200px] shrink-0 bg-white/80 backdrop-blur-xs border-2 border-dashed border-pink-300 text-pink-500 shadow-md flex flex-col items-center justify-center hover:scale-[1.02] active:scale-95 transition-all snap-start"
+            className="w-[106px] h-[152px] md:w-[140px] md:h-[200px] shrink-0 bg-white/80 backdrop-blur-xs border-2 border-dashed border-pink-300 text-pink-500 shadow-md flex flex-col items-center justify-center hover:scale-[1.02] active:scale-95 transition-all snap-start"
             style={{ borderRadius: "50% 50% 28% 28% / 18% 18% 70% 70%" }}
           >
             <span className="text-2xl md:text-3xl font-light mb-0.5 md:mb-1">+</span>
@@ -598,7 +664,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
             <div
               key={story.id}
               onClick={() => openStoryAtIndex(index)}
-              className={`min-w-[106px] h-[152px] md:min-w-[140px] md:h-[200px] shrink-0 relative overflow-hidden shadow-md text-white cursor-pointer hover:scale-[1.02] transition-transform snap-start ${story.viewedAt ? 'opacity-70 ring-1 ring-white/20' : ''}`}
+              className={`w-[106px] h-[152px] md:w-[140px] md:h-[200px] shrink-0 relative overflow-hidden shadow-md text-white cursor-pointer hover:scale-[1.02] transition-transform snap-start ${story.viewedAt ? 'opacity-70 ring-1 ring-white/20' : ''}`}
               style={{ borderRadius: "50% 50% 28% 28% / 18% 18% 70% 70%" }}
             >
               {story.image ? (
@@ -608,8 +674,19 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                   className="w-full h-full object-cover"
                 />
               ) : (
-                <div className="w-full h-full bg-linear-to-br from-pink-400 via-purple-400 to-blue-400 flex items-center justify-center text-2xl md:text-3xl">
-                  {story.text}
+                <div className="w-full h-full bg-linear-to-br from-pink-400 via-purple-400 to-blue-400 overflow-hidden p-3 flex items-center justify-center text-center text-[10px] md:text-xs font-medium leading-relaxed">
+                  <div
+                    className="relative w-full text-center text-[10px] md:text-xs font-medium leading-relaxed"
+                    style={{
+                      display: "-webkit-box",
+                      WebkitLineClamp: 3,
+                      WebkitBoxOrient: "vertical",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <span className="whitespace-pre-wrap break-words">{getStoryPreviewText(story.text)}</span>
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-linear-to-t from-[#4f46e5]/80 to-transparent" />
+                  </div>
                 </div>
               )}
 
@@ -882,7 +959,9 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
 
       {/* Story Fullscreen Viewer Modal */}
       {selectedStory && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/95 backdrop-blur-md"
+        >
           <button
             type="button"
             onClick={() => {
@@ -895,7 +974,10 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
             ✕
           </button>
 
-          <div className="w-full max-w-sm h-[85vh] rounded-2xl overflow-hidden relative shadow-2xl bg-slate-900">
+          <div className="relative w-[calc(100vw-1rem)] h-[calc(100vh-2rem)] sm:w-screen sm:h-screen overflow-hidden bg-slate-900 rounded-[1.25rem] sm:rounded-none">
+            <div className="absolute inset-0 z-10 rounded-[1.25rem] sm:rounded-none border border-white/25 shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_0_0_1px_rgba(255,255,255,0.06)_inset,0_18px_45px_rgba(0,0,0,0.35)] pointer-events-none" />
+            <div className="absolute inset-3 z-10 rounded-[1rem] sm:rounded-none border border-white/15 pointer-events-none" />
+            <div className="absolute inset-6 z-10 rounded-[0.9rem] sm:rounded-none border border-fuchsia-400/20 pointer-events-none" />
             <div className="absolute inset-x-0 top-0 z-50 flex gap-1.5 p-2">
               {stories.map((_, index) => (
                 <div key={index} className="h-1 flex-1 overflow-hidden rounded-full bg-white/20">
@@ -913,7 +995,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
             </div>
 
             {selectedStory.image ? (
-              <div className="flex items-center justify-center w-full h-full bg-slate-900">
+              <div className="flex items-center justify-center w-full h-full bg-slate-900 relative z-30">
                 <img
                   src={selectedStory.image}
                   alt="story content"
@@ -921,18 +1003,24 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                 />
               </div>
             ) : (
-              <div className="w-full h-full bg-linear-to-br from-pink-500 via-purple-500 to-blue-500 flex items-center justify-center text-6xl text-white">
-                {selectedStory.text}
+              <div className="relative z-30 w-full h-full bg-linear-to-br from-pink-500 via-purple-500 to-blue-500 px-6 py-8 text-white flex items-center justify-center">
+                <div
+                  className="max-w-[85%] max-h-[70vh] overflow-y-auto whitespace-pre-wrap break-words text-center text-2xl md:text-3xl font-semibold leading-relaxed scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent"
+                  style={{ overscrollBehavior: "contain" }}
+                >
+                  {selectedStory.text}
+                </div>
               </div>
             )}
 
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/40"></div>
+            <div className="absolute inset-0 z-20 bg-gradient-to-t from-black/80 via-black/20 to-black/40"></div>
+
+            <div className="absolute top-4 left-4 z-50 flex items-center gap-2 text-xs text-white/70">
+              <span className="rounded-full bg-black/30 px-2 py-1">⏳ {getTimeLeft(selectedStory.expiresAt)}</span>
+              {selectedStory.music && <span className="rounded-full bg-black/30 px-2 py-1">🎵 {selectedStory.music}</span>}
+            </div>
 
             <div className="absolute bottom-6 left-0 right-0 text-center text-white px-4 space-y-3">
-              <div className="flex items-center justify-center gap-2 text-xs text-white/70">
-                <span className="rounded-full bg-black/30 px-2 py-1">⏳ {getTimeLeft(selectedStory.expiresAt)}</span>
-                {selectedStory.music && <span className="rounded-full bg-black/30 px-2 py-1">🎵 {selectedStory.music}</span>}
-              </div>
 
               {selectedStory.voice && (
                 <div className="mx-auto max-w-xs">
@@ -941,46 +1029,83 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
               )}
 
               <div>
-                <h2 className="font-bold text-xl tracking-tight">{selectedStory.name}</h2>
+                <h2 className="font-bold text-xl tracking-tight">
+                  {currentUserProfile?.username && selectedStory.name === currentUserProfile.username ? "Your Story" : selectedStory.name}
+                </h2>
                 <p className="text-xs text-white/60 mt-0.5">{selectedStory.duration}</p>
               </div>
 
-              {selectedStory.text && (
-                <p className="text-sm font-medium px-4 text-white/90">{selectedStory.text}</p>
+              {!(currentUserProfile?.username && selectedStory.name === currentUserProfile.username) && (
+                <div className="pt-2 flex gap-1.5 justify-center">
+                  {['❤️', '😂', '🔥', '😮', '👏'].map((emoji) => {
+                    const count = selectedStory.reactions?.[emoji]?.length || 0;
+                    const isUserReacted = userReactions[selectedStory.id] === emoji;
+                    return (
+                      <button
+                        key={emoji}
+                        onClick={() => handleReaction(selectedStory.id, emoji)}
+                        className={`px-2.5 py-1 rounded-full text-xs transition-all ${
+                          isUserReacted
+                            ? 'bg-white text-slate-900 scale-105 font-bold shadow-md'
+                            : 'bg-white/10 text-white hover:bg-white/20'
+                        }`}
+                      >
+                        {emoji} <span className="text-[10px] opacity-90">{count > 0 ? count : ''}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
 
-              <div className="pt-2 flex gap-1.5 justify-center">
-                {['❤️', '😂', '🔥', '😮', '👏'].map((emoji) => {
-                  const count = selectedStory.reactions?.[emoji]?.length || 0;
-                  const isUserReacted = userReactions[selectedStory.id] === emoji;
-                  return (
-                    <button
-                      key={emoji}
-                      onClick={() => handleReaction(selectedStory.id, emoji)}
-                      className={`px-2.5 py-1 rounded-full text-xs transition-all ${
-                        isUserReacted
-                          ? 'bg-white text-slate-900 scale-105 font-bold shadow-md'
-                          : 'bg-white/10 text-white hover:bg-white/20'
-                      }`}
-                    >
-                      {emoji} <span className="text-[10px] opacity-90">{count > 0 ? count : ''}</span>
-                    </button>
-                  );
-                })}
-              </div>
+      {/* Story Type Choice Overlay */}
+      {storyChoiceOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-xs" onClick={() => setStoryChoiceOpen(false)}></div>
+
+          <div className="relative w-full max-w-xs bg-white rounded-2xl p-4 shadow-2xl space-y-4">
+            <h3 className="text-center font-bold text-base text-slate-800">Create Story</h3>
+            <p className="text-sm text-center text-slate-500">Choose what you want to share.</p>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => openStoryEditor("text")}
+                className="py-3 rounded-xl bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200 transition-colors"
+              >
+                Text
+              </button>
+              <button
+                type="button"
+                onClick={() => openStoryEditor("photo")}
+                className="py-3 rounded-xl bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 text-white font-semibold shadow-md"
+              >
+                Photo
+              </button>
             </div>
           </div>
         </div>
       )}
 
       {/* Story Builder/Editor Overlay */}
-      {storyEditorOpen && selectedImage && (
+      {storyEditorOpen && (selectedImage || storyMode === "text") && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-xs" onClick={() => {setStoryEditorOpen(false); setSelectedImage(null); setStoryText(""); setStoryDuration(24); setStoryMusic(undefined); setStoryVoice(undefined);}}></div>
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-xs" onClick={() => {setStoryEditorOpen(false); setStoryMode(null); setSelectedImage(null); setStoryText(""); setStoryDuration(24); setStoryMusic(undefined); setStoryVoice(undefined);}}></div>
 
           <div className="relative w-full max-w-xs bg-white rounded-2xl p-4 shadow-2xl space-y-4">
             <div className="w-full aspect-square overflow-hidden rounded-xl bg-slate-100">
-              <img src={selectedImage} alt="preview" className="w-full h-full object-cover" />
+              {selectedImage ? (
+                <img src={selectedImage} alt="preview" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full bg-linear-to-br from-pink-500 via-purple-500 to-blue-500 overflow-y-auto p-4 flex items-center justify-center text-white font-semibold text-center">
+                  <div className="w-full whitespace-pre-wrap break-words text-xl leading-relaxed">
+                    {storyText.trim() ? storyText.trim() : "Text Story"}
+                  </div>
+                </div>
+              )}
             </div>
 
             <h3 className="text-center font-bold text-base text-slate-800">Create Story</h3>
@@ -989,7 +1114,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
               value={storyText}
               onChange={(e) => setStoryText(e.target.value)}
               placeholder="Drop a vibe text onto your story..."
-              className="w-full text-sm border border-slate-100 bg-slate-50/50 rounded-xl px-3 py-2.5 outline-none resize-none placeholder:text-slate-400 focus:border-pink-300 transition-colors"
+              className="w-full max-h-[13rem] overflow-y-auto text-sm border border-slate-100 bg-slate-50/50 rounded-xl px-3 py-2.5 outline-none resize-none placeholder:text-slate-400 focus:border-pink-300 transition-colors"
               rows={2}
             />
 
@@ -1038,6 +1163,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                 type="button"
                 onClick={() => {
                   setStoryEditorOpen(false);
+                  setStoryMode(null);
                   setSelectedImage(null);
                   setStoryText("");
                   setStoryDuration(24);
@@ -1065,7 +1191,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
   // Wrap with VibesProFeed if user is premium, otherwise return normal feed
   if (isVibesPro) {
     return (
-      <VibesProFeed>
+      <VibesProFeed hideNavbar={Boolean(selectedStory)}>
         {feedContent}
       </VibesProFeed>
     );

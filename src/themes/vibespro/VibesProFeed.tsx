@@ -3,6 +3,7 @@ import { VibesProNavbar } from './VibesProNavbar';
 
 interface VibesProFeedProps {
   children?: React.ReactNode;
+  hideNavbar?: boolean;
 }
 
 /**
@@ -11,11 +12,11 @@ interface VibesProFeedProps {
  */
 export const VibesProFeed: React.FC<VibesProFeedProps> = ({
   children,
+  hideNavbar = false,
 }) => {
   return (
     <div className="min-h-screen bg-[#0B0B0B]">
-      {/* Premium Navbar */}
-      <VibesProNavbar />
+      {!hideNavbar && <VibesProNavbar />}
 
       {/* Feed with premium theme */}
       <div className="relative pt-16 sm:pt-20">

@@ -21,7 +21,7 @@ import {
   User,
 } from "lucide-react";
 import { getProfile, saveProfile, type ProfileData } from "../utils/profileStorage";
-import { fetchProfileByUsername, upsertProfileToSupabase, uploadProfileImage } from "../lib/profileApi";
+import { fetchProfileByUsername, fetchProfileFromSupabase, upsertProfileToSupabase, uploadProfileImage } from "../lib/profileApi";
 import { logout } from "../lib/auth";
 
 export default function Settings() {
@@ -48,6 +48,33 @@ export default function Settings() {
     window.localStorage.setItem("metoyou-theme", selectedTheme);
     document.documentElement.dataset.theme = selectedTheme;
   }, [selectedTheme]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const refreshProfile = async () => {
+      if (!profile.id) return;
+
+      try {
+        const remote = await fetchProfileFromSupabase(profile.id);
+        if (!mounted || !remote) return;
+
+        saveProfile(remote);
+        setProfile(remote);
+        setName(remote.firstName ?? remote.username);
+        setUsername(remote.username);
+        setProfilePictureUrl(remote.profilePic ?? "");
+      } catch (error) {
+        console.warn("Failed to refresh profile from Supabase", error);
+      }
+    };
+
+    void refreshProfile();
+
+    return () => {
+      mounted = false;
+    };
+  }, [profile.id]);
 
   useEffect(() => {
     return () => {

@@ -3,6 +3,7 @@ import ScrollRestoration from "./lib/ScrollRestoration";
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { VideoProvider } from "./contexts/VideoContext";
 import { ChatProvider } from "./contexts/ChatContext";
+import PWAInstallPrompt from "./components/PWAInstallPrompt";
 
 import Home from "./pages/Home";
 import Feed from "./pages/Feed";
@@ -18,6 +19,7 @@ import AdminDashboard from "./pages/AdminDashboard";
 import AdminPosts from "./pages/AdminPosts";
 import AdminUsers from "./pages/AdminUsers";
 import VibesProUpgrade from "./pages/VibesProUpgrade";
+import VibesProSuccess from "./pages/VibesProSuccess";
 import RequireAuth from "./components/RequireAuth";
 
 function App() {
@@ -27,7 +29,7 @@ function App() {
         <ChatProvider>
           <BrowserRouter>
             <ScrollRestoration />
-              <Routes>
+            <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/feed" element={<RequireAuth><Feed /></RequireAuth>} />
               <Route path="/login" element={<Login />} />
@@ -36,6 +38,7 @@ function App() {
               <Route path="/profile/:username" element={<RequireAuth><Profile /></RequireAuth>} />
               <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
               <Route path="/settings/vibes-pro" element={<RequireAuth><VibesProUpgrade /></RequireAuth>} />
+              <Route path="/vibes-pro/success" element={<RequireAuth><VibesProSuccess /></RequireAuth>} />
               <Route path="/messages" element={<RequireAuth><Messages /></RequireAuth>} />
               <Route path="/chat" element={<RequireAuth><Chat /></RequireAuth>} />
               <Route path="/notifications" element={<RequireAuth><Notifications /></RequireAuth>} />
@@ -43,8 +46,9 @@ function App() {
               <Route path="/admin-dashboard" element={<RequireAuth><AdminDashboard /></RequireAuth>} />
               <Route path="/admin-users" element={<RequireAuth><AdminUsers /></RequireAuth>} />
               <Route path="/admin-posts" element={<RequireAuth><AdminPosts /></RequireAuth>} />
-                </Routes>
-            </BrowserRouter>
+            </Routes>
+            <PWAInstallPrompt />
+          </BrowserRouter>
         </ChatProvider>
       </VideoProvider>
     </LanguageProvider>

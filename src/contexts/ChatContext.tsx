@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
-import type { Message } from "../lib/messageApi";
+import type { Message } from "../types/message";
 
 interface ConversationCache {
   messages: Message[];

@@ -1,6 +1,5 @@
 import { Link } from "react-router-dom";
 import { useEffect, useState, useRef } from "react";
-import MessageCard from "../components/MessageCard";
 import { useAuth } from "../hooks/useAuth";
 import { getMessageThreads, type MessageThread } from "../lib/messageApi";
 import { getProfile } from "../utils/profileStorage";

@@ -24,7 +24,10 @@ CREATE POLICY "Profile pictures: authenticated users can select their own files"
   USING (
     bucket_id = 'profile-pictures'
     AND auth.role() = 'authenticated'
-    AND coalesce((storage.foldername(name))[1], '') = auth.uid()::text
+    AND (
+      coalesce((storage.foldername(name))[0], '') = auth.uid()::text
+      OR coalesce((storage.foldername(name))[1], '') = auth.uid()::text
+    )
   );
 
 -- Allow authenticated users to upload files only inside their own folder.
@@ -35,7 +38,10 @@ CREATE POLICY "Profile pictures: authenticated users can insert their own files"
   WITH CHECK (
     bucket_id = 'profile-pictures'
     AND auth.role() = 'authenticated'
-    AND coalesce((storage.foldername(name))[1], '') = auth.uid()::text
+    AND (
+      coalesce((storage.foldername(name))[0], '') = auth.uid()::text
+      OR coalesce((storage.foldername(name))[1], '') = auth.uid()::text
+    )
   );
 
 -- Allow authenticated users to update files only inside their own folder.
@@ -46,12 +52,18 @@ CREATE POLICY "Profile pictures: authenticated users can update their own files"
   USING (
     bucket_id = 'profile-pictures'
     AND auth.role() = 'authenticated'
-    AND coalesce((storage.foldername(name))[1], '') = auth.uid()::text
+    AND (
+      coalesce((storage.foldername(name))[0], '') = auth.uid()::text
+      OR coalesce((storage.foldername(name))[1], '') = auth.uid()::text
+    )
   )
   WITH CHECK (
     bucket_id = 'profile-pictures'
     AND auth.role() = 'authenticated'
-    AND coalesce((storage.foldername(name))[1], '') = auth.uid()::text
+    AND (
+      coalesce((storage.foldername(name))[0], '') = auth.uid()::text
+      OR coalesce((storage.foldername(name))[1], '') = auth.uid()::text
+    )
   );
 
 -- Allow authenticated users to delete files only inside their own folder.
@@ -62,5 +74,8 @@ CREATE POLICY "Profile pictures: authenticated users can delete their own files"
   USING (
     bucket_id = 'profile-pictures'
     AND auth.role() = 'authenticated'
-    AND coalesce((storage.foldername(name))[1], '') = auth.uid()::text
+    AND (
+      coalesce((storage.foldername(name))[0], '') = auth.uid()::text
+      OR coalesce((storage.foldername(name))[1], '') = auth.uid()::text
+    )
   );

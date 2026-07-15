@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode, type SetStateAction } from "react";
 import { useQueryClient } from '@tanstack/react-query';
-import { fetchPostsFromSupabase, type PostRecord } from "../lib/postApi";
+import { fetchPostsFromSupabase } from "../lib/postApi";
 import { useAuth } from "../hooks/useAuth";
+import type { PostRecord } from "../types/post";
 
 export type User = {
   id: string;

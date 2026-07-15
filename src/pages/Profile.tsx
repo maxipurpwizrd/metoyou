@@ -7,7 +7,7 @@ import { fetchPostsFromSupabase } from "../lib/postApi";
 import { followUser, unfollowUser, getFollowStatus } from "../lib/followApi";
 import FollowButton from "../components/social/FollowButton";
 import { useAuth } from "../hooks/useAuth";
-import type { ProfileData } from "../utils/profileStorage";
+import type { ProfileData } from "../types/profile";
 import { useLanguage } from "../contexts/LanguageContext";
 import { normalizeLanguage } from "../lib/i18n";
 import ImageViewer from "../components/ImageViewer";
@@ -391,7 +391,7 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
       const raw = sessionStorage.getItem(cacheKey);
       if (raw) {
         const cached = JSON.parse(raw) as ProfileData;
-        setProfile((prev) => ({ ...prev, ...cached }));
+        setProfile((prev: ProfileData) => ({ ...prev, ...cached }));
         if (cached.language) setLanguage(normalizeLanguage(cached.language));
       }
     } catch (e) {
@@ -543,13 +543,13 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
       const success = await unfollowUser(viewerId, profile.id);
       if (success) {
         setIsFollowing(false);
-        setFollowersCount((count) => Math.max(0, count - 1));
+        setFollowersCount((count: number) => Math.max(0, count - 1));
       }
     } else {
       const success = await followUser(viewerId, profile.id, actorUsername);
       if (success) {
         setIsFollowing(true);
-        setFollowersCount((count) => count + 1);
+        setFollowersCount((count: number) => count + 1);
       }
     }
 
@@ -754,7 +754,7 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
             )}
 
             <div className="flex flex-wrap justify-center gap-2 md:gap-3 mt-6 md:mt-8">
-              {selectedInterests.map((interest) => (
+              {selectedInterests.map((interest: string) => (
                 <span key={interest} className="bg-white/40 backdrop-blur-2xl border border-white/50 px-3 md:px-4 py-2 rounded-full text-xs md:text-sm text-slate-900 shadow-lg">
                   {interest}
                 </span>

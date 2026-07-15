@@ -1,22 +1,11 @@
 import { supabase } from "./supabase";
 import { optimizeImageFile, mimeToExtension } from "./imageUtils";
 import { normalizeLanguage } from "./i18n";
-import type { ProfileData } from "../utils/profileStorage";
+import type { DbProfile, ProfileData, ProfileSearchResult } from "../types/profile";
 
 const PROFILE_PICTURE_BUCKET = "profile-pictures";
 
-type DbProfile = Omit<ProfileData, "profilePic" | "dateOfBirth" | "gender"> & {
-  profile_pic: string | null;
-  date_of_birth?: string | null;
-  gender?: string | null;
-  vibes_pro?: boolean | null;
-  vibes_pro_portrait?: string | null;
-  vibes_pro_until?: string | null;
-  stripe_customer_id?: string | null;
-  stripe_subscription_id?: string | null;
-};
-
-export async function fetchProfileFromSupabase(userId?: string) {
+export async function fetchProfileFromSupabase(userId?: string): Promise<ProfileData | null> {
   try {
     let id = userId;
     if (!id) {
@@ -46,7 +35,7 @@ export async function fetchProfileFromSupabase(userId?: string) {
   }
 }
 
-export async function upsertProfileToSupabase(profile: ProfileData) {
+export async function upsertProfileToSupabase(profile: ProfileData): Promise<ProfileData | null> {
   try {
     const normalizedLanguage = normalizeLanguage(profile.language);
     const { profilePic, dateOfBirth, gender } = profile;
@@ -94,7 +83,7 @@ export async function upsertProfileToSupabase(profile: ProfileData) {
   }
 }
 
-export async function fetchProfileByUsername(username?: string) {
+export async function fetchProfileByUsername(username?: string): Promise<ProfileData | null> {
   try {
     if (!username) return null;
 
@@ -117,7 +106,7 @@ export async function fetchProfileByUsername(username?: string) {
   }
 }
 
-export async function uploadProfileImage(file: File) {
+export async function uploadProfileImage(file: File): Promise<string | null> {
   try {
     const { data: authData, error: authError } = await supabase.auth.getUser();
     if (authError) throw authError;
@@ -127,14 +116,14 @@ export async function uploadProfileImage(file: File) {
     // Optimize image before upload
     const optimized = await optimizeImageFile(file, 1200, 0.8);
     const ext = mimeToExtension(optimized.type || file.type || "image/jpeg");
-    const timestamp = Date.now();
-    const filename = `${userId}/${timestamp}_${Math.random().toString(36).slice(2)}.${ext}`;
-    const { error } = await supabase.storage.from(PROFILE_PICTURE_BUCKET).upload(filename, optimized, {
+    const filePath = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const { error } = await supabase.storage.from(PROFILE_PICTURE_BUCKET).upload(filePath, optimized, {
       contentType: optimized.type || file.type,
-    } as any);
+      upsert: false,
+    });
     if (error) throw error;
 
-    const { data: urlData } = supabase.storage.from(PROFILE_PICTURE_BUCKET).getPublicUrl(filename);
+    const { data: urlData } = supabase.storage.from(PROFILE_PICTURE_BUCKET).getPublicUrl(filePath);
     return urlData.publicUrl ?? null;
   } catch (e) {
     console.error("uploadProfileImage error", e);
@@ -142,7 +131,7 @@ export async function uploadProfileImage(file: File) {
   }
 }
 
-export async function searchUsersByUsername(query: string) {
+export async function searchUsersByUsername(query: string): Promise<ProfileSearchResult[]> {
   try {
     if (!query.trim()) {
       return [];
@@ -156,7 +145,7 @@ export async function searchUsersByUsername(query: string) {
 
     if (error) throw error;
 
-    return (data || []).map((item: any) => ({
+    return (data ?? []).map((item) => ({
       id: item.id,
       username: item.username,
       profilePic: item.profile_pic,

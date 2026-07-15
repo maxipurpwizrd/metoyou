@@ -1,27 +1,9 @@
 import { supabase } from "./supabase";
 import { mimeToExtension } from "./imageUtils";
+import type { PostMediaType, PostRecord } from "../types/post";
 
 export const AUDIO_STORAGE_BUCKET = "post-audio";
 export const IMAGE_STORAGE_BUCKET = "posts-images";
-
-export type PostRecord = {
-  id: string;
-  author_id: string;
-  text?: string | null;
-  image_url?: string | null;
-  video_url?: string | null;
-  audio_url?: string | null;
-  media_type?: string | null;
-  likes_count?: number;
-  comments_count?: number;
-  highlighted?: boolean;
-  created_at: string;
-  profiles?: {
-    username?: string;
-    profile_pic?: string;
-    is_vibes_pro?: boolean | null;
-  } | null;
-};
 
 function inferAudioMimeType(audio: string) {
   if (audio.startsWith("data:")) {
@@ -61,13 +43,10 @@ async function uploadBlobToSupabase(
   const { error } = await supabase.storage.from(bucket).upload(filePath, blob, {
     contentType: mimeType,
     upsert: false,
-    onUploadProgress: (event: { loaded: number; total?: number | null }) => {
-      const percent = event.total ? Math.round((event.loaded / event.total) * 100) : 100;
-      onProgress?.(percent);
-    },
-  } as never);
+  });
 
   if (error) throw error;
+  onProgress?.(100);
 
   const { data: publicUrlData } = supabase.storage.from(bucket).getPublicUrl(filePath);
   return publicUrlData.publicUrl ?? null;
@@ -111,9 +90,9 @@ export async function savePostToSupabase(payload: {
   image_url?: string | null;
   video_url?: string | null;
   audio_url?: string | null;
-  media_type?: string | null;
+  media_type?: PostMediaType;
   highlighted?: boolean;
-}) {
+}): Promise<PostRecord | null> {
   try {
     const insert = {
       author_id: payload.author_id,
@@ -151,7 +130,7 @@ export async function fetchPostsFromSupabase(options?: {
   before?: string;
   after?: string;
   author_id?: string;
-}) {
+}): Promise<PostRecord[]> {
   try {
     const limit = options?.limit ?? 50;
 
@@ -177,7 +156,15 @@ export async function fetchPostsFromSupabase(options?: {
 
     const { data, error } = await builder;
     if (error) throw error;
-    return data ?? [];
+
+    const normalizedRows = (data ?? []).map((record) => ({
+      ...record,
+      profiles: Array.isArray(record.profiles)
+        ? record.profiles[0] ?? null
+        : record.profiles ?? null,
+    }));
+
+    return normalizedRows as PostRecord[];
   } catch (e) {
     console.error("fetchPostsFromSupabase error", e);
     return [] as PostRecord[];
@@ -188,7 +175,7 @@ export async function fetchPostsFromSupabase(options?: {
  * Delete a post by id from the `posts` table.
  * Returns true on success.
  */
-export async function deletePostFromSupabase(postId: string) {
+export async function deletePostFromSupabase(postId: string): Promise<boolean> {
   try {
     const { error } = await supabase.from("posts").delete().eq("id", postId);
     if (error) throw error;

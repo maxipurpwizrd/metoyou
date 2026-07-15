@@ -25,7 +25,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       line_items: [{ price: PRICE_ID, quantity: 1 }],
       customer_email: email || undefined,
       metadata: { userId },
-      success_url: `${SITE_URL}/settings?checkout=success`,
+      success_url: `${SITE_URL}/vibes-pro/success`,
       cancel_url: `${SITE_URL}/settings?checkout=cancel`,
       payment_method_collection: 'if_required',
     });

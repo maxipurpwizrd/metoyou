@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from "react";
+import { MoreVertical, Edit2, Trash2, Reply } from "lucide-react";
 import type { Message } from "../lib/messageApi";
 import { updateMessageReactions } from "../lib/messageApi";
 
 type Props = {
   message: Message;
   mine?: boolean;
+  onEdit?: (messageId: string, newText: string) => void;
+  onDelete?: (messageId: string) => void;
+  onReply?: (message: Message) => void;
 };
 
 function formatMessageTime(dateString?: string) {
@@ -33,11 +37,17 @@ function formatDuration(seconds: number) {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
-export default function ChatBubble({ message, mine = false }: Props) {
+export default function ChatBubble({ message, mine = false, onEdit, onDelete, onReply }: Props) {
   const hasImage = Boolean(message.image_url);
   const hasVideo = Boolean(message.video_url);
   const hasAudio = Boolean(message.audio_url);
   const hasText = Boolean(message.text?.trim());
+  const replyMetadata = (message.metadata as Record<string, unknown> | null | undefined) ?? {};
+  const replyText = typeof replyMetadata.reply_to_text === "string"
+    ? replyMetadata.reply_to_text
+    : message.reply_to_text ?? null;
+  const hasReply = Boolean(message.reply_to_id || message.reply_to_text || replyText);
+  const isEdited = Boolean(message.edited_at);
 
   const timestamp = formatMessageTime(message.created_at);
 
@@ -54,8 +64,12 @@ export default function ChatBubble({ message, mine = false }: Props) {
   const [currentTime, setCurrentTime] = useState(0);
   const [showReactions, setShowReactions] = useState(false);
   const [reactions, setReactions] = useState<Record<string, string[]>>(message.reactions ?? {});
+  const [showMenu, setShowMenu] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState(message.text ?? "");
   const bubbleWrapperRef = useRef<HTMLDivElement | null>(null);
   const reactionTrayRef = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const holdTimerRef = useRef<number | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -84,15 +98,20 @@ export default function ChatBubble({ message, mine = false }: Props) {
       const target = event.target as Node | null;
       const isInsideBubble = bubbleWrapperRef.current?.contains(target);
       const isInsideTray = reactionTrayRef.current?.contains(target);
+      const isInsideMenu = menuRef.current?.contains(target);
 
       if (showReactions && (!isInsideBubble || (isInsideBubble && !isInsideTray))) {
         setShowReactions(false);
+      }
+
+      if (showMenu && !isInsideMenu) {
+        setShowMenu(false);
       }
     };
 
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [showReactions]);
+  }, [showReactions, showMenu]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -243,8 +262,93 @@ export default function ChatBubble({ message, mine = false }: Props) {
   }
 
   return (
-    <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+    <div className={`flex ${mine ? "justify-end" : "justify-start"} group`}>
       <div className={`max-w-[75%] mb-2 text-sm ${mine ? "text-right" : "text-left"}`}>
+        {/* Menu button - appears on hover for own messages */}
+        {mine && (
+          <div className="flex items-center justify-end gap-1 mb-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div ref={menuRef} className="relative">
+              <button
+                onClick={() => setShowMenu(!showMenu)}
+                className="p-1 rounded hover:bg-white/20 transition-colors"
+                aria-label="Message options"
+              >
+                <MoreVertical size={16} className="text-white/60" />
+              </button>
+
+              {showMenu && (
+                <div className="absolute right-0 mt-1 bg-slate-800 border border-white/10 rounded-lg shadow-lg z-50 min-w-40">
+                  <button
+                    onClick={() => {
+                      setIsEditing(true);
+                      setShowMenu(false);
+                    }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-white/10 flex items-center gap-2 text-white/80 first:rounded-t-lg"
+                  >
+                    <Edit2 size={14} />
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => {
+                      onReply?.(message);
+                      setShowMenu(false);
+                    }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-white/10 flex items-center gap-2 text-white/80"
+                  >
+                    <Reply size={14} />
+                    Reply
+                  </button>
+                  <button
+                    onClick={() => {
+                      onDelete?.(message.id);
+                      setShowMenu(false);
+                    }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-white/10 flex items-center gap-2 text-red-400/80 last:rounded-b-lg"
+                  >
+                    <Trash2 size={14} />
+                    Delete
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Edit mode UI */}
+        {isEditing && mine ? (
+          <div className="rounded-[28px] bg-white/60 backdrop-blur-2xl border border-white/50 shadow-sm p-3 mb-2">
+            <textarea
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              className="w-full bg-transparent text-slate-800 resize-none outline-none border-none"
+              rows={3}
+            />
+            <div className="flex gap-2 mt-2">
+              <button
+                onClick={() => {
+                  if (editText.trim()) {
+                    onEdit?.(message.id, editText.trim());
+                    setIsEditing(false);
+                  }
+                }}
+                className="flex-1 px-3 py-1 rounded-full bg-pink-500 text-white text-sm font-medium hover:bg-pink-600 transition"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => {
+                  setIsEditing(false);
+                  setEditText(message.text ?? "");
+                }}
+                className="flex-1 px-3 py-1 rounded-full border border-slate-300 text-slate-800 text-sm font-medium hover:bg-slate-50 transition"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Message bubble */}
         <div
           ref={bubbleWrapperRef}
           className={`${bubbleBase} inline-block px-4 py-4`}
@@ -254,8 +358,14 @@ export default function ChatBubble({ message, mine = false }: Props) {
           onPointerCancel={cancelReactionHold}
         >
           <div className="flex flex-col gap-3">
+            {hasReply && (
+              <div className={`rounded-2xl border px-3 py-2 text-xs ${mine ? "border-white/20 bg-white/10 text-white/80" : "border-slate-300/70 bg-slate-50/80 text-slate-700"}`}>
+                <div className="font-medium opacity-70">Reply</div>
+                <div className="mt-1 whitespace-pre-wrap wrap-break-word">{replyText ?? "Quoted message"}</div>
+              </div>
+            )}
             {hasText && (
-              <div className="break-words whitespace-pre-wrap text-left">{message.text}</div>
+              <div className="wrap-break-word whitespace-pre-wrap text-left">{message.text}</div>
             )}
 
             {hasImage && (
@@ -274,13 +384,13 @@ export default function ChatBubble({ message, mine = false }: Props) {
             )}
 
             {hasVideo && (
-              <div className="overflow-hidden rounded-2xl shadow-sm max-w-[260px] mx-auto">
+              <div className="overflow-hidden rounded-2xl shadow-sm max-w-65 mx-auto">
                 <video controls src={message.video_url ?? ""} className="block w-full h-auto object-cover" />
               </div>
             )}
 
             {hasAudio && (
-              <div className="overflow-hidden rounded-2xl shadow-sm p-3 flex items-center gap-3 max-w-[260px] mx-auto">
+              <div className="overflow-hidden rounded-2xl shadow-sm p-3 flex items-center gap-3 max-w-65 mx-auto">
                 <button
                   onClick={togglePlay}
                   aria-label={isPlaying ? "Pause audio" : "Play audio"}
@@ -344,6 +454,7 @@ export default function ChatBubble({ message, mine = false }: Props) {
 
           <div className={`flex items-center gap-2 text-[11px] mt-1 ${mine ? "justify-end text-white/70" : "text-slate-500"}`}>
             <span>{timestamp}</span>
+            {isEdited && <span className="italic">(edited)</span>}
             {mine && (
               <span className="ml-1 text-sm">{getStatusIcon(message.status ?? undefined)}</span>
             )}

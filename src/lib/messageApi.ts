@@ -1,36 +1,8 @@
 import { supabase } from "./supabase";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import type { Conversation, Message, MessageThread, PresenceState } from "../types/message";
 
-export type Message = {
-  id: string;
-  conversation_id: string;
-  sender_id: string;
-  text?: string | null;
-  image_url?: string | null;
-  audio_url?: string | null;
-  video_url?: string | null;
-  status?: string | null;
-  message_type?: string | null;
-  metadata?: Record<string, unknown> | null;
-  reactions?: Record<string, string[]>;
-  created_at: string;
-};
-
-export type PresenceState = Record<string, { last_active?: number; username?: string }>;
-
-export type Conversation = {
-  id: string;
-  user_1: string;
-  user_2: string;
-  created_at: string;
-};
-
-export type MessageThread = {
-  otherId: string;
-  otherUsername: string;
-  lastText?: string | null;
-  lastTime?: string;
-};
+export type { Conversation, Message, MessageThread, PresenceState } from "../types/message";
 
 export async function getMessageThreads(
   userId: string
@@ -258,6 +230,54 @@ export async function fetchMessages(
   }
 }
 
+export async function fetchMessagesPage(
+  conversationId: string,
+  beforeCreatedAt?: string,
+  limit = 30
+): Promise<Message[]> {
+  try {
+    const { data: conversation, error: convError } = await supabase
+      .from("conversations")
+      .select("id")
+      .eq("id", conversationId)
+      .maybeSingle();
+
+    if (convError) {
+      console.error("fetchMessagesPage conversation check failed", convError);
+      throw convError;
+    }
+
+    if (!conversation) {
+      console.warn("fetchMessagesPage: conversation not found", conversationId);
+      return [];
+    }
+
+    let query = supabase
+      .from("messages")
+      .select("*")
+      .eq("conversation_id", conversationId);
+
+    if (beforeCreatedAt) {
+      query = query.lt("created_at", beforeCreatedAt);
+      query = query.order("created_at", { ascending: true });
+    } else {
+      query = query.order("created_at", { ascending: false });
+    }
+
+    const { data, error } = await query.limit(limit);
+
+    if (error) {
+      console.error("fetchMessagesPage query failed", error);
+      throw error;
+    }
+
+    return mergeMessages(data ?? []);
+  } catch (e) {
+    console.error("fetchMessagesPage error", e);
+    return [];
+  }
+}
+
 type SendMessageParams = {
   conversationId: string;
   senderId: string;
@@ -266,6 +286,8 @@ type SendMessageParams = {
   audioUrl?: string;
   videoUrl?: string;
   messageType?: string;
+  replyToId?: string | null;
+  replyToText?: string | null;
 };
 
 export async function sendMessage({
@@ -276,6 +298,8 @@ export async function sendMessage({
   audioUrl,
   videoUrl,
   messageType,
+  replyToId,
+  replyToText,
 }: SendMessageParams): Promise<Message | null> {
   try {
     // Verify conversation exists and sender is a participant
@@ -297,27 +321,55 @@ export async function sendMessage({
       return null;
     }
 
-    const { data, error } = await supabase
-      .from("messages")
-      .insert({
-        conversation_id: conversationId,
-        sender_id: senderId,
-        text: text ?? null,
-        image_url: imageUrl ?? null,
-        audio_url: audioUrl ?? null,
-        video_url: videoUrl ?? null,
-        message_type: messageType ?? null,
-        status: "sent",
-      })
-      .select()
-      .single();
+    const basePayload = {
+      conversation_id: conversationId,
+      sender_id: senderId,
+      text: text ?? null,
+      image_url: imageUrl ?? null,
+      audio_url: audioUrl ?? null,
+      video_url: videoUrl ?? null,
+      message_type: messageType ?? null,
+      status: "sent",
+    };
 
-    if (error) {
-      console.error("sendMessage insert failed", error);
-      throw error;
+    const payloads: Array<Record<string, unknown>> = [basePayload];
+
+    if (replyToId || replyToText) {
+      payloads.unshift({
+        ...basePayload,
+        metadata: {
+          reply_to_id: replyToId ?? null,
+          reply_to_text: replyToText ?? null,
+        },
+      });
     }
 
-    return data;
+    let lastError: Error | null = null;
+
+    for (const payload of payloads) {
+      const { data, error } = await supabase
+        .from("messages")
+        .insert(payload)
+        .select()
+        .single();
+
+      if (!error) {
+        return data;
+      }
+
+      lastError = error;
+      const isSchemaMismatch = error?.message?.includes("column") || error?.code === "PGRST204";
+      if (!isSchemaMismatch) {
+        break;
+      }
+    }
+
+    if (lastError) {
+      console.error("sendMessage insert failed", lastError);
+      throw lastError;
+    }
+
+    return null;
   } catch (e) {
     console.error("sendMessage error", e);
     return null;
@@ -620,6 +672,86 @@ export async function updateConversationLastMessageTime(
     return true;
   } catch (e) {
     console.error("updateConversationLastMessageTime error", e);
+    return false;
+  }
+}
+
+// Edit message
+export async function editMessage(
+  messageId: string,
+  newText: string,
+  senderId: string
+): Promise<Message | null> {
+  try {
+    // Verify sender is the message author
+    const { data: message, error: fetchError } = await supabase
+      .from("messages")
+      .select("sender_id")
+      .eq("id", messageId)
+      .maybeSingle();
+
+    if (fetchError) throw fetchError;
+    if (!message || message.sender_id !== senderId) {
+      console.error("editMessage: sender not authorized");
+      return null;
+    }
+
+    const { data, error } = await supabase
+      .from("messages")
+      .update({
+        text: newText.trim(),
+        edited_at: new Date().toISOString(),
+      })
+      .eq("id", messageId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("editMessage error", error);
+      return null;
+    }
+
+    console.debug(`Edited message ${messageId}`);
+    return data;
+  } catch (e) {
+    console.error("editMessage error", e);
+    return null;
+  }
+}
+
+// Delete message
+export async function deleteMessage(
+  messageId: string,
+  senderId: string
+): Promise<boolean> {
+  try {
+    // Verify sender is the message author
+    const { data: message, error: fetchError } = await supabase
+      .from("messages")
+      .select("sender_id")
+      .eq("id", messageId)
+      .maybeSingle();
+
+    if (fetchError) throw fetchError;
+    if (!message || message.sender_id !== senderId) {
+      console.error("deleteMessage: sender not authorized");
+      return false;
+    }
+
+    const { error } = await supabase
+      .from("messages")
+      .delete()
+      .eq("id", messageId);
+
+    if (error) {
+      console.error("deleteMessage error", error);
+      return false;
+    }
+
+    console.debug(`Deleted message ${messageId}`);
+    return true;
+  } catch (e) {
+    console.error("deleteMessage error", e);
     return false;
   }
 }
