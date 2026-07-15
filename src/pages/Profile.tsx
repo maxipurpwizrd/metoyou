@@ -69,7 +69,7 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
   const currentUser = initialProfile;
   const { user: authUser } = useAuth();
   const viewerId = authUser?.id ?? currentUser?.id;
-  const actorUsername = currentUser?.username ?? authUser?.user_metadata?.first_name ?? "Someone";
+  const actorUsername = currentUser?.username ?? authUser?.user_metadata?.first_name ?? "";
   const followLabel = isFollowing ? "Following" : isFollowedBy ? "Follow Back" : "Follow";
 
   const openProfilePictureViewer = () => {

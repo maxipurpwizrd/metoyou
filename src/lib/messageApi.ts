@@ -382,6 +382,7 @@ export function subscribeToMessages(
 ): RealtimeChannel {
   const channel = supabase.channel(`messages:${conversationId}`);
   
+  // Subscribe to both INSERT and UPDATE events in one channel
   channel.on(
     "postgres_changes",
     {
@@ -398,6 +399,49 @@ export function subscribeToMessages(
     }
   );
 
+  channel.on(
+    "postgres_changes",
+    {
+      event: "UPDATE",
+      schema: "public",
+      table: "messages",
+      filter: `conversation_id=eq.${conversationId}`,
+    },
+    (payload) => {
+      const message = payload.new as Message;
+      if (message && message.id) {
+        callback(message);
+      }
+    }
+  );
+
+  channel.on(
+    "postgres_changes",
+    {
+      event: "DELETE",
+      schema: "public",
+      table: "messages",
+      filter: `conversation_id=eq.${conversationId}`,
+    },
+    (payload) => {
+      // Broadcast delete event with a special marker
+      const deletedMessage = payload.old as Message;
+      if (deletedMessage && deletedMessage.id) {
+        // Create a delete marker message
+        const deleteMarker: Message = {
+          ...deletedMessage,
+          id: deletedMessage.id,
+          text: undefined,
+          image_url: undefined,
+          audio_url: undefined,
+          video_url: undefined,
+          metadata: { deleted: true },
+        };
+        callback(deleteMarker);
+      }
+    }
+  );
+
   channel.subscribe((status) => {
     if (status === "SUBSCRIBED") {
       console.debug(`Subscribed to messages for conversation ${conversationId}`);
@@ -408,8 +452,6 @@ export function subscribeToMessages(
 
   return channel;
 }
-
-// Typing indicator helpers (broadcast channel)
 export async function sendTypingIndicator(
   conversationId: string,
   senderId: string,
@@ -418,16 +460,35 @@ export async function sendTypingIndicator(
   try {
     const channel = supabase.channel(`typing:${conversationId}`);
     
-    // Subscribe to the channel first
-    await new Promise<void>((resolve) => {
+    let resolved = false;
+
+    // Set up subscription first
+    channel.on(
+      "broadcast",
+      { event: "typing" },
+      (evt) => {
+        // Just listen, no response needed
+      }
+    );
+
+    // Subscribe to the channel
+    const subscribePromise = new Promise<void>((resolve) => {
       channel.subscribe((status) => {
-        if (status === "SUBSCRIBED") {
+        if (status === "SUBSCRIBED" && !resolved) {
+          resolved = true;
           resolve();
         }
       });
-      // Timeout after 3 seconds
-      setTimeout(() => resolve(), 3000);
+      // Timeout after 2 seconds
+      setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          resolve();
+        }
+      }, 2000);
     });
+
+    await subscribePromise;
 
     // Send the typing indicator
     const result = await channel.send({
@@ -436,7 +497,7 @@ export async function sendTypingIndicator(
       payload: { sender_id: senderId, typing },
     });
 
-    // Cleanup
+    // Cleanup - don't keep connection open
     await channel.unsubscribe();
     
     return result === "ok";
@@ -471,56 +532,73 @@ export function subscribeToTyping(
   return channel;
 }
 
-// Presence helpers (lightweight local presence MVP)
-function getPresenceStorageKey(conversationId: string) {
-  return `metoyou:presence:${conversationId}`;
-}
-
-function readPresenceState(conversationId: string): PresenceState {
-  if (typeof window === "undefined") return {};
-
-  try {
-    const raw = window.localStorage.getItem(getPresenceStorageKey(conversationId));
-    if (!raw) return {};
-    return JSON.parse(raw) as PresenceState;
-  } catch (err) {
-    console.warn("readPresenceState error", err);
-    return {};
-  }
-}
-
-function writePresenceState(conversationId: string, state: PresenceState) {
-  if (typeof window === "undefined") return;
-
-  window.localStorage.setItem(getPresenceStorageKey(conversationId), JSON.stringify(state));
-  window.dispatchEvent(new Event("metoyou-presence-updated"));
-}
-
-export async function joinPresence(
+// Presence helpers (Supabase Realtime Presence)
+export function joinPresence(
   conversationId: string,
   userId: string,
+  onPresenceChange: (state: PresenceState) => void,
   meta: Record<string, unknown> = {}
-): Promise<RealtimeChannel | null> {
+): RealtimeChannel | null {
   try {
-    const channel = supabase.channel(`presence:${conversationId}`);
-    
-    // Update local presence state
-    const state = readPresenceState(conversationId);
-    state[userId] = {
-      last_active: Date.now(),
-      username: typeof meta.username === "string" ? meta.username : undefined,
-    };
-    writePresenceState(conversationId, state);
+    const channel = supabase.channel(`presence:${conversationId}`, {
+      config: {
+        presence: {
+          key: userId,
+        },
+      },
+    });
 
-    // Subscribe to the channel
-    await new Promise<void>((resolve) => {
-      channel.subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          resolve();
+    // Helper to format and broadcast presence state
+    const broadcastPresenceState = () => {
+      const presenceState = channel.presenceState() as PresenceState;
+      const formattedState: PresenceState = {};
+      
+      Object.entries(presenceState).forEach(([userId, presences]) => {
+        if (Array.isArray(presences) && presences.length > 0) {
+          const lastPresence = presences[presences.length - 1] as any;
+          formattedState[userId] = {
+            last_active: lastPresence.last_active ?? Date.now(),
+            username: lastPresence.username,
+          };
         }
       });
-      // Timeout after 5 seconds
-      setTimeout(() => resolve(), 5000);
+
+      onPresenceChange(formattedState);
+    };
+
+    // ATTACH ALL LISTENERS BEFORE SUBSCRIBE
+    channel.on("presence", { event: "sync" }, () => {
+      broadcastPresenceState();
+      console.debug(`Presence synced for conversation ${conversationId}`);
+    });
+
+    channel.on("presence", { event: "join" }, ({ key, newPresences }) => {
+      broadcastPresenceState();
+      console.debug(`User ${key} joined presence`, newPresences);
+    });
+
+    channel.on("presence", { event: "leave" }, ({ key, leftPresences }) => {
+      broadcastPresenceState();
+      console.debug(`User ${key} left presence`, leftPresences);
+    });
+
+    // Subscribe and track (non-blocking)
+    void channel.subscribe(async (status) => {
+      if (status === "SUBSCRIBED") {
+        // Track this user's presence
+        const presenceData = {
+          last_active: Date.now(),
+          username: typeof meta.username === "string" ? meta.username : undefined,
+          online_at: new Date().toISOString(),
+        };
+
+        const { error } = await channel.track(presenceData);
+        if (error) {
+          console.error("joinPresence track error", error);
+        }
+
+        console.debug(`Joined presence for conversation ${conversationId}`);
+      }
     });
 
     return channel;
@@ -530,59 +608,20 @@ export async function joinPresence(
   }
 }
 
-export async function leavePresence(conversationId: string, userId: string): Promise<void> {
+export async function leavePresence(
+  conversationId: string,
+  userId: string,
+  channel?: RealtimeChannel
+): Promise<void> {
   try {
-    const state = readPresenceState(conversationId);
-    delete state[userId];
-    writePresenceState(conversationId, state);
+    if (!channel) return;
+    
+    await channel.untrack();
+    await channel.unsubscribe();
+    console.debug(`Left presence for conversation ${conversationId}`);
   } catch (e) {
     console.error("leavePresence error", e);
   }
-}
-
-export function subscribeToPresence(
-  conversationId: string,
-  callback: (state: PresenceState) => void
-): { unsubscribe: () => void } {
-  const presenceKey = getPresenceStorageKey(conversationId);
-
-  const sync = () => {
-    const state = readPresenceState(conversationId);
-    callback(state);
-  };
-
-  const onStorageChange = (event: StorageEvent) => {
-    if (event.key === presenceKey && event.newValue) {
-      try {
-        const state = JSON.parse(event.newValue) as PresenceState;
-        callback(state);
-      } catch (e) {
-        console.warn("subscribeToPresence: failed to parse storage event", e);
-      }
-    }
-  };
-
-  const onPresenceUpdate = () => {
-    sync();
-  };
-
-  // Initial sync
-  sync();
-
-  // Listen for storage changes (tab synchronization)
-  if (typeof window !== "undefined") {
-    window.addEventListener("storage", onStorageChange);
-    window.addEventListener("metoyou-presence-updated", onPresenceUpdate);
-  }
-
-  return {
-    unsubscribe: () => {
-      if (typeof window !== "undefined") {
-        window.removeEventListener("storage", onStorageChange);
-        window.removeEventListener("metoyou-presence-updated", onPresenceUpdate);
-      }
-    },
-  };
 }
 
 // Read receipt helpers
@@ -756,33 +795,4 @@ export async function deleteMessage(
   }
 }
 
-export function subscribeToMessageStatusUpdates(
-  conversationId: string,
-  callback: (message: Message) => void
-): RealtimeChannel {
-  const channel = supabase.channel(`message_status:${conversationId}`);
-  
-  channel.on(
-    "postgres_changes",
-    {
-      event: "UPDATE",
-      schema: "public",
-      table: "messages",
-      filter: `conversation_id=eq.${conversationId}`,
-    },
-    (payload) => {
-      const message = payload.new as Message;
-      if (message && message.id) {
-        callback(message);
-      }
-    }
-  );
 
-  channel.subscribe((status) => {
-    if (status === "SUBSCRIBED") {
-      console.debug(`Subscribed to message status updates for conversation ${conversationId}`);
-    }
-  });
-
-  return channel;
-}

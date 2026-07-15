@@ -71,26 +71,29 @@ export async function followUser(
     });
     if (followError) throw followError;
 
-    const { data: mutualFollowData, error: mutualFollowError } = await supabase
-      .from("followers")
-      .select("id")
-      .match({ follower_id: targetId, following_id: viewerId })
-      .maybeSingle();
+    if (actorUsername) {
+      const { data: mutualFollowData, error: mutualFollowError } = await supabase
+        .from("followers")
+        .select("id")
+        .match({ follower_id: targetId, following_id: viewerId })
+        .maybeSingle();
 
-    if (mutualFollowError) throw mutualFollowError;
+      if (mutualFollowError) throw mutualFollowError;
 
-    const notificationType = mutualFollowData ? "follow_back" : "follow";
-    const message = mutualFollowData ? `${actorUsername} followed you back` : `${actorUsername} followed you`;
-    const { error: notificationError } = await supabase.from("notifications").insert({
-      type: notificationType,
-      message,
-      target_id: targetId,
-      actor_id: viewerId,
-      user_id: targetId,
-      created_at: new Date().toISOString(),
-      is_read: false,
-    });
-    if (notificationError) throw notificationError;
+      const notificationType = mutualFollowData ? "follow_back" : "follow";
+      const message = mutualFollowData ? `${actorUsername} followed you back` : `${actorUsername} followed you`;
+      const createdAt = new Date().toISOString();
+      const { error: notificationError } = await supabase.from("notifications").insert({
+        type: notificationType,
+        message,
+        target_id: targetId,
+        actor_id: viewerId,
+        user_id: targetId,
+        created_at: createdAt,
+        is_read: false,
+      });
+      if (notificationError) throw notificationError;
+    }
 
     return true;
   } catch (e) {

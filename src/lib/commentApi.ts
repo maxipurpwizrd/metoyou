@@ -21,15 +21,17 @@ async function createCommentNotification(postId: string, actorId: string) {
 
     const { data: actorData, error: actorError } = await supabase.from("profiles").select("username").eq("id", actorId).maybeSingle();
     if (actorError) throw actorError;
+    if (!actorData?.username) return;
 
-    const actorUsername = actorData?.username ?? "Someone";
+    const actorUsername = actorData.username;
+    const createdAt = new Date().toISOString();
     await supabase.from("notifications").insert({
       type: "comment",
       message: `${actorUsername} commented on your post`,
       target_id: postId,
       actor_id: actorId,
       user_id: authorId,
-      created_at: new Date().toISOString(),
+      created_at: createdAt,
       is_read: false,
     });
   } catch (e) {

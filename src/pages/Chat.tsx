@@ -13,14 +13,12 @@ import {
   fetchMessagesPage,
   findOrCreateConversation,
   subscribeToMessages,
-  subscribeToMessageStatusUpdates,
   markMessagesAsRead,
   updateConversationLastMessageTime,
   sendTypingIndicator,
   subscribeToTyping,
   joinPresence,
   leavePresence,
-  subscribeToPresence,
   mergeMessages,
   editMessage,
   deleteMessage,
@@ -52,7 +50,6 @@ export default function Chat() {
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
   const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
   const subscriptionRef = useRef<RealtimeChannel | null>(null);
-  const statusUpdateSubscriptionRef = useRef<RealtimeChannel | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewUrlRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -70,13 +67,50 @@ export default function Chat() {
   const [audioPreviewUrl, setAudioPreviewUrl] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const waveRef = useRef<HTMLCanvasElement | null>(null);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const waveRef = useRef<HTMLCanvasElement | null>(null);
+  const typingStateRef = useRef<boolean>(false);
+  const typingThrottleRef = useRef<number | null>(null);
   const typingTimeoutRef = useRef<number | null>(null);
+
+  // Handle text input with smart typing indicators
+  async function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const val = e.target.value;
+    setInputText(val);
+
+    if (!conversationId || !userId) return;
+
+    const isTyping = val.trim().length > 0;
+
+    // State changed from not-typing to typing
+    if (isTyping && !typingStateRef.current) {
+      typingStateRef.current = true;
+      void sendTypingIndicator(conversationId, userId, true);
+    }
+
+    // Clear existing timeout
+    if (typingTimeoutRef.current) {
+      window.clearTimeout(typingTimeoutRef.current);
+    }
+
+    // Set timeout to send stop-typing after 1.5 seconds of inactivity
+    if (isTyping) {
+      typingTimeoutRef.current = window.setTimeout(() => {
+        typingStateRef.current = false;
+        void sendTypingIndicator(conversationId, userId, false);
+        typingTimeoutRef.current = null;
+      }, 1500) as unknown as number;
+    } else {
+      // User cleared input, stop typing immediately
+      if (typingStateRef.current) {
+        typingStateRef.current = false;
+        void sendTypingIndicator(conversationId, userId, false);
+      }
+    }
+  }
   const recordingTimerRef = useRef<number | null>(null);
   const [presenceState, setPresenceState] = useState<Record<string, { last_active?: number; username?: string }>>({});
   const presenceChannelRef = useRef<RealtimeChannel | null>(null);
-  const presenceCleanupRef = useRef<(() => void) | null>(null);
 
   const recipientId = searchParams.get("recipient") ?? "";
   const recipientName = searchParams.get("username") ?? "Friend";
@@ -163,19 +197,23 @@ export default function Chat() {
     }
 
     subscriptionRef.current = subscribeToMessages(conversationId, (newMessage) => {
-      setMessages((current) => mergeMessages([...current, newMessage]));
-      Promise.resolve().then(() => addMessageToCache(conversationId, newMessage));
-    });
-
-    // Subscribe to message status updates (for read receipts)
-    if (statusUpdateSubscriptionRef.current) {
-      statusUpdateSubscriptionRef.current.unsubscribe();
-      statusUpdateSubscriptionRef.current = null;
-    }
-
-    statusUpdateSubscriptionRef.current = subscribeToMessageStatusUpdates(conversationId, (updatedMessage) => {
-      setMessages((current) => mergeMessages([...current, updatedMessage]));
-      Promise.resolve().then(() => addMessageToCache(conversationId, updatedMessage));
+      // Handle delete markers
+      if ((newMessage.metadata as any)?.deleted) {
+        setMessages((current) => current.filter((msg) => msg.id !== newMessage.id));
+        if (conversationId) {
+          Promise.resolve().then(() => {
+            const cache = getCachedMessages(conversationId);
+            if (cache) {
+              const updated = cache.filter((msg) => msg.id !== newMessage.id);
+              setCachedMessages(conversationId, updated);
+            }
+          });
+        }
+      } else {
+        // Normal message insert/update
+        setMessages((current) => mergeMessages([...current, newMessage]));
+        Promise.resolve().then(() => addMessageToCache(conversationId, newMessage));
+      }
     });
 
     // typing subscription
@@ -192,11 +230,6 @@ export default function Chat() {
     });
 
     // presence subscription
-    if (presenceCleanupRef.current) {
-      presenceCleanupRef.current();
-      presenceCleanupRef.current = null;
-    }
-
     if (presenceChannelRef.current) {
       try {
         presenceChannelRef.current.unsubscribe();
@@ -207,14 +240,10 @@ export default function Chat() {
     }
 
     if (userId) {
-      void joinPresence(conversationId, userId, { username: recipientName }).then((channel) => {
-        presenceChannelRef.current = channel;
-        if (channel) {
-          presenceCleanupRef.current = subscribeToPresence(conversationId, (state) => {
-            setPresenceState(state);
-          }).unsubscribe;
-        }
-      });
+      const presenceChannel = joinPresence(conversationId, userId, (state) => {
+        setPresenceState(state);
+      }, { username: recipientName });
+      presenceChannelRef.current = presenceChannel;
     }
 
     return () => {
@@ -224,18 +253,10 @@ export default function Chat() {
         subscriptionRef.current.unsubscribe();
         subscriptionRef.current = null;
       }
-      if (statusUpdateSubscriptionRef.current) {
-        statusUpdateSubscriptionRef.current.unsubscribe();
-        statusUpdateSubscriptionRef.current = null;
-      }
       try {
         typingChannel?.unsubscribe();
       } catch (err) {
         console.warn(err);
-      }
-      if (presenceCleanupRef.current) {
-        presenceCleanupRef.current();
-        presenceCleanupRef.current = null;
       }
       if (presenceChannelRef.current) {
         try {
@@ -246,7 +267,7 @@ export default function Chat() {
         presenceChannelRef.current = null;
       }
       if (conversationId && userId) {
-        void leavePresence(conversationId, userId);
+        void leavePresence(conversationId, userId, presenceChannelRef.current ?? undefined);
       }
     };
   }, [conversationId, getCachedMessages, setCachedMessages, addMessageToCache, userId, recipientName]);
@@ -257,8 +278,13 @@ export default function Chat() {
         window.clearInterval(recordingTimerRef.current);
         recordingTimerRef.current = null;
       }
-      if (conversationId && userId) {
+      if (typingTimeoutRef.current) {
+        window.clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+      if (conversationId && userId && typingStateRef.current) {
         // ensure we announce stop-typing when leaving
+        typingStateRef.current = false;
         void sendTypingIndicator(conversationId, userId, false);
       }
     };
@@ -275,6 +301,16 @@ export default function Chat() {
     if (!userId || !recipientId) {
       setSendError("You need to be signed in to send a message.");
       return;
+    }
+
+    // Stop typing indicator when sending
+    if (conversationId && typingStateRef.current) {
+      typingStateRef.current = false;
+      void sendTypingIndicator(conversationId, userId, false);
+    }
+    if (typingTimeoutRef.current) {
+      window.clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
     }
 
     let resolvedConversationId = conversationId;
@@ -342,22 +378,21 @@ export default function Chat() {
 
     console.log("Chat - calling sendMessage with:", { conversationId: resolvedConversationId, senderId: userId, text: inputText.trim() || undefined, imageUrl, audioUrl });
 
-    // Add optimistic message immediately if audio
+    // Create optimistic message for immediate display (works for all message types)
     const optimisticId = createMessageId("optimistic");
-    if (audioBlob && optimisticAudioUrl) {
-      const optimisticMessage: Message = {
-        id: optimisticId,
-        conversation_id: resolvedConversationId,
-        sender_id: userId,
-        text: inputText.trim() || undefined,
-        audio_url: optimisticAudioUrl,
-        created_at: new Date().toISOString(),
-      };
-      
-      setMessages((current) => mergeMessages([...current, optimisticMessage]));
-      // defer cache update to avoid updating context during render
-      Promise.resolve().then(() => addMessageToCache(resolvedConversationId, optimisticMessage));
-    }
+    const optimisticMessage: Message = {
+      id: optimisticId,
+      conversation_id: resolvedConversationId,
+      sender_id: userId,
+      text: inputText.trim() || undefined,
+      image_url: imageUrl,
+      audio_url: optimisticAudioUrl || audioUrl,
+      created_at: new Date().toISOString(),
+    };
+    
+    setMessages((current) => mergeMessages([...current, optimisticMessage]));
+    // defer cache update to avoid updating context during render
+    Promise.resolve().then(() => addMessageToCache(resolvedConversationId, optimisticMessage));
 
     const newMessage = await sendMessage({
       conversationId: resolvedConversationId,
@@ -1137,17 +1172,7 @@ export default function Chat() {
                   type="text"
                   placeholder="Type a message..."
                   value={inputText}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setInputText(val);
-                    if (!conversationId || !userId) return;
-                    void sendTypingIndicator(conversationId, userId, true);
-                    if (typingTimeoutRef.current) window.clearTimeout(typingTimeoutRef.current);
-                    typingTimeoutRef.current = window.setTimeout(() => {
-                      void sendTypingIndicator(conversationId!, userId!, false);
-                      typingTimeoutRef.current = null;
-                    }, 1200) as unknown as number;
-                  }}
+                  onChange={handleInputChange}
                   onKeyDown={(e) => e.key === "Enter" && handleSend()}
                   className="w-full bg-transparent outline-none text-white placeholder-white/40 text-sm md:text-base px-2"
                 />
