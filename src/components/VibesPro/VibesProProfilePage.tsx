@@ -97,7 +97,7 @@ export default function VibesProProfilePage({
   };
 
   return (
-    <div className="app-screen overflow-hidden bg-black">
+    <div className="h-screen w-full overflow-hidden bg-black">
       <div className="flex min-h-screen flex-col">
         <div className="shrink-0">
           <VibesProHero
@@ -137,12 +137,16 @@ export default function VibesProProfilePage({
           />
         </div>
 
-        <div className="bg-slate-950 px-4 pb-2 pt-2 text-white sm:px-6">
-          <p className="text-center text-xs uppercase tracking-[0.3em] text-white/50">Posts</p>
-        </div>
+        <div className="flex-1 overflow-hidden px-4 pb-4 pt-3 sm:px-6">
+          <div className="flex h-full min-h-80 flex-col overflow-hidden rounded-4xl border border-amber-400/20 bg-slate-950/95 shadow-[0_24px_80px_rgba(255,215,0,0.12)]">
+            <div className="px-4 pb-2 pt-2 text-white sm:px-6">
+              <p className="text-center text-xs uppercase tracking-[0.3em] text-white/50">Posts</p>
+            </div>
 
-        <div className="flex-1 overflow-hidden">
-          <VibesProPostsCarousel posts={mappedPosts} onPostSelect={handlePostSelect} />
+            <div className="flex-1 overflow-hidden">
+              <VibesProPostsCarousel posts={mappedPosts} onPostSelect={handlePostSelect} />
+            </div>
+          </div>
         </div>
       </div>
 

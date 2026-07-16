@@ -13,6 +13,7 @@ import { addComment, editComment, deleteComment } from "../lib/commentApi";
 import { likePost, unlikePost, hasUserLiked, getPostLikes } from "../lib/likeApi";
 import {
   createStoryToSupabase,
+  deleteStoryFromSupabase,
   fetchStoriesFromSupabase,
   subscribeToStories,
   updateStoryReactionsInSupabase,
@@ -73,6 +74,14 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
   const [selectedStory, setSelectedStory] = useState<Story | null>(null);
   const [selectedStoryIndex, setSelectedStoryIndex] = useState<number | null>(null);
   const [storyProgress, setStoryProgress] = useState(0);
+  const [storyMenuOpen, setStoryMenuOpen] = useState(false);
+  const [storyCreating, setStoryCreating] = useState(false);
+  const [storyCreateProgress, setStoryCreateProgress] = useState(0);
+  const [storyCreateStatus, setStoryCreateStatus] = useState<string | null>(null);
+  const [savedStories, setSavedStories] = useState<string[]>(() => {
+    const saved = localStorage.getItem("metoyou-saved-stories");
+    return saved ? (JSON.parse(saved) as string[]) : [];
+  });
 
   const [savedPosts, setSavedPosts] = useState<string[]>(() => {
     const saved = localStorage.getItem("metoyou-saved-posts");
@@ -90,6 +99,19 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
     const saved = localStorage.getItem("metoyou-muted-users");
     return saved ? (JSON.parse(saved) as string[]) : [];
   });
+
+  const currentUserProfile = getProfile();
+  const isStoryOwner = selectedStory?.authorId === currentUserProfile.id;
+
+  useEffect(() => {
+    localStorage.setItem("metoyou-saved-stories", JSON.stringify(savedStories));
+  }, [savedStories]);
+
+  useEffect(() => {
+    if (!selectedStory) {
+      setStoryMenuOpen(false);
+    }
+  }, [selectedStory]);
 
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [storyEditorOpen, setStoryEditorOpen] = useState<boolean>(false);
@@ -113,6 +135,64 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
     listRef.current?.recomputeRowHeights();
   }, [filteredPosts.length, selectedPostId]);
   const suppressAutoCloseRef = useRef(false);
+
+  const handleShareStory = async () => {
+    if (!selectedStory) return;
+
+    try {
+      const shareText = selectedStory.text ? `${selectedStory.name} says: ${selectedStory.text}` : `${selectedStory.name} shared a story on MeToYou.`;
+      const shareUrl = window.location.href;
+
+      if (navigator.share) {
+        await navigator.share({
+          title: `${selectedStory.name}'s story`,
+          text: shareText,
+          url: shareUrl,
+        });
+      } else {
+        await navigator.clipboard.writeText(`${shareText} ${shareUrl}`);
+        alert("Story link copied to clipboard.");
+      }
+    } catch (error) {
+      console.error("Unable to share story", error);
+    } finally {
+      setStoryMenuOpen(false);
+    }
+  };
+
+  const handleSaveStory = () => {
+    if (!selectedStory) return;
+    setSavedStories((prev) =>
+      prev.includes(selectedStory.id) ? prev : [...prev, selectedStory.id]
+    );
+    setStoryMenuOpen(false);
+  };
+
+  const [confirmDeleteStory, setConfirmDeleteStory] = useState(false);
+
+  const handleReportStory = () => {
+    setStoryMenuOpen(false);
+    alert("This story has been reported. Our moderation team will review it shortly.");
+  };
+
+  const handleDeleteStory = () => {
+    setStoryMenuOpen(false);
+    setConfirmDeleteStory(true);
+  };
+
+  const confirmDeleteStoryAction = async () => {
+    if (!selectedStory) return;
+    await deleteStoryFromSupabase(selectedStory.id);
+    setStories((prev) => prev.filter((story) => story.id !== selectedStory.id));
+    setSelectedStory(null);
+    setSelectedStoryIndex(null);
+    setConfirmDeleteStory(false);
+  };
+
+  const cancelDeleteStory = () => {
+    setConfirmDeleteStory(false);
+  };
+
   const autoCloseTimeoutRef = useRef<number | null>(null);
 
   const [stories, setStories] = useState<Story[]>([]);
@@ -519,30 +599,60 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
 
     const displayName = profile?.username || "Maxi";
     const storyType: StoryType = selectedImage ? "photo" : storyVoice ? "voice" : "text";
+    const isMediaStory = Boolean(selectedImage || storyVoice);
 
-    const createdStory = await createStoryToSupabase({
-      authorId: profile.id,
-      username: displayName,
-      profilePic: profile.profilePic ?? null,
-      text: storyText.trim() || undefined,
-      image: selectedImage ?? undefined,
-      voice: storyVoice,
-      storyType,
-      durationHours: storyDuration,
-    });
+    setStoryCreating(true);
+    setStoryCreateProgress(0);
+    setStoryCreateStatus(isMediaStory ? "Uploading" : "Posting");
 
-    if (createdStory) {
-      setStories((prevStories) => [mapStoryRecord(createdStory), ...prevStories.filter((story) => story.id !== createdStory.id)]);
+    const progressSteps = isMediaStory
+      ? [2, 4, 8, 16, 28, 42, 58, 74, 86, 94]
+      : [10, 20, 40, 60, 80];
+    let progressIndex = 0;
+
+    const progressInterval = window.setInterval(() => {
+      setStoryCreateProgress((current) => {
+        if (current >= 95) return current;
+
+        const next = progressSteps[Math.min(progressIndex, progressSteps.length - 1)];
+        progressIndex += 1;
+        return next;
+      });
+    }, 250);
+
+    try {
+      const createdStory = await createStoryToSupabase({
+        authorId: profile.id,
+        username: displayName,
+        profilePic: profile.profilePic ?? null,
+        text: storyText.trim() || undefined,
+        image: selectedImage ?? undefined,
+        voice: storyVoice,
+        storyType,
+        durationHours: storyDuration,
+      });
+
+      if (createdStory) {
+        setStories((prevStories) => [mapStoryRecord(createdStory), ...prevStories.filter((story) => story.id !== createdStory.id)]);
+      }
+    } finally {
+      window.clearInterval(progressInterval);
+      setStoryCreateProgress(100);
+      setStoryCreateStatus(isMediaStory ? "Uploaded" : "Posted");
+      setTimeout(() => {
+        setStoryCreating(false);
+        setStoryCreateStatus(null);
+        setStoryCreateProgress(0);
+        setStoryEditorOpen(false);
+        setStoryChoiceOpen(false);
+        setStoryMode(null);
+        setSelectedImage(null);
+        setStoryText("");
+        setStoryDuration(24);
+        setStoryMusic(undefined);
+        setStoryVoice(undefined);
+      }, 400);
     }
-
-    setStoryEditorOpen(false);
-    setStoryChoiceOpen(false);
-    setStoryMode(null);
-    setSelectedImage(null);
-    setStoryText("");
-    setStoryDuration(24);
-    setStoryMusic(undefined);
-    setStoryVoice(undefined);
   };
 
   const startRecording = async () => {
@@ -616,8 +726,14 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
   };
 
   // Check if user is VibesPro and render premium theme
-  const currentUserProfile = getProfile();
   const isVibesPro = currentUserProfile?.is_vibes_pro === true;
+  const storyCardRadius = isVibesPro ? "1.25rem" : "50% 50% 28% 28% / 18% 18% 70% 70%";
+  const storyCardBorderClasses = isVibesPro
+    ? "border-2 border-amber-300/25 shadow-[0_0_0_2px_rgba(212,175,55,0.22),0_24px_50px_rgba(212,175,55,0.18)]"
+    : "";
+  const storyPlaceholderGradient = isVibesPro ? "from-[#7C5CFF] via-[#00D4FF] to-[#D4AF37]" : "from-pink-400 via-purple-400 to-blue-400";
+  const storyCardBgClass = isVibesPro ? "bg-[#111111]/85 text-white" : "bg-white/80 text-pink-500";
+  const storyCardStyle = { borderRadius: storyCardRadius };
 
   // Normal feed content that can be wrapped by VibesProFeed theme
   const feedContent = (
@@ -652,8 +768,8 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
           <button
             type="button"
             onClick={handleStoryClick}
-            className="w-[106px] h-[152px] md:w-[140px] md:h-[200px] shrink-0 bg-white/80 backdrop-blur-xs border-2 border-dashed border-pink-300 text-pink-500 shadow-md flex flex-col items-center justify-center hover:scale-[1.02] active:scale-95 transition-all snap-start"
-            style={{ borderRadius: "50% 50% 28% 28% / 18% 18% 70% 70%" }}
+            className={`w-[106px] h-[152px] md:w-[140px] md:h-[200px] shrink-0 flex flex-col items-center justify-center ${storyCardBorderClasses} ${storyCardBgClass} hover:scale-[1.02] active:scale-95 transition-all snap-start`}
+            style={storyCardStyle}
           >
             <span className="text-2xl md:text-3xl font-light mb-0.5 md:mb-1">+</span>
             <span className="font-bold text-[10px] md:text-xs tracking-wide">Your Story</span>
@@ -664,8 +780,8 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
             <div
               key={story.id}
               onClick={() => openStoryAtIndex(index)}
-              className={`w-[106px] h-[152px] md:w-[140px] md:h-[200px] shrink-0 relative overflow-hidden shadow-md text-white cursor-pointer hover:scale-[1.02] transition-transform snap-start ${story.viewedAt ? 'opacity-70 ring-1 ring-white/20' : ''}`}
-              style={{ borderRadius: "50% 50% 28% 28% / 18% 18% 70% 70%" }}
+              className={`w-[106px] h-[152px] md:w-[140px] md:h-[200px] shrink-0 relative overflow-hidden ${storyCardBorderClasses} text-white cursor-pointer hover:scale-[1.02] transition-transform snap-start ${story.viewedAt ? 'opacity-70 ring-1 ring-white/20' : ''}`}
+              style={storyCardStyle}
             >
               {story.image ? (
                 <img
@@ -674,18 +790,29 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                   className="w-full h-full object-cover"
                 />
               ) : (
-                <div className="w-full h-full bg-linear-to-br from-pink-400 via-purple-400 to-blue-400 overflow-hidden p-3 flex items-center justify-center text-center text-[10px] md:text-xs font-medium leading-relaxed">
-                  <div
-                    className="relative w-full text-center text-[10px] md:text-xs font-medium leading-relaxed"
-                    style={{
-                      display: "-webkit-box",
-                      WebkitLineClamp: 3,
-                      WebkitBoxOrient: "vertical",
-                      overflow: "hidden",
-                    }}
-                  >
-                    <span className="whitespace-pre-wrap break-words">{getStoryPreviewText(story.text)}</span>
-                    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-linear-to-t from-[#4f46e5]/80 to-transparent" />
+                <div className={`w-full h-full bg-linear-to-br ${storyPlaceholderGradient} overflow-hidden p-3 flex items-center justify-center text-center`}>
+                  <div className="relative w-full h-full rounded-2xl border border-white/10 bg-black/10 p-2 backdrop-blur-sm">
+                    <div className="absolute inset-0 bg-white/5" />
+                    <div className="relative flex h-full w-full flex-col items-center justify-center gap-1 text-white">
+                      {story.text ? (
+                        <p
+                          className="max-h-full overflow-hidden text-[10px] md:text-[12px] font-semibold leading-tight text-left"
+                          style={{
+                            display: "-webkit-box",
+                            WebkitLineClamp: 4,
+                            WebkitBoxOrient: "vertical",
+                            whiteSpace: "pre-wrap",
+                          }}
+                        >
+                          {story.text}
+                        </p>
+                      ) : (
+                        <>
+                          <span className="text-[11px] md:text-xs uppercase tracking-[0.24em] text-white/70">Text Story</span>
+                          <p className="text-[10px] md:text-[12px] font-semibold leading-tight opacity-80">No text content yet.</p>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
@@ -779,25 +906,50 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                                       const profile = getProfile();
                                       if (!profile) return;
                                       const userId = profile.id;
-
-                                      const currentlyLiked = await hasUserLiked(String(post.id), userId);
-                                      if (currentlyLiked) {
-                                        await unlikePost(String(post.id), userId);
-                                      } else {
-                                        await likePost(String(post.id), userId);
-                                      }
-
-                                      const likesData = await getPostLikes(String(post.id));
-                                      const likesCount = (likesData || []).length;
-                                      const userLikedNow = likesData.some((l) => l.user_id === userId);
+                                      const postId = String(post.id);
+                                      const wasLiked = Boolean(post.liked);
+                                      const previousLikes = Number(post.likes ?? post.likes_count ?? 0);
+                                      const nextLiked = !wasLiked;
+                                      const nextLikes = Math.max(0, previousLikes + (nextLiked ? 1 : -1));
 
                                       setPosts((prevPosts) =>
                                         prevPosts.map((p) =>
                                           p.id === post.id
-                                            ? { ...p, likes: likesCount, likes_count: likesCount, liked: Boolean(userLikedNow) }
+                                            ? { ...p, likes: nextLikes, likes_count: nextLikes, liked: nextLiked }
                                             : p
                                         )
                                       );
+
+                                      try {
+                                        if (wasLiked) {
+                                          const removed = await unlikePost(postId, userId);
+                                          if (!removed) throw new Error("Unlike failed");
+                                        } else {
+                                          const liked = await likePost(postId, userId);
+                                          if (!liked) throw new Error("Like failed");
+                                        }
+
+                                        const likesData = await getPostLikes(postId);
+                                        const likesCount = (likesData || []).length;
+                                        const userLikedNow = likesData.some((l) => l.user_id === userId);
+
+                                        setPosts((prevPosts) =>
+                                          prevPosts.map((p) =>
+                                            p.id === post.id
+                                              ? { ...p, likes: likesCount, likes_count: likesCount, liked: Boolean(userLikedNow) }
+                                              : p
+                                          )
+                                        );
+                                      } catch (error) {
+                                        console.error("Failed to sync like state", error);
+                                        setPosts((prevPosts) =>
+                                          prevPosts.map((p) =>
+                                            p.id === post.id
+                                              ? { ...p, likes: previousLikes, likes_count: previousLikes, liked: wasLiked }
+                                              : p
+                                          )
+                                        );
+                                      }
                                     }}
                                     onSelectPost={() => {
                                       setAutoCloseSuppressed(true);
@@ -994,6 +1146,90 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
               <button type="button" className="h-full w-1/2" aria-label="Next story" onClick={goToNextStory} />
             </div>
 
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                setStoryMenuOpen((open) => !open);
+              }}
+              className="absolute top-4 left-4 z-50 flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/40 text-white shadow-md shadow-black/40 transition hover:bg-white/10"
+              aria-label="Story actions"
+            >
+              <span className="text-lg leading-none">⋯</span>
+            </button>
+
+            {storyMenuOpen && selectedStory && (
+              <div className="absolute top-16 left-4 z-50 min-w-[180px] rounded-2xl border border-white/15 bg-slate-950/95 p-2 shadow-2xl shadow-black/50">
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    handleShareStory();
+                  }}
+                  className="w-full rounded-xl px-3 py-2 text-left text-sm text-white hover:bg-white/10 transition"
+                >
+                  Share story
+                </button>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    handleSaveStory();
+                  }}
+                  className="w-full rounded-xl px-3 py-2 text-left text-sm text-white hover:bg-white/10 transition"
+                >
+                  {savedStories.includes(selectedStory.id) ? "Saved" : "Save story"}
+                </button>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    handleReportStory();
+                  }}
+                  className="w-full rounded-xl px-3 py-2 text-left text-sm text-white hover:bg-white/10 transition"
+                >
+                  Report story
+                </button>
+                {isStoryOwner && (
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleDeleteStory();
+                    }}
+                    className="w-full rounded-xl px-3 py-2 text-left text-sm text-rose-200 hover:bg-rose-500/20 transition"
+                  >
+                    Delete story
+                  </button>
+                )}
+              </div>
+            )}
+
+            {confirmDeleteStory && selectedStory && (
+              <div className="fixed inset-0 z-[10001] flex items-center justify-center bg-black/80 p-4">
+                <div className="w-full max-w-sm rounded-4xl border border-white/20 bg-slate-950 p-6 shadow-2xl shadow-black/60">
+                  <p className="text-lg font-semibold text-white">Delete this story?</p>
+                  <p className="mt-3 text-sm text-slate-300">This will permanently remove the story from your story tray. Are you sure?</p>
+                  <div className="mt-6 flex flex-wrap gap-3 justify-end">
+                    <button
+                      type="button"
+                      onClick={cancelDeleteStory}
+                      className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={confirmDeleteStoryAction}
+                      className="rounded-full bg-rose-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-400"
+                    >
+                      Delete story
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {selectedStory.image ? (
               <div className="flex items-center justify-center w-full h-full bg-slate-900 relative z-30">
                 <img
@@ -1015,7 +1251,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
 
             <div className="absolute inset-0 z-20 bg-gradient-to-t from-black/80 via-black/20 to-black/40"></div>
 
-            <div className="absolute top-4 left-4 z-50 flex items-center gap-2 text-xs text-white/70">
+            <div className="absolute left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-2 text-xs text-white/70">
               <span className="rounded-full bg-black/30 px-2 py-1">⏳ {getTimeLeft(selectedStory.expiresAt)}</span>
               {selectedStory.music && <span className="rounded-full bg-black/30 px-2 py-1">🎵 {selectedStory.music}</span>}
             </div>
@@ -1158,10 +1394,25 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
               </div>
             </div>
 
+            {storyCreating && storyCreateStatus ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
+                  <span>{storyCreateStatus}</span>
+                  <span>{storyCreateProgress}%</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
+                  <div className="h-full rounded-full bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 transition-all duration-200"
+                    style={{ width: `${storyCreateProgress}%` }}
+                  />
+                </div>
+              </div>
+            ) : null}
+
             <div className="flex gap-2 pt-2 text-xs font-bold">
               <button
                 type="button"
                 onClick={() => {
+                  if (storyCreating) return;
                   setStoryEditorOpen(false);
                   setStoryMode(null);
                   setSelectedImage(null);
@@ -1171,6 +1422,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                   setStoryVoice(undefined);
                 }}
                 className="flex-1 py-2.5 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+                disabled={storyCreating}
               >
                 Cancel
               </button>
@@ -1178,8 +1430,9 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                 type="button"
                 onClick={handleCreateStory}
                 className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 text-white shadow-md shadow-purple-200 active:scale-95 transition-transform"
+                disabled={storyCreating}
               >
-                Post Story 🚀
+                {storyCreating ? "Working..." : "Post Story 🚀"}
               </button>
             </div>
           </div>

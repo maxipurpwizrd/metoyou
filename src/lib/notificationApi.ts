@@ -48,6 +48,37 @@ export async function markNotificationsRead(userId: string) {
   }
 }
 
+export async function deleteNotification(userId: string, notificationId: string) {
+  try {
+    const { error } = await supabase
+      .from("notifications")
+      .delete()
+      .eq("id", notificationId)
+      .eq("user_id", userId);
+
+    if (error) throw error;
+    return true;
+  } catch (e) {
+    console.error("deleteNotification error", e);
+    return false;
+  }
+}
+
+export async function deleteAllNotifications(userId: string) {
+  try {
+    const { error } = await supabase
+      .from("notifications")
+      .delete()
+      .eq("user_id", userId);
+
+    if (error) throw error;
+    return true;
+  } catch (e) {
+    console.error("deleteAllNotifications error", e);
+    return false;
+  }
+}
+
 export function subscribeToNotifications(userId: string, onChange: () => void): RealtimeChannel {
   const existing = notificationChannels.get(userId);
 
@@ -120,23 +151,60 @@ export async function getNotifications(userId: string) {
   try {
     const { data, error } = await supabase
       .from("notifications")
-      .select("id, type, message, created_at, is_read")
+      .select("id, type, message, created_at, is_read, actor_id, target_id")
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(50);
 
     if (error) throw error;
 
-    return (data || []).map((item: any) => ({
-      id: item.id,
-      type: item.type ?? "notification",
-      user: "Someone",
-      avatar: null,
-      message: item.message ?? "",
-      postId: null,
-      timestamp: item.created_at ?? new Date().toISOString(),
-      read: Boolean(item.is_read),
-    })) as Notification[];
+    const notifications = (data || []) as any[];
+    const actorIds = Array.from(new Set(notifications.map((item) => item.actor_id).filter(Boolean)));
+
+    const profileMap = new Map<string, { username: string; profile_pic: string | null }>();
+
+    if (actorIds.length > 0) {
+      const { data: profiles, error: profileError } = await supabase
+        .from("profiles")
+        .select("id, username, profile_pic")
+        .in("id", actorIds as string[]);
+
+      if (profileError) throw profileError;
+
+      (profiles || []).forEach((profile: any) => {
+        if (profile?.id) {
+          profileMap.set(profile.id, {
+            username: profile.username,
+            profile_pic: profile.profile_pic,
+          });
+        }
+      });
+    }
+
+    const normalizeNotificationMessage = (actorUsername: string | null, message: string) => {
+      const trimmed = message.trim();
+      if (!actorUsername || !trimmed) return trimmed;
+
+      const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const pattern = new RegExp(`^${escapeRegExp(actorUsername)}\s*[:\-–—]?\s*`, "i");
+      const normalized = trimmed.replace(pattern, "").trim();
+      return normalized || trimmed;
+    };
+
+    return notifications.map((item: any) => {
+      const actor = item.actor_id ? profileMap.get(item.actor_id) : null;
+      const rawMessage = item.message ?? "";
+      return {
+        id: item.id,
+        type: item.type ?? "notification",
+        user: actor?.username ?? "Someone",
+        avatar: actor?.profile_pic ?? null,
+        message: normalizeNotificationMessage(actor?.username ?? null, rawMessage),
+        postId: item.target_id ?? null,
+        timestamp: item.created_at ?? new Date().toISOString(),
+        read: Boolean(item.is_read),
+      };
+    }) as Notification[];
   } catch (e) {
     console.error("getNotifications error", e);
     return [] as Notification[];

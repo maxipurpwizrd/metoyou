@@ -39,9 +39,7 @@ export async function likePost(postId: string, userId: string) {
         const createdAt = new Date().toISOString();
         const notificationData = {
           type: "like",
-          message: `${actorUsername} liked your post`,
-          target_id: postId,
-          actor_id: userId,
+      message: "liked your post",
           user_id: authorId,
           created_at: createdAt,
           is_read: false,

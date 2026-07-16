@@ -94,6 +94,15 @@ export async function updateStoryReactionsInSupabase(storyId: string, reactions:
   }
 }
 
+export async function deleteStoryFromSupabase(storyId: string) {
+  try {
+    const { error } = await supabase.from("stories").delete().eq("id", storyId);
+    if (error) throw error;
+  } catch (error) {
+    console.error("deleteStoryFromSupabase error", error);
+  }
+}
+
 export function subscribeToStories(onChange: (stories: StoryRecord[]) => void) {
   const channel = supabase.channel("stories-realtime");
 

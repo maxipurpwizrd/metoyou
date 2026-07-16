@@ -81,7 +81,7 @@ export async function followUser(
       if (mutualFollowError) throw mutualFollowError;
 
       const notificationType = mutualFollowData ? "follow_back" : "follow";
-      const message = mutualFollowData ? `${actorUsername} followed you back` : `${actorUsername} followed you`;
+      const message = mutualFollowData ? "followed you back" : "followed you";
       const createdAt = new Date().toISOString();
       const { error: notificationError } = await supabase.from("notifications").insert({
         type: notificationType,
