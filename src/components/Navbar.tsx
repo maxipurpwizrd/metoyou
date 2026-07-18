@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { useLanguage } from "../contexts/LanguageContext";
 import { getUnreadNotificationCount, subscribeToNotifications } from "../lib/notificationApi";
 
 export default function Navbar() {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
@@ -42,7 +44,7 @@ export default function Navbar() {
                 className="inline-flex h-12 w-12 items-center justify-center rounded-[24px] text-lg text-slate-900 hover:bg-white/30 transition"
               >
                 <span aria-hidden>🔍</span>
-                <span className="sr-only">Search</span>
+                <span className="sr-only">{t("nav.search")}</span>
               </Link>
 
               <Link
@@ -51,7 +53,7 @@ export default function Navbar() {
                 className="inline-flex h-12 w-12 items-center justify-center rounded-3xl text-lg text-slate-900 hover:bg-white/30 transition"
               >
                 <span aria-hidden>🏠</span>
-                <span className="sr-only">Home</span>
+                <span className="sr-only">{t("nav.home")}</span>
               </Link>
 
               <Link
@@ -59,7 +61,7 @@ export default function Navbar() {
                 className="inline-flex h-12 w-12 items-center justify-center rounded-3xl text-lg text-slate-900 hover:bg-white/30 transition"
               >
                 <span aria-hidden>👤</span>
-                <span className="sr-only">Profile</span>
+                <span className="sr-only">{t("nav.profile")}</span>
               </Link>
 
               <Link
@@ -67,7 +69,7 @@ export default function Navbar() {
                 className="relative inline-flex h-12 w-12 items-center justify-center rounded-3xl text-lg text-slate-900 hover:bg-white/30 transition"
               >
                 <span aria-hidden>💬</span>
-                <span className="sr-only">Messages</span>
+                <span className="sr-only">{t("nav.messages")}</span>
 
                 <span className="absolute -top-1 -right-1 bg-pink-500 text-white text-[9px] h-4 w-4 rounded-full flex items-center justify-center font-bold">
                   3
@@ -79,7 +81,7 @@ export default function Navbar() {
                 className="relative inline-flex h-12 w-12 items-center justify-center rounded-3xl text-lg text-slate-900 hover:bg-white/30 transition"
               >
                 <span aria-hidden>🔔</span>
-                <span className="sr-only">Notifications</span>
+                <span className="sr-only">{t("nav.notifications")}</span>
 
                 {unreadCount > 0 && (
                   <span className="absolute -top-1 -right-1 bg-pink-500 text-white text-[9px] min-h-4 min-w-4 px-1 rounded-full flex items-center justify-center font-bold">

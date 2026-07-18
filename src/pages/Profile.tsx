@@ -2,6 +2,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import type { ChangeEvent } from "react";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { getProfile, saveProfile } from "../utils/profileStorage";
+import { useProfile } from "../contexts/ProfileContext";
 import { fetchProfileFromSupabase, fetchProfileByUsername, upsertProfileToSupabase, uploadProfileImage } from "../lib/profileApi";
 import { fetchPostsFromSupabase } from "../lib/postApi";
 import { addComment, getComments, editComment, deleteComment } from "../lib/commentApi";
@@ -42,14 +43,22 @@ type ProfilePost = {
 
 
 export default function Profile(_props: { embedded?: boolean } = {}) {
-  const { setLanguage } = useLanguage();
+  const { setLanguage, t } = useLanguage();
   const params = useParams();
   const navigate = useNavigate();
   const routeUsername = params.username;
 
-  const initialProfile = useMemo(() => getProfile(), []);
+  const { profile: profileFromContext } = useProfile();
+  const initialProfile = useMemo(() => profileFromContext ?? getProfile(), [profileFromContext]);
   const [profile, setProfile] = useState<ProfileData>(initialProfile);
   const [myPosts, setMyPosts] = useState<ProfilePost[]>([]);
+
+  useEffect(() => {
+    if (!profileFromContext) return;
+    if (profileFromContext.id !== profile.id || profileFromContext.username !== profile.username || profileFromContext.language !== profile.language) {
+      setProfile(profileFromContext);
+    }
+  }, [profileFromContext, profile.id, profile.username, profile.language]);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerImages, setViewerImages] = useState<string[]>([]);
   const [viewerIndex, setViewerIndex] = useState(0);
@@ -58,7 +67,7 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
   const [viewerAuthorUsername, setViewerAuthorUsername] = useState<string | undefined>(undefined);
   const [profilePictureMenuOpen, setProfilePictureMenuOpen] = useState(false);
   const [selectedPostId, setSelectedPostId] = useState<string | number | null>(null);
-  const [loadingCommentsByPost, setLoadingCommentsByPost] = useState<Record<string, boolean>>({});
+  const [, setLoadingCommentsByPost] = useState<Record<string, boolean>>({});
   const suppressAutoCloseRef = useRef(false);
   const autoCloseTimeoutRef = useRef<number | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -83,11 +92,11 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
   const [followLoading, setFollowLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const currentUser = initialProfile;
+  const currentUser = profileFromContext ?? initialProfile;
   const { user: authUser } = useAuth();
   const viewerId = authUser?.id ?? currentUser?.id;
   const actorUsername = currentUser?.username ?? authUser?.user_metadata?.first_name ?? "";
-  const followLabel = isFollowing ? "Following" : isFollowedBy ? "Follow Back" : "Follow";
+  const followLabel = isFollowing ? t("profile.following") : isFollowedBy ? t("profile.followBack") : t("profile.follow");
 
   const openProfilePictureViewer = () => {
     if (!profilePic) return;
@@ -133,7 +142,7 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
   };
 
   const handleProfilePostLikeToggle = async (post: ProfilePost) => {
-    const profileUser = getProfile();
+    const profileUser = profileFromContext ?? getProfile();
     if (!profileUser) return;
 
     const postId = String(post.id);
@@ -176,7 +185,7 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
   };
 
   const handleProfilePostAddComment = async (post: ProfilePost, comment: { id: number; text?: string; voice?: string }) => {
-    const profileUser = getProfile();
+    const profileUser = profileFromContext ?? getProfile();
     if (!profileUser) return;
 
     try {
@@ -303,8 +312,8 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
         profilePic: uploadedUrl,
         ...(profile.is_vibes_pro ? { vibes_pro_portrait: uploadedUrl } : {}),
       };
-      setProfile(updatedProfile);
-      saveProfile(updatedProfile);
+      setProfile((prev) => ({ ...prev, ...updatedProfile }));
+      saveProfile({ ...profile, ...updatedProfile });
 
       if (viewingOwn) {
         await upsertProfileToSupabase(updatedProfile);
@@ -465,8 +474,8 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
       }
 
       const updatedProfile = { ...profile, vibes_pro_portrait: uploadedUrl, profilePic: profile.profilePic ?? uploadedUrl };
-      setProfile(updatedProfile);
-      saveProfile(updatedProfile);
+      setProfile((prev) => ({ ...prev, ...updatedProfile }));
+      saveProfile({ ...profile, ...updatedProfile });
 
       if (viewingOwn) {
         await upsertProfileToSupabase(updatedProfile);
@@ -599,7 +608,7 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
 
         if (!mounted || !remote) return;
 
-        setProfile(remote);
+        setProfile((prev) => ({ ...prev, ...remote }));
         if (remote.language) setLanguage(normalizeLanguage(remote.language));
 
         try {
@@ -824,7 +833,7 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
                     className="inline-flex items-center gap-1 md:gap-2 rounded-full border border-white/60 bg-white/40 px-2 md:px-4 py-1 md:py-2 text-xs md:text-sm font-semibold text-slate-900 shadow-xl backdrop-blur-2xl transition hover:scale-[1.02]"
                   >
                     <Settings2 className="w-3 h-3 md:w-4 md:h-4" />
-                    Settings
+                    {t("profile.settings")}
                   </Link>
                 </div>
               )}
@@ -851,7 +860,7 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
                       onClick={openProfilePictureViewer}
                       className="w-full text-left px-3 md:px-4 py-3 text-sm md:text-base hover:bg-slate-100 transition"
                     >
-                      View profile picture
+                      {t("profile.viewPicture")}
                     </button>
                     {viewingOwn && (
                       <button
@@ -859,7 +868,7 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
                         onClick={handleUploadProfilePicture}
                         className="w-full text-left px-3 md:px-4 py-3 text-sm md:text-base hover:bg-slate-100 transition"
                       >
-                        {isUploading ? "Uploading profile picture..." : "Update profile picture"}
+                        {isUploading ? t("profile.uploadingProfilePicture") : t("profile.updatePicture")}
                       </button>
                     )}
                   </div>
@@ -892,7 +901,7 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
 
             {showUploadSuccess && (
               <div className="mt-4 rounded-3xl border border-emerald-200 bg-emerald-50/90 px-4 py-3 text-sm font-semibold text-emerald-700 shadow-lg backdrop-blur">
-                Congratulations! Your profile picture was successfully updated.
+                {t("profile.uploadSuccess")}
               </div>
             )}
 
@@ -905,7 +914,7 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
             {!viewingOwn && (
               <div className="mt-4 md:mt-6 flex items-center justify-between gap-2 md:gap-3 bg-white/20 backdrop-blur-3xl rounded-3xl p-3 md:p-4 border border-white/30">
                 <FollowButton
-                  label={followLoading ? "Working..." : followLabel}
+                  label={followLoading ? t("profile.working") : followLabel}
                   isFollowing={isFollowing}
                   loading={followLoading}
                   onClick={handleFollowToggle}
@@ -915,7 +924,7 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
                 <Link
                   to={`/chat?recipient=${profile.id}&username=${encodeURIComponent(profile.username)}`}
                   className="inline-flex items-center justify-center w-10 h-10 md:w-12 md:h-12 rounded-2xl bg-white shadow-lg border border-white/60 text-slate-900 text-lg md:text-xl transition hover:scale-105 shrink-0"
-                  aria-label="Message user"
+                  aria-label={t("profile.messageUser")}
                 >
                   💬
                 </Link>
@@ -925,21 +934,21 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
             <div className="grid grid-cols-3 gap-2 md:gap-4 mt-6 md:mt-8">
               <div className="bg-white/30 rounded-2xl p-3 md:p-4 text-center shadow-lg">
                 <h2 className="font-black text-2xl md:text-3xl text-slate-900">{hommiesCount}</h2>
-                <p className="text-slate-700 text-xs md:text-sm mt-2">Hommies</p>
+                <p className="text-slate-700 text-xs md:text-sm mt-2">{t("profile.hommies")}</p>
               </div>
               <div className="bg-white/30 rounded-2xl p-3 md:p-4 text-center shadow-lg">
                 <h2 className="font-black text-2xl md:text-3xl text-slate-900">{snapshotsCount}</h2>
-                <p className="text-slate-700 text-xs md:text-sm mt-2">Snapshots</p>
+                <p className="text-slate-700 text-xs md:text-sm mt-2">{t("profile.snapshots")}</p>
               </div>
               <div className="bg-white/30 rounded-2xl p-3 md:p-4 text-center shadow-lg">
                 <h2 className="font-black text-2xl md:text-3xl text-slate-900">{vibesCount}</h2>
-                <p className="text-slate-700 text-xs md:text-sm mt-2">Vibes</p>
+                <p className="text-slate-700 text-xs md:text-sm mt-2">{t("profile.vibes")}</p>
               </div>
             </div>
 
             {bio && (
               <div className="mt-6 md:mt-8 bg-white/30 rounded-3xl p-4 md:p-6 shadow-lg">
-                <h2 className="font-bold text-xl md:text-2xl mb-3 text-slate-900">About Me</h2>
+                <h2 className="font-bold text-xl md:text-2xl mb-3 text-slate-900">{t("profile.aboutMe")}</h2>
                 <p className="text-slate-700 text-sm md:text-base leading-relaxed">{bio}</p>
               </div>
             )}
@@ -953,7 +962,7 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
             </div>
 
             <div className="mt-6 md:mt-8">
-              <h2 className="font-bold text-xl md:text-2xl mb-3 md:mb-4">Highlights ✨</h2>
+              <h2 className="font-bold text-xl md:text-2xl mb-3 md:mb-4">{t("profile.highlights")}</h2>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3">
                 {myPosts.filter((post) => post.highlighted).length > 0 ? (
                   myPosts
@@ -975,14 +984,14 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
                     ))
                 ) : (
                   <div className="col-span-full rounded-3xl bg-white/60 border border-dashed border-slate-300 p-6 text-center text-slate-500">
-                    No highlighted posts yet. Mark a post as a highlight from feed to show it here.
+                    {t("profile.noHighlights")}
                   </div>
                 )}
               </div>
             </div>
 
             <div className="mt-6 md:mt-8">
-              <h2 className="font-bold text-xl md:text-2xl mb-3 md:mb-4">My Snapshots 📸</h2>
+              <h2 className="font-bold text-xl md:text-2xl mb-3 md:mb-4">{t("profile.mySnapshots")}</h2>
               <div className="space-y-4">
                 {myPosts.map((post) => (
                   <PostCard
@@ -993,7 +1002,10 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
                     time={post.time ?? ""}
                     text={post.text}
                     image={post.image}
-                    comments={post.commentList ?? []}
+                    comments={((post.commentList ?? []) as Array<{ id: string | number; user: { id: string; username: string }; text?: string; voice?: string; likes?: number }>).map((comment) => ({
+                      ...comment,
+                      likes: comment.likes ?? 0,
+                    }))}
                     likes={post.likes ?? 0}
                     liked={Boolean(post.liked)}
                     isSelected={selectedPostId === post.id}

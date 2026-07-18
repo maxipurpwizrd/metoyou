@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useRef } from 'react';
+import { useLanguage } from "../../contexts/LanguageContext";
 import type { VibesProHeroProps } from './types';
 import FollowButton from '../social/FollowButton';
 import throneTemplate from './assets/throne-template.png';
@@ -41,6 +42,7 @@ export default function VibesProHero({
 }: VibesProHeroProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const hasPortrait = Boolean(portraitUrl && portraitUrl !== '/default-avatar.png');
+    const { t } = useLanguage();
 
   const handleConfirmUpload = () => {
     onConfirmPortraitUpload?.();
@@ -85,7 +87,7 @@ export default function VibesProHero({
               type="button"
               onClick={onRequestPortraitUpload ?? (() => fileInputRef.current?.click())}
               className="rounded-full border border-white/20 bg-black/50 p-3 text-white shadow-md backdrop-blur-sm"
-              aria-label="Upload throne portrait"
+                aria-label={t("vibespro.portrait.uploadAria")}
             >
               📷
             </button>
@@ -121,11 +123,13 @@ export default function VibesProHero({
       {showPortraitConfirm && viewingOwn && (
         <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/70 px-4">
           <div className="w-full max-w-sm rounded-3xl border border-amber-200/30 bg-slate-950/90 p-5 text-center shadow-2xl backdrop-blur-xl">
-            <p className="text-sm font-semibold uppercase tracking-[0.25em] text-amber-200">Portrait update</p>
-            <h2 className="mt-2 text-xl font-semibold text-white">Do You Really Wanna Change Your Profile Picture?</h2>
+            <p className="text-sm font-semibold uppercase tracking-[0.25em] text-amber-200">{t("vibespro.portrait.updateTitle")}</p>
+            <h2 className="mt-2 text-xl font-semibold text-white">{t("vibespro.portrait.confirm")}</h2>
             <div className="mt-5 flex justify-center gap-3">
               <button type="button" onClick={onCancelPortraitUpload} className="rounded-full border border-white/20 px-4 py-2 text-sm text-white/90 hover:bg-white/10">Cancel</button>
               <button type="button" onClick={handleConfirmUpload} className="rounded-full bg-amber-400 px-4 py-2 text-sm font-semibold text-amber-950">Yes</button>
+                <button type="button" onClick={onCancelPortraitUpload} className="rounded-full border border-white/20 px-4 py-2 text-sm text-white/90 hover:bg-white/10">{t("common.cancel")}</button>
+                <button type="button" onClick={handleConfirmUpload} className="rounded-full bg-amber-400 px-4 py-2 text-sm font-semibold text-amber-950">{t("vibespro.portrait.yes")}</button>
             </div>
           </div>
         </div>
@@ -134,11 +138,13 @@ export default function VibesProHero({
       {showCropConfirm && viewingOwn && (
         <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/70 px-4">
           <div className="w-full max-w-sm rounded-3xl border border-amber-200/30 bg-slate-950/90 p-5 text-center shadow-2xl backdrop-blur-xl">
-            <p className="text-sm font-semibold uppercase tracking-[0.25em] text-amber-200">Next step</p>
-            <h2 className="mt-2 text-xl font-semibold text-white">Would you like to crop?</h2>
+            <p className="text-sm font-semibold uppercase tracking-[0.25em] text-amber-200">{t("vibespro.crop.nextStep")}</p>
+            <h2 className="mt-2 text-xl font-semibold text-white">{t("vibespro.crop.prompt")}</h2>
             <div className="mt-5 flex justify-center gap-3">
               <button type="button" onClick={() => onChooseCropPortrait?.(false)} className="rounded-full border border-white/20 px-4 py-2 text-sm text-white/90 hover:bg-white/10">No</button>
               <button type="button" onClick={() => onChooseCropPortrait?.(true)} className="rounded-full bg-amber-400 px-4 py-2 text-sm font-semibold text-amber-950">Yes</button>
+                <button type="button" onClick={() => onChooseCropPortrait?.(false)} className="rounded-full border border-white/20 px-4 py-2 text-sm text-white/90 hover:bg-white/10">{t("vibespro.crop.no")}</button>
+                <button type="button" onClick={() => onChooseCropPortrait?.(true)} className="rounded-full bg-amber-400 px-4 py-2 text-sm font-semibold text-amber-950">{t("vibespro.crop.yes")}</button>
             </div>
           </div>
         </div>
@@ -148,8 +154,8 @@ export default function VibesProHero({
         <div className="fixed inset-0 z-70 flex flex-col bg-black/95">
           <div className="flex items-center justify-between border-b border-white/10 px-4 py-3 sm:px-6">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-amber-200">Crop preview</p>
-              <h2 className="text-lg font-semibold text-white">Adjust your portrait</h2>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-amber-200">{t("vibespro.crop.previewTitle")}</p>
+              <h2 className="text-lg font-semibold text-white">{t("vibespro.crop.adjust")}</h2>
             </div>
             <button type="button" onClick={onCancelCropPreview} className="rounded-full border border-white/20 px-3 py-1 text-sm text-white/90 hover:bg-white/10">Cancel</button>
           </div>
@@ -177,6 +183,7 @@ export default function VibesProHero({
             <div className="mx-auto flex max-w-2xl flex-col gap-3 text-sm text-white/85">
               <label className="block">
                 <span className="mb-1 block text-xs uppercase tracking-[0.25em] text-amber-200">Zoom</span>
+                  <span className="mb-1 block text-xs uppercase tracking-[0.25em] text-amber-200">{t("vibespro.crop.zoom")}</span>
                 <input
                   type="range"
                   min="1"
@@ -190,6 +197,7 @@ export default function VibesProHero({
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">
                   <span className="mb-1 block text-xs uppercase tracking-[0.25em] text-amber-200">Move X</span>
+                    <span className="mb-1 block text-xs uppercase tracking-[0.25em] text-amber-200">{t("vibespro.crop.moveX")}</span>
                   <input
                     type="range"
                     min="-120"
@@ -202,6 +210,7 @@ export default function VibesProHero({
                 </label>
                 <label className="block">
                   <span className="mb-1 block text-xs uppercase tracking-[0.25em] text-amber-200">Move Y</span>
+                    <span className="mb-1 block text-xs uppercase tracking-[0.25em] text-amber-200">{t("vibespro.crop.moveY")}</span>
                   <input
                     type="range"
                     min="-120"
@@ -216,6 +225,8 @@ export default function VibesProHero({
               <div className="flex justify-end gap-3 pt-1">
                 <button type="button" onClick={onCancelCropPreview} className="rounded-full border border-white/20 px-4 py-2 text-sm text-white/90 hover:bg-white/10">Discard</button>
                 <button type="button" onClick={onApplyCropPreview} className="rounded-full bg-amber-400 px-4 py-2 text-sm font-semibold text-amber-950">Use crop</button>
+                  <button type="button" onClick={onCancelCropPreview} className="rounded-full border border-white/20 px-4 py-2 text-sm text-white/90 hover:bg-white/10">{t("common.cancel")}</button>
+                  <button type="button" onClick={onApplyCropPreview} className="rounded-full bg-amber-400 px-4 py-2 text-sm font-semibold text-amber-950">{t("vibespro.crop.use")}</button>
               </div>
             </div>
           </div>
@@ -235,7 +246,7 @@ export default function VibesProHero({
           type="button"
           onClick={() => window.history.back()}
           className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/30 text-lg text-white shadow-lg backdrop-blur-sm"
-          aria-label="Go back"
+          aria-label={t("common.goBack")}
         >
           ←
         </button>
@@ -243,7 +254,7 @@ export default function VibesProHero({
           <Link
             to="/settings"
             className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/30 text-lg text-white shadow-lg backdrop-blur-sm"
-            aria-label="Open settings"
+            aria-label={t("settings.open") || 'Open settings'}
           >
             ⚙
           </Link>

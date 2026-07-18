@@ -21,13 +21,23 @@ import {
   User,
 } from "lucide-react";
 import { getProfile, saveProfile, type ProfileData } from "../utils/profileStorage";
+import { useProfile } from "../contexts/ProfileContext";
 import { fetchProfileByUsername, fetchProfileFromSupabase, upsertProfileToSupabase, uploadProfileImage } from "../lib/profileApi";
 import { logout } from "../lib/auth";
 
 export default function Settings() {
-  const initialProfile = getProfile();
-  const { language, setLanguage } = useLanguage();
+  const { profile: profileFromContext } = useProfile();
+  const initialProfile = profileFromContext ?? getProfile();
+  const { language, setLanguage, t } = useLanguage();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!profileFromContext) return;
+    setProfile(profileFromContext);
+    setName(profileFromContext.firstName ?? profileFromContext.username);
+    setUsername(profileFromContext.username);
+    setProfilePictureUrl(profileFromContext.profilePic ?? "");
+  }, [profileFromContext]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [profile, setProfile] = useState<ProfileData>(initialProfile);
   const [activeModal, setActiveModal] = useState<"name" | "username" | "picture" | "language" | "logout" | null>(null);
@@ -59,8 +69,8 @@ export default function Settings() {
         const remote = await fetchProfileFromSupabase(profile.id);
         if (!mounted || !remote) return;
 
-        saveProfile(remote);
-        setProfile(remote);
+        saveProfile({ ...profile, ...remote });
+        setProfile((prev) => ({ ...prev, ...remote }));
         setName(remote.firstName ?? remote.username);
         setUsername(remote.username);
         setProfilePictureUrl(remote.profilePic ?? "");
@@ -109,8 +119,8 @@ export default function Settings() {
         throw new Error("Unable to save profile");
       }
 
-      saveProfile(savedProfile);
-      setProfile(savedProfile);
+      saveProfile({ ...profile, ...savedProfile });
+      setProfile((prev) => ({ ...prev, ...savedProfile }));
       setName(savedProfile.firstName ?? savedProfile.username);
       setUsername(savedProfile.username);
       setProfilePictureUrl(savedProfile.profilePic ?? "");
@@ -125,15 +135,46 @@ export default function Settings() {
 
   const handleLanguageSelection = async (selected: AppLanguage) => {
     setLanguage(selected);
-    const updatedProfile = { ...profile, language: selected };
-    saveProfile(updatedProfile);
-    setProfile(updatedProfile);
+    // Preserve explicit boolean flags; don't overwrite with undefined.
+    const updatedProfile: ProfileData = {
+      ...profile,
+      language: selected,
+    };
+    if (typeof profile.is_vibes_pro === "boolean") updatedProfile.is_vibes_pro = profile.is_vibes_pro;
+    if (typeof profile.vibes_pro === "boolean") updatedProfile.vibes_pro = profile.vibes_pro;
+
+    console.log("[trace][Settings] before first saveProfile", {
+      profileIsVibesPro: profile?.is_vibes_pro,
+      profileVibesPro: profile?.vibes_pro,
+      updatedIsVibesPro: updatedProfile.is_vibes_pro,
+      updatedVibesPro: updatedProfile.vibes_pro,
+      language: selected,
+    });
+
+    const firstSavedProfile = saveProfile({ ...profile, ...updatedProfile });
+    console.log("[trace][Settings] after first saveProfile", {
+      savedIsVibesPro: firstSavedProfile?.is_vibes_pro,
+      savedVibesPro: firstSavedProfile?.vibes_pro,
+      savedLanguage: firstSavedProfile?.language,
+    });
+    setProfile((prev) => ({ ...prev, ...updatedProfile }));
 
     try {
       const savedProfile = await upsertProfileToSupabase(updatedProfile);
       if (savedProfile) {
-        saveProfile(savedProfile);
-        setProfile(savedProfile);
+        console.log("[trace][Settings] before second saveProfile", {
+          savedProfileIsVibesPro: savedProfile?.is_vibes_pro,
+          savedProfileVibesPro: savedProfile?.vibes_pro,
+          savedProfileLanguage: savedProfile?.language,
+        });
+
+        const secondSavedProfile = saveProfile({ ...profile, ...savedProfile });
+        console.log("[trace][Settings] after second saveProfile", {
+          savedIsVibesPro: secondSavedProfile?.is_vibes_pro,
+          savedVibesPro: secondSavedProfile?.vibes_pro,
+          savedLanguage: secondSavedProfile?.language,
+        });
+        setProfile((prev) => ({ ...prev, ...savedProfile }));
       }
     } catch (error) {
       console.error("Language save error", error);
@@ -274,12 +315,12 @@ export default function Settings() {
         <div className="flex flex-col gap-4 mb-8">
           <div className="inline-flex items-center gap-3 rounded-full bg-white/30 backdrop-blur-2xl border border-white/50 px-4 py-2 shadow-xl text-sm font-semibold text-slate-700">
             <Sparkles className="w-4 h-4" />
-            Premium settings for your MeToYou experience
+            {t("settings.premiumBanner")}
           </div>
 
           <div className="grid gap-4">
             <div>
-              <h1 className="text-4xl sm:text-5xl font-black tracking-tight text-slate-950">Settings <span aria-hidden>⚙️</span></h1>
+              <h1 className="text-4xl sm:text-5xl font-black tracking-tight text-slate-950">{t("settings.title")} <span aria-hidden>⚙️</span></h1>
             </div>
 
             {!Boolean(profile.vibes_pro ?? profile.is_vibes_pro) && (
@@ -287,9 +328,9 @@ export default function Settings() {
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <p className="text-sm font-semibold uppercase tracking-[0.3em] text-amber-600">VibesPro</p>
-                    <h2 className="mt-2 text-xl font-black text-slate-900">Unlock premium features</h2>
+                    <h2 className="mt-2 text-xl font-black text-slate-900">{t("settings.premiumTitle")}</h2>
                     <p className="mt-2 text-sm leading-6 text-slate-600">
-                      Subscribe for $4.99/month to unlock VibesPro gating and the upcoming premium experience.
+                      {t("settings.premiumBody")}
                     </p>
                   </div>
                   <button
@@ -297,7 +338,7 @@ export default function Settings() {
                     onClick={() => navigate("/settings/vibes-pro")}
                     className="inline-flex items-center justify-center rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white shadow-lg transition hover:bg-slate-800"
                   >
-                    Upgrade to VibesPro
+                    {t("settings.premiumCta")}
                   </button>
                 </div>
               </div>
@@ -314,8 +355,8 @@ export default function Settings() {
                   <User className="w-6 h-6" />
                 </div>
                 <div>
-                  <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Profile & Personal Details</p>
-                  <h2 className="text-2xl font-bold text-slate-900">Your personal control panel</h2>
+                  <p className="text-sm uppercase tracking-[0.3em] text-slate-500">{t("settings.profileSection")}</p>
+                  <h2 className="text-2xl font-bold text-slate-900">{t("settings.profileSectionTitle")}</h2>
                 </div>
               </div>
             </div>
@@ -331,7 +372,7 @@ export default function Settings() {
                     <User className="w-5 h-5" />
                   </div>
                   <div>
-                    <p className="font-semibold text-slate-900">Name</p>
+                    <p className="font-semibold text-slate-900">{t("settings.profileName")}</p>
                     <p className="text-sm text-slate-500">{name}</p>
                   </div>
                 </div>
@@ -348,7 +389,7 @@ export default function Settings() {
                     <AtSign className="w-5 h-5" />
                   </div>
                   <div>
-                    <p className="font-semibold text-slate-900">Username</p>
+                    <p className="font-semibold text-slate-900">{t("settings.profileUsername")}</p>
                     <p className="text-sm text-slate-500">@{username.toLowerCase()}</p>
                   </div>
                 </div>
@@ -365,8 +406,8 @@ export default function Settings() {
                     <Image className="w-5 h-5" />
                   </div>
                   <div>
-                    <p className="font-semibold text-slate-900">Profile Picture</p>
-                    <p className="text-sm text-slate-500">{profilePictureUrl ? "Custom profile picture set" : "Add or change photo"}</p>
+                    <p className="font-semibold text-slate-900">{t("settings.profilePicture")}</p>
+                    <p className="text-sm text-slate-500">{profilePictureUrl ? "Custom profile picture set" : t("settings.profilePictureDesc")}</p>
                   </div>
                 </div>
                 <ArrowRight className="w-5 h-5 text-slate-500" />
@@ -381,8 +422,8 @@ export default function Settings() {
                   <Lock className="w-6 h-6" />
                 </div>
                 <div>
-                  <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Password & Security</p>
-                  <h2 className="text-2xl font-bold text-slate-900">Keep your account safe</h2>
+                  <p className="text-sm uppercase tracking-[0.3em] text-slate-500">{t("settings.securitySection")}</p>
+                  <h2 className="text-2xl font-bold text-slate-900">{t("settings.securitySectionTitle")}</h2>
                 </div>
               </div>
             </div>
@@ -394,7 +435,7 @@ export default function Settings() {
                     <Lock className="w-5 h-5" />
                   </div>
                   <div>
-                    <p className="font-semibold text-slate-900">Change Password</p>
+                    <p className="font-semibold text-slate-900">{t("settings.changePassword")}</p>
                     <p className="text-sm text-slate-500">Update your login key</p>
                   </div>
                 </div>
@@ -407,7 +448,7 @@ export default function Settings() {
                     <ShieldCheck className="w-5 h-5" />
                   </div>
                   <div>
-                    <p className="font-semibold text-slate-900">Security Check</p>
+                    <p className="font-semibold text-slate-900">{t("settings.securityCheck")}</p>
                     <p className="text-sm text-slate-500">Review your account protection</p>
                   </div>
                 </div>
@@ -420,7 +461,7 @@ export default function Settings() {
                     <Phone className="w-5 h-5" />
                   </div>
                   <div>
-                    <p className="font-semibold text-slate-900">Add / Change Phone Number</p>
+                    <p className="font-semibold text-slate-900">{t("settings.phoneNumber")}</p>
                     <p className="text-sm text-slate-500">Two-factor and recovery support</p>
                   </div>
                 </div>
@@ -433,7 +474,7 @@ export default function Settings() {
                     <Mail className="w-5 h-5" />
                   </div>
                   <div>
-                    <p className="font-semibold text-slate-900">Add / Change Email</p>
+                    <p className="font-semibold text-slate-900">{t("settings.email")}</p>
                     <p className="text-sm text-slate-500">Manage your account address</p>
                   </div>
                 </div>
@@ -466,74 +507,86 @@ export default function Settings() {
           <section className="bg-white/20 backdrop-blur-3xl border border-white/30 rounded-[32px] shadow-2xl p-6">
             <div className="flex items-center justify-between gap-3 mb-6">
               <div className="flex items-center gap-3">
-                <div className="grid place-items-center w-12 h-12 rounded-3xl bg-pink-500/15 text-pink-700">
-                  <Monitor className="w-6 h-6" />
+                <div className="grid place-items-center w-12 h-12 rounded-3xl bg-emerald-500/15 text-emerald-700">
+                  <Flag className="w-6 h-6" />
                 </div>
                 <div>
-                  <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Display Settings</p>
-                  <h2 className="text-2xl font-bold text-slate-900">Theme & visual polish</h2>
+                  <p className="text-sm uppercase tracking-[0.3em] text-slate-500">{t("settings.languageSection")}</p>
+                  <h2 className="text-2xl font-bold text-slate-900">{t("settings.languageSectionTitle")}</h2>
                 </div>
               </div>
             </div>
 
-            <div className="grid gap-4">
-              <button
-                type="button"
-                onClick={() => openModal("language")}
-                className="w-full flex items-center justify-between gap-4 rounded-3xl border border-white/40 bg-white/15 px-5 py-4 text-left shadow-lg transition hover:bg-white/30"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="grid place-items-center w-11 h-11 rounded-2xl bg-gradient-to-br from-pink-500 via-purple-500 to-blue-500 text-white">
-                    <Flag className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-slate-900">Language</p>
-                    <p className="text-sm text-slate-500">
-                      {language === "en-basic" ? "English — Basic" : language === "en-street" ? "English — Street" : "French — France"}
-                    </p>
-                  </div>
+            <button
+              type="button"
+              onClick={() => openModal("language")}
+              className="w-full flex items-center justify-between gap-4 rounded-3xl border border-white/40 bg-white/15 px-5 py-4 text-left shadow-lg transition hover:bg-white/30"
+            >
+              <div className="flex items-center gap-3">
+                <div className="grid place-items-center w-11 h-11 rounded-2xl bg-gradient-to-br from-pink-500 via-purple-500 to-blue-500 text-white">
+                  <Flag className="w-5 h-5" />
                 </div>
-                <ArrowRight className="w-5 h-5 text-slate-500" />
-              </button>
-
-              <div className="rounded-3xl border border-white/40 bg-white/15 p-5 shadow-inner">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-base font-semibold text-slate-900">Theme</p>
-                    <p className="text-sm text-slate-500">Current selected appearance</p>
-                  </div>
-                  <span className="rounded-full bg-slate-950/10 px-4 py-2 text-sm font-semibold text-slate-900 uppercase tracking-[0.15em]">
-                    {selectedTheme === "black-ice" ? "Black Ice" : "Pink Liquid Glass Glow"}
-                  </span>
+                <div>
+                  <p className="font-semibold text-slate-900">{t("settings.languageSection")}</p>
+                  <p className="text-sm text-slate-500">
+                    {language === "en-basic" ? t("lang.en-basic") : language === "en-street" ? t("lang.en-street") : t("lang.fr-fr")}
+                  </p>
                 </div>
+              </div>
+              <ArrowRight className="w-5 h-5 text-slate-500" />
+            </button>
+          </section>
 
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedTheme("black-ice")}
-                    className={`rounded-3xl border px-4 py-4 text-left transition ${
-                      selectedTheme === "black-ice"
-                        ? "border-slate-900 bg-slate-950/10"
-                        : "border-white/40 bg-white/10 hover:bg-white/20"
-                    }`}
-                  >
-                    <p className="font-semibold text-slate-900">Black Ice</p>
-                    <p className="text-sm text-slate-500 mt-1">Dark theme preview</p>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setSelectedTheme("pink-glow")}
-                    className={`rounded-3xl border px-4 py-4 text-left transition ${
-                      selectedTheme === "pink-glow"
-                        ? "border-slate-900 bg-slate-950/10"
-                        : "border-white/40 bg-white/10 hover:bg-white/20"
-                    }`}
-                  >
-                    <p className="font-semibold text-slate-900">Pink Liquid Glass Glow</p>
-                    <p className="text-sm text-slate-500 mt-1">Light theme preview</p>
-                  </button>
+          <section className="bg-white/20 backdrop-blur-3xl border border-white/30 rounded-[32px] shadow-2xl p-6">
+            <div className="flex items-center justify-between gap-3 mb-6">
+              <div className="flex items-center gap-3">
+                <div className="grid place-items-center w-12 h-12 rounded-3xl bg-pink-500/15 text-pink-700">
+                  <Monitor className="w-6 h-6" />
                 </div>
+                <div>
+                  <p className="text-sm uppercase tracking-[0.3em] text-slate-500">{t("settings.displaySection")}</p>
+                  <h2 className="text-2xl font-bold text-slate-900">{t("settings.displaySectionTitle")}</h2>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-white/40 bg-white/15 p-5 shadow-inner">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-base font-semibold text-slate-900">{t("home.theme")}</p>
+                  <p className="text-sm text-slate-500">Current selected appearance</p>
+                </div>
+                <span className="rounded-full bg-slate-950/10 px-4 py-2 text-sm font-semibold text-slate-900 uppercase tracking-[0.15em]">
+                  {selectedTheme === "black-ice" ? "Black Ice" : "Pink Liquid Glass Glow"}
+                </span>
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedTheme("black-ice")}
+                  className={`rounded-3xl border px-4 py-4 text-left transition ${
+                    selectedTheme === "black-ice"
+                      ? "border-slate-900 bg-slate-950/10"
+                      : "border-white/40 bg-white/10 hover:bg-white/20"
+                  }`}
+                >
+                  <p className="font-semibold text-slate-900">{t("settings.theme.blackIce")}</p>
+                  <p className="text-sm text-slate-500 mt-1">Dark theme preview</p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedTheme("pink-glow")}
+                  className={`rounded-3xl border px-4 py-4 text-left transition ${
+                    selectedTheme === "pink-glow"
+                      ? "border-slate-900 bg-slate-950/10"
+                      : "border-white/40 bg-white/10 hover:bg-white/20"
+                  }`}
+                >
+                  <p className="font-semibold text-slate-900">{t("settings.theme.pinkGlow")}</p>
+                  <p className="text-sm text-slate-500 mt-1">Light theme preview</p>
+                </button>
               </div>
             </div>
           </section>
@@ -635,7 +688,7 @@ export default function Settings() {
                   <LogOut className="w-6 h-6" />
                 </div>
                 <div>
-                  <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Logout</p>
+                  <p className="text-sm uppercase tracking-[0.3em] text-slate-500">{t("profile.logout")}</p>
                   <h2 className="text-2xl font-bold text-slate-900">Exit your MeToYou session</h2>
                 </div>
               </div>
@@ -660,10 +713,10 @@ export default function Settings() {
               <div>
                 <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Edit</p>
                 <h3 className="text-3xl font-bold text-slate-950">
-                  {activeModal === "name" && "Update Name"}
-                  {activeModal === "username" && "Update Username"}
+                  {activeModal === "name" && t("settings.profileName")}
+                  {activeModal === "username" && t("settings.profileUsername")}
                   {activeModal === "picture" && "Update Profile Picture"}
-                  {activeModal === "language" && "Choose Language"}
+                  {activeModal === "language" && t("settings.languageModalTitle")}
                 </h3>
               </div>
               <button
@@ -743,9 +796,9 @@ export default function Settings() {
               {activeModal === "language" && (
                 <div className="grid gap-3">
                   {[
-                    { label: "Basic English", value: "en-basic" },
-                    { label: "Street Slang", value: "en-street" },
-                    { label: "French", value: "fr-fr" },
+                    { label: t("settings.languageOption.basic"), value: "en-basic" },
+                    { label: t("settings.languageOption.street"), value: "en-street" },
+                    { label: t("settings.languageOption.french"), value: "fr-fr" },
                   ].map((option) => (
                     <button
                       key={option.value}
@@ -777,7 +830,7 @@ export default function Settings() {
                   onClick={() => setActiveModal(null)}
                   className="rounded-3xl border border-slate-300 px-5 py-3 text-slate-700 transition hover:bg-slate-100"
                 >
-                  Cancel
+                  {t("common.cancel")}
                 </button>
                 <button
                   type="button"
@@ -785,7 +838,7 @@ export default function Settings() {
                   disabled={isSaving}
                   className="rounded-3xl bg-gradient-to-r from-pink-500 to-purple-500 px-5 py-3 text-white font-semibold shadow-lg transition hover:scale-[1.01] disabled:opacity-50"
                 >
-                  Save Changes
+                  {t("common.saveChanges")}
                 </button>
               </div>
             </div>

@@ -3,6 +3,7 @@ import { useMemo, useState, useEffect, useRef } from "react";
 import { AutoSizer, CellMeasurer, CellMeasurerCache, List, WindowScroller } from "react-virtualized";
 import { useFeed, type Post as FeedPost } from "../contexts/FeedContext";
 import { getProfile } from "../utils/profileStorage";
+import { useProfile } from "../contexts/ProfileContext";
 import { VibesProFeed } from "../themes/vibespro";
 
 import CreatePost from "../components/CreatePost";
@@ -10,7 +11,7 @@ import PostCard from "../components/PostCard";
 import PostSkeleton from "../components/PostSkeleton";
 import { savePostToSupabase, deletePostFromSupabase, uploadAudioToSupabase, uploadImageToSupabase } from "../lib/postApi";
 import { addComment, editComment, deleteComment } from "../lib/commentApi";
-import { likePost, unlikePost, hasUserLiked, getPostLikes } from "../lib/likeApi";
+import { likePost, unlikePost, getPostLikes } from "../lib/likeApi";
 import {
   createStoryToSupabase,
   deleteStoryFromSupabase,
@@ -38,15 +39,6 @@ type Story = {
   storyType: StoryType;
   authorId?: string;
   createdAt?: string;
-};
-
-const getStoryPreviewText = (text?: string) => {
-  if (!text) return "";
-
-  const normalized = text.replace(/\s+/g, " ").trim();
-  if (normalized.length <= 80) return normalized;
-
-  return `${normalized.slice(0, 77).trimEnd()}...`;
 };
 
 const mapStoryRecord = (story: StoryRecord): Story => ({
@@ -100,8 +92,9 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
     return saved ? (JSON.parse(saved) as string[]) : [];
   });
 
-  const currentUserProfile = getProfile();
-  const isStoryOwner = selectedStory?.authorId === currentUserProfile.id;
+  const { profile: currentUserProfileFromContext } = useProfile();
+  const currentUserProfile = currentUserProfileFromContext ?? getProfile();
+  const isStoryOwner = selectedStory?.authorId === currentUserProfile?.id;
 
   useEffect(() => {
     localStorage.setItem("metoyou-saved-stories", JSON.stringify(savedStories));
@@ -378,7 +371,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
     payload: { text?: string; image?: string; video?: string; audio?: string },
     onProgress?: (percent: number) => void
   ) => {
-    const profile = getProfile();
+    const profile = currentUserProfile;
     if (!profile) return false;
 
     const startProgress = () => {
@@ -488,7 +481,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
     audio?: string,
     onProgress?: (percent: number) => void
   ): Promise<boolean> => {
-    const profile = getProfile();
+    const profile = currentUserProfile;
     if (!profile) return false;
 
     const optimisticId = `optimistic-${Date.now()}`;
@@ -594,7 +587,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
   const handleCreateStory = async () => {
     if (!selectedImage && !storyText.trim()) return;
 
-    const profile = getProfile();
+    const profile = currentUserProfile;
     if (!profile) return;
 
     const displayName = profile?.username || "Maxi";
@@ -726,6 +719,10 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
   };
 
   // Check if user is VibesPro and render premium theme
+  console.log("[trace][Feed] before isVibesPro", {
+    currentUserProfileIsVibesPro: currentUserProfile?.is_vibes_pro,
+    currentUserProfileVibesPro: currentUserProfile?.vibes_pro,
+  });
   const isVibesPro = currentUserProfile?.is_vibes_pro === true;
   const storyCardRadius = isVibesPro ? "1.25rem" : "50% 50% 28% 28% / 18% 18% 70% 70%";
   const storyCardBorderClasses = isVibesPro
@@ -903,7 +900,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                                     liked={Boolean(post.liked)}
                                     isSelected={isSelected}
                                     onToggleLike={async () => {
-                                      const profile = getProfile();
+                                      const profile = currentUserProfile;
                                       if (!profile) return;
                                       const userId = profile.id;
                                       const postId = String(post.id);
@@ -1030,7 +1027,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                                       alert("User muted");
                                     }}
                                     onAddComment={async (comment) => {
-                                      const profile = getProfile();
+                                      const profile = currentUserProfile;
                                       if (!profile) return;
 
                                       const added = await addComment(String(post.id), profile.id, comment.text, comment.voice);

@@ -1,8 +1,10 @@
 import Navbar from "../components/Navbar";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useLanguage } from "../contexts/LanguageContext";
 import { searchUsersByUsername } from "../lib/profileApi";
 import { getProfile } from "../utils/profileStorage";
+import { useProfile } from "../contexts/ProfileContext";
 import { VibesProFeed } from "../themes/vibespro";
 
 type SearchUser = {
@@ -13,7 +15,9 @@ type SearchUser = {
 
 export default function Search() {
   const navigate = useNavigate();
-  const profile = getProfile();
+  const { t } = useLanguage();
+  const { profile: profileFromContext } = useProfile();
+  const profile = profileFromContext ?? getProfile();
   const isVibesPro = profile?.is_vibes_pro === true;
   
   const [query, setQuery] = useState("");
@@ -47,7 +51,7 @@ export default function Search() {
         <div className="mb-6">
           <input
             type="text"
-            placeholder="Search people..."
+            placeholder={t("search.placeholder")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className={`w-full px-4 py-3 rounded-[28px] outline-none text-sm ${
@@ -65,7 +69,7 @@ export default function Search() {
               : 'bg-white/20 backdrop-blur-3xl border border-white/30'
           }`}>
             <p className={isVibesPro ? 'text-white/70' : 'text-slate-600'}>
-              Search for people...
+              {t("search.empty")}
             </p>
           </div>
         ) : isLoading ? (
@@ -75,7 +79,7 @@ export default function Search() {
               : 'bg-white/20 backdrop-blur-3xl border border-white/30'
           }`}>
             <p className={isVibesPro ? 'text-white/70' : 'text-slate-600'}>
-              Searching...
+              {t("search.loading")}
             </p>
           </div>
         ) : users.length === 0 ? (
@@ -85,7 +89,7 @@ export default function Search() {
               : 'bg-white/20 backdrop-blur-3xl border border-white/30'
           }`}>
             <p className={isVibesPro ? 'text-white/70' : 'text-slate-600'}>
-              No users found
+              {t("search.none")}
             </p>
           </div>
         ) : (
@@ -95,7 +99,7 @@ export default function Search() {
               <h2 className={`text-xl font-bold mb-4 ${
                 isVibesPro ? 'text-white' : 'text-slate-900'
               }`}>
-                👥 People ({users.length})
+                👥 {t("search.peopleCount").replace("{count}", String(users.length))}
               </h2>
               <div className="space-y-3">
                 {users.map((user) => (
@@ -145,7 +149,7 @@ export default function Search() {
                           ? 'bg-linear-to-r from-[#D4AF37] to-[#F0C75E] text-[#0B0B0B]'
                           : 'bg-linear-to-r from-pink-500 to-purple-500 text-white'
                       }`}>
-                        Follow
+                        {t("search.follow")}
                       </button>
                     </div>
                   </div>

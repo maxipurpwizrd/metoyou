@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useLanguage } from '../../contexts/LanguageContext';
 import { Heart, MessageCircle, Share2, MoreVertical } from 'lucide-react';
 import { PremiumCard } from './components/PremiumCard';
 import { PremiumIcon } from './components/PremiumIcon';
@@ -41,6 +42,8 @@ export const VibesProPostCard: React.FC<VibesProPostCardProps> = ({
     setLikes(liked ? likes - 1 : likes + 1);
     onLike?.();
   };
+
+  const { t } = useLanguage();
 
   const timeString = createdAt
     ? new Date(createdAt).toLocaleDateString('en-US', {
@@ -112,7 +115,7 @@ export const VibesProPostCard: React.FC<VibesProPostCardProps> = ({
               />
             </PremiumIcon>
             <span className="text-sm font-medium text-[#D6D6D6] group-hover:text-[#F0C75E] transition-colors">
-              {likes > 0 ? likes : 'Like'}
+              {likes > 0 ? likes : t('vibespro.like')}
             </span>
           </button>
 
@@ -125,7 +128,7 @@ export const VibesProPostCard: React.FC<VibesProPostCardProps> = ({
               <MessageCircle size={18} className="text-[#B88A2D]" />
             </PremiumIcon>
             <span className="text-sm font-medium text-[#D6D6D6] hover:text-[#F0C75E]">
-              {commentsCount > 0 ? commentsCount : 'Comment'}
+              {commentsCount > 0 ? commentsCount : t('vibespro.comment')}
             </span>
           </button>
 
@@ -137,7 +140,7 @@ export const VibesProPostCard: React.FC<VibesProPostCardProps> = ({
             <PremiumIcon>
               <Share2 size={18} className="text-[#B88A2D]" />
             </PremiumIcon>
-            <span className="text-sm font-medium text-[#D6D6D6] hover:text-[#F0C75E]">Share</span>
+            <span className="text-sm font-medium text-[#D6D6D6] hover:text-[#F0C75E]">{t('vibespro.share')}</span>
           </button>
         </div>
       </PremiumCard>

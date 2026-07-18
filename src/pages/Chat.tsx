@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from "react";
-import type { RealtimeChannel, User } from "@supabase/supabase-js";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { Mic, Paperclip, Send, Smile, Square, X, Pause, Play } from "lucide-react";
 import ChatBubble from "../components/ChatBubble";
-import { VibesProChat } from "../components/VibesPro";
-import type { VibesProMessage as VibesProMessageType } from "../components/VibesPro/types";
 import { useAuth } from "../hooks/useAuth";
 import { useChat } from "../contexts/ChatContext";
+import { useProfile } from "../contexts/ProfileContext";
+import { getProfile } from "../utils/profileStorage";
 import { supabase } from "../lib/supabase";
 import {
   sendMessage,
@@ -25,12 +25,6 @@ import {
   type Message,
 } from "../lib/messageApi";
 
-type AuthUserWithVibesFlag = (User | null | undefined) & {
-  is_vibes_pro?: boolean;
-  user_metadata?: { is_vibes_pro?: boolean };
-  app_metadata?: { is_vibes_pro?: boolean };
-};
-
 export default function Chat() {
   const { user, isLoading: authLoading } = useAuth();
   const [searchParams] = useSearchParams();
@@ -47,6 +41,7 @@ export default function Chat() {
   const [sendError, setSendError] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [showSearchBar, setShowSearchBar] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
   const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
   const subscriptionRef = useRef<RealtimeChannel | null>(null);
@@ -57,6 +52,7 @@ export default function Chat() {
   const isUserAtBottomRef = useRef(true);
   const previousMessageCountRef = useRef(0);
   const messagesLoadVersionRef = useRef(0);
+  const scrollIdleTimeoutRef = useRef<number | null>(null);
 
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
@@ -70,7 +66,6 @@ export default function Chat() {
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const waveRef = useRef<HTMLCanvasElement | null>(null);
   const typingStateRef = useRef<boolean>(false);
-  const typingThrottleRef = useRef<number | null>(null);
   const typingTimeoutRef = useRef<number | null>(null);
 
   // Handle text input with smart typing indicators
@@ -115,10 +110,9 @@ export default function Chat() {
   const recipientId = searchParams.get("recipient") ?? "";
   const recipientName = searchParams.get("username") ?? "Friend";
   const userId = user?.id;
-  const isVibesProUser =
-    (user as AuthUserWithVibesFlag | null | undefined)?.is_vibes_pro === true ||
-    (user as AuthUserWithVibesFlag | null | undefined)?.user_metadata?.is_vibes_pro === true ||
-    (user as AuthUserWithVibesFlag | null | undefined)?.app_metadata?.is_vibes_pro === true;
+  const { profile: profileFromContext } = useProfile();
+  const profile = profileFromContext ?? getProfile();
+  const isVibesPro = profile?.is_vibes_pro === true || profile?.vibes_pro === true;
 
   function createMessageId(prefix = "msg") {
     const randomPart =
@@ -756,10 +750,19 @@ export default function Chat() {
     if (!container) return;
 
     const handleScroll = () => {
-      // Check if user is near bottom (within 100px)
       const isNearBottom = 
         container.scrollHeight - container.scrollTop - container.clientHeight < 100;
       isUserAtBottomRef.current = isNearBottom;
+
+      setShowSearchBar(true);
+
+      if (scrollIdleTimeoutRef.current) {
+        window.clearTimeout(scrollIdleTimeoutRef.current);
+      }
+
+      scrollIdleTimeoutRef.current = window.setTimeout(() => {
+        setShowSearchBar(false);
+      }, 1200);
 
       if (container.scrollTop < 220 && hasMoreMessages && !isLoadingOlderMessages) {
         void loadOlderMessages();
@@ -767,7 +770,13 @@ export default function Chat() {
     };
 
     container.addEventListener("scroll", handleScroll, { passive: true });
-    return () => container.removeEventListener("scroll", handleScroll);
+    return () => {
+      container.removeEventListener("scroll", handleScroll);
+      if (scrollIdleTimeoutRef.current) {
+        window.clearTimeout(scrollIdleTimeoutRef.current);
+        scrollIdleTimeoutRef.current = null;
+      }
+    };
   }, [conversationId, hasMoreMessages, isLoadingOlderMessages, messages.length]);
 
   // Auto-scroll only if user is already at bottom or messages just loaded
@@ -789,13 +798,6 @@ export default function Chat() {
       });
     }
   }, [messages]);
-
-  const vibesProMessages: VibesProMessageType[] = messages.map((msg) => ({
-    id: msg.id,
-    text: msg.text ?? "",
-    role: msg.sender_id === userId ? "user" : "assistant",
-    createdAt: msg.created_at ?? undefined,
-  }));
 
   async function handleEditMessage(messageId: string, newText: string) {
     if (!userId) return;
@@ -827,39 +829,47 @@ export default function Chat() {
     }
   }
 
-  if (isVibesProUser) {
-    return (
-      <div className="app-screen bg-linear-to-br from-slate-800 via-slate-700 to-blue-900 p-4 md:p-6">
-        <div className="mx-auto max-w-3xl">
-          <VibesProChat
-            messages={vibesProMessages}
-            currentUserId={userId ?? ""}
-            onSend={(text) => {
-              if (!text.trim() || !userId || !recipientId || !conversationId) return;
-              void sendMessage({
-                conversationId,
-                senderId: userId,
-                text: text.trim(),
-              }).then((newMessage) => {
-                if (!newMessage) return;
-                setMessages((current) => {
-                  const filtered = current.filter((msg) => msg.id !== newMessage.id);
-                  if (filtered.some((message) => message.id === newMessage.id)) {
-                    return filtered;
-                  }
-                  return [...filtered, newMessage];
-                });
-                Promise.resolve().then(() => addMessageToCache(conversationId, newMessage));
-              });
-            }}
-          />
-        </div>
-      </div>
-    );
-  }
+  const shellClassName = isVibesPro
+    ? "app-screen min-h-screen bg-[radial-gradient(circle_at_top,rgba(212,175,55,0.18),transparent_35%),linear-gradient(135deg,#0B0B0B_0%,#141414_45%,#0F0F0F_100%)] flex flex-col relative overflow-hidden"
+    : "app-screen bg-linear-to-br from-slate-800 via-slate-700 to-blue-900 flex flex-col relative overflow-hidden";
+
+  const headerClassName = isVibesPro
+    ? "fixed top-0 left-0 right-0 z-50 bg-[#111111]/95 p-3 md:p-6 border-b border-[#D4AF37]/20 shadow-[0_0_40px_rgba(212,175,55,0.12)]"
+    : "fixed top-0 left-0 right-0 z-50 bg-linear-to-br from-slate-800 via-slate-700 to-blue-900 p-3 md:p-6 border-b border-white/20";
+
+  const headerCardClassName = isVibesPro
+    ? "bg-[#181818]/90 backdrop-blur-3xl border border-[#D4AF37]/20 rounded-[28px] p-3 shadow-[0_0_24px_rgba(212,175,55,0.12)] flex flex-col gap-3"
+    : "bg-white/5 backdrop-blur-3xl border border-white/10 rounded-[28px] p-3 shadow-sm flex flex-col gap-3";
+
+  const headerTextClassName = isVibesPro ? "text-[#F2D37C]" : "text-white";
+  const headerSubtextClassName = isVibesPro ? "text-[#EBD39A]/70" : "text-white/60";
+  const panelClassName = isVibesPro
+    ? "rounded-2xl border border-[#D4AF37]/20 bg-[#181818]/80 px-3 py-2 backdrop-blur-xl"
+    : "rounded-2xl border border-white/10 bg-white/10 px-3 py-2 backdrop-blur-xl";
+
+  const emptyStateClassName = isVibesPro
+    ? "bg-[#181818]/80 backdrop-blur-3xl border border-[#D4AF37]/20 rounded-4xl p-8 text-center text-[#EBD39A]/70 shadow-[0_0_30px_rgba(212,175,55,0.08)]"
+    : "bg-white/5 backdrop-blur-3xl border border-white/10 rounded-4xl p-8 text-center text-white/60 shadow-lg";
+
+  const messageBoxClassName = isVibesPro
+    ? "bg-[#181818]/90 backdrop-blur-3xl border border-[#D4AF37]/20 rounded-3xl md:rounded-4xl p-2 md:p-4 shadow-[0_0_30px_rgba(212,175,55,0.12)]"
+    : "bg-white/5 backdrop-blur-3xl border border-white/10 rounded-3xl md:rounded-4xl p-2 md:p-4 shadow-2xl";
+
+  const messagesSurfaceClassName = "flex-1 overflow-y-auto pt-28 md:pt-32 pb-28 md:pb-32 px-3 md:px-6 bg-transparent";
+  const backgroundOverlayClassName = isVibesPro
+    ? "absolute inset-0 pointer-events-none z-0 bg-[radial-gradient(circle_at_top_left,rgba(212,175,55,0.12),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(255,215,0,0.10),transparent_30%)]"
+    : "absolute inset-0 pointer-events-none z-0";
+
+  const inputClassName = isVibesPro
+    ? "w-full bg-transparent outline-none text-[#F7E7B2] placeholder-[#E8C96F]/50 text-sm md:text-base px-2 font-serif"
+    : "w-full bg-transparent outline-none text-white placeholder-white/40 text-sm md:text-base px-2";
+
+  const sendButtonClassName = isVibesPro
+    ? "bg-linear-to-r from-[#D4AF37] to-[#F0C75E] text-[#111111] h-10 w-10 md:w-auto md:px-4 rounded-full md:rounded-2xl font-bold shadow-lg hover:scale-105 transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex items-center justify-center shrink-0 text-sm md:text-base active:scale-95"
+    : "bg-linear-to-r from-cyan-500 to-blue-600 text-white h-10 w-10 md:w-auto md:px-4 rounded-full md:rounded-2xl font-bold shadow-lg hover:scale-105 transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex items-center justify-center shrink-0 text-sm md:text-base active:scale-95";
 
   return (
-    <div className="app-screen bg-linear-to-br from-slate-800 via-slate-700 to-blue-900 flex flex-col relative overflow-hidden">
+    <div className={shellClassName}>
       {/* Paw Print Background */}
       <svg
         className="absolute inset-0 w-full h-full opacity-15 pointer-events-none"
@@ -925,78 +935,79 @@ export default function Chat() {
       </svg>
 
       {/* Content Container - relative z-index to appear above paw prints */}
-      <div className="relative z-10">
+      <div className="relative z-10 flex-1">
+        <div className={backgroundOverlayClassName} />
 
       {/* Fixed Header */}
-      <div className="fixed top-0 left-0 right-0 z-50 bg-linear-to-br from-slate-800 via-slate-700 to-blue-900 p-3 md:p-6 border-b border-white/20">
+      <div className={headerClassName}>
         <div className="max-w-xl mx-auto">
-          <div className="bg-white/5 backdrop-blur-3xl border border-white/10 rounded-[28px] p-3 shadow-sm flex items-center gap-3">
+          <div className={headerCardClassName}>
+            <div className="flex items-center gap-3">
+              <Link
+                to="/messages"
+                className="text-lg font-bold text-white hover:scale-[1.05] transition"
+              >
+                ←
+              </Link>
 
-            <Link
-              to="/messages"
-              className="text-lg font-bold text-white hover:scale-[1.05] transition"
-            >
-              ←
-            </Link>
+              <div className={`grid place-items-center w-10 h-10 rounded-[20px] ${isVibesPro ? 'bg-linear-to-r from-[#D4AF37] to-[#F0C75E] text-[#111111]' : 'bg-linear-to-r from-cyan-400 to-blue-500 text-white'} font-bold text-sm`}>
+                {recipientName.charAt(0)}
+              </div>
 
-            <div className="grid place-items-center w-10 h-10 rounded-[20px] bg-linear-to-r from-cyan-400 to-blue-500 text-white font-bold text-sm">
-              {recipientName.charAt(0)}
+              <div>
+                <h2 
+                  className={`font-semibold text-sm md:text-base cursor-pointer transition ${isVibesPro ? 'text-[#F7E7B2] hover:text-[#FFD98A]' : 'text-white hover:text-cyan-300'}`}
+                  onClick={() => navigate(`/profile/${recipientName}`)}
+                >
+                  {recipientName}
+                </h2>
+
+                <p className={`text-xs mt-1 ${headerSubtextClassName}`}>
+                  {typingUsers.includes(recipientId)
+                    ? `${recipientName} is typing...`
+                    : presenceState[recipientId]
+                      ? "🟢 Online"
+                      : "Online now"}
+                </p>
+              </div>
+
+              {/* Call Buttons */}
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  onClick={() => alert(`Starting audio call with ${recipientName}`)}
+                  title="Audio call"
+                  className="bg-white/5 text-white p-2 rounded-xl hover:bg-white/10 transition"
+                >
+                  📞
+                </button>
+
+                <button
+                  onClick={() => alert(`Starting video call with ${recipientName}`)}
+                  title="Video call"
+                  className="bg-white/5 text-white p-2 rounded-xl hover:bg-white/10 transition"
+                >
+                  🎥
+                </button>
+              </div>
             </div>
 
-            <div>
-              <h2 
-                className="font-semibold text-sm md:text-base text-white cursor-pointer hover:text-cyan-300 transition"
-                onClick={() => navigate(`/profile/${recipientName}`)}
-              >
-                {recipientName}
-              </h2>
-
-              <p className="text-xs text-white/60 mt-1">
-                {typingUsers.includes(recipientId)
-                  ? `${recipientName} is typing...`
-                  : presenceState[recipientId]
-                    ? "🟢 Online"
-                    : "Online now"}
-              </p>
+            <div className={`overflow-hidden transition-all duration-300 ${showSearchBar || searchQuery.trim() ? 'max-h-12 opacity-100 mt-1' : 'max-h-0 opacity-0 mt-0'}`}>
+              <div className={`${panelClassName}`}>
+                <input
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search this conversation"
+                  className={`w-full bg-transparent text-sm outline-none ${isVibesPro ? 'text-[#F7E7B2] placeholder:text-[#E8C96F]/50 font-serif' : 'text-white placeholder:text-white/50'}`}
+                />
+              </div>
             </div>
-
-            {/* Call Buttons */}
-            <div className="ml-auto flex items-center gap-2">
-              <button
-                onClick={() => alert(`Starting audio call with ${recipientName}`)}
-                title="Audio call"
-                className="bg-white/5 text-white p-2 rounded-xl hover:bg-white/10 transition"
-              >
-                📞
-              </button>
-
-              <button
-                onClick={() => alert(`Starting video call with ${recipientName}`)}
-                title="Video call"
-                className="bg-white/5 text-white p-2 rounded-xl hover:bg-white/10 transition"
-              >
-                🎥
-              </button>
-            </div>
-
           </div>
         </div>
       </div>
 
       {/* Messages Container */}
-      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto pt-28 md:pt-32 pb-28 md:pb-32 px-3 md:px-6">
+      <div ref={messagesContainerRef} className={`relative z-10 ${messagesSurfaceClassName}`}>
         <div className="max-w-xl mx-auto">
-          {recipientId && (
-            <div className="mb-3 rounded-2xl border border-white/10 bg-white/10 px-3 py-2 backdrop-blur-xl">
-              <input
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search this conversation"
-                className="w-full bg-transparent text-sm text-white placeholder:text-white/50 outline-none"
-              />
-            </div>
-          )}
-
           {/* Messages */}
           {recipientId ? (
             <div className="space-y-4">
@@ -1017,7 +1028,7 @@ export default function Chat() {
 
                 if (filteredMessages.length === 0) {
                   return (
-                    <div className="text-center text-white/50 py-8">
+                    <div className={`text-center py-8 ${isVibesPro ? 'text-[#EBD39A]/70' : 'text-white/50'}`}>
                       No messages match your search. 🔎
                     </div>
                   );
@@ -1037,7 +1048,7 @@ export default function Chat() {
               <div ref={messagesEndRef} />
             </div>
           ) : (
-            <div className="bg-white/5 backdrop-blur-3xl border border-white/10 rounded-4xl p-8 text-center text-white/60 shadow-lg">
+            <div className={emptyStateClassName}>
               Open a message thread or tap a profile message icon to start chatting.
             </div>
           )}
@@ -1046,7 +1057,7 @@ export default function Chat() {
       </div>
 
       {/* Fixed Message Box at Bottom */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-linear-to-br from-slate-800 via-slate-700 to-blue-900 p-3 md:p-6 border-t border-white/20">
+      <div className={`fixed bottom-0 left-0 right-0 z-50 p-3 md:p-6 ${isVibesPro ? 'bg-[#111111]/95 border-t border-[#D4AF37]/20 shadow-[0_0_40px_rgba(212,175,55,0.10)]' : 'bg-linear-to-br from-slate-800 via-slate-700 to-blue-900 border-t border-white/20'}`}>
         <div className="max-w-xl mx-auto">
           {replyingTo && (
             <div className="mb-3 rounded-2xl border border-white/10 bg-white/10 px-3 py-2 text-sm text-white/80 flex items-center justify-between">
@@ -1125,7 +1136,7 @@ export default function Chat() {
             </div>
           ) : null}
 
-          <div className="bg-white/5 backdrop-blur-3xl border border-white/10 rounded-3xl md:rounded-4xl p-2 md:p-4 shadow-2xl">
+          <div className={messageBoxClassName}>
             {sendError ? (
               <div className="mb-2 rounded-2xl border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
                 {sendError}
@@ -1174,7 +1185,7 @@ export default function Chat() {
                   value={inputText}
                   onChange={handleInputChange}
                   onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                  className="w-full bg-transparent outline-none text-white placeholder-white/40 text-sm md:text-base px-2"
+                  className={inputClassName}
                 />
               </div>
 
@@ -1205,7 +1216,7 @@ export default function Chat() {
               <button
                 onClick={handleSend}
                 disabled={isLoading || authLoading || !userId || !recipientId || !conversationId || (!inputText.trim() && !selectedFile && !audioBlob)}
-                className="bg-linear-to-r from-cyan-500 to-blue-600 text-white h-10 w-10 md:w-auto md:px-4 rounded-full md:rounded-2xl font-bold shadow-lg hover:scale-105 transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex items-center justify-center shrink-0 text-sm md:text-base active:scale-95"
+                className={sendButtonClassName}
               >
                 {isLoading ? (
                   <span className="hidden md:inline">Uploading... {uploadProgress}%</span>

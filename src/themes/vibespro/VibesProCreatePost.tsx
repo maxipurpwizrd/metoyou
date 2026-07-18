@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useLanguage } from "../../contexts/LanguageContext";
 import { Image, Music, Smile } from 'lucide-react';
 import { PremiumCard } from './components/PremiumCard';
 import { PremiumButton } from './components/PremiumButton';
@@ -17,6 +18,7 @@ export const VibesProCreatePost: React.FC<VibesProCreatePostProps> = ({
 }) => {
   const [content, setContent] = useState('');
   const [isFocused, setIsFocused] = useState(false);
+  const { t } = useLanguage();
 
   const handlePost = () => {
     if (content.trim() && onPost) {
@@ -48,7 +50,7 @@ export const VibesProCreatePost: React.FC<VibesProCreatePostProps> = ({
           {/* User Info */}
           <div>
             <p className="font-semibold text-[#FFFFFF]">{userName}</p>
-            <p className="text-xs text-[#D6D6D6]">Drop your vibe</p>
+            <p className="text-xs text-[#D6D6D6]">{t("vibespro.create.dropVibe")}</p>
           </div>
         </div>
 
@@ -70,7 +72,7 @@ export const VibesProCreatePost: React.FC<VibesProCreatePostProps> = ({
             onChange={(e) => setContent(e.target.value)}
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
-            placeholder="Share your thoughts, moments, and vibes..."
+            placeholder={t("vibespro.create.placeholder")}
             className="w-full bg-transparent text-[#FFFFFF] placeholder-[#D6D6D6]/40 focus:outline-none resize-none"
             rows={3}
           />
@@ -104,7 +106,7 @@ export const VibesProCreatePost: React.FC<VibesProCreatePostProps> = ({
               onClick={handlePost}
               disabled={!content.trim()}
             >
-              Post
+              {t("vibespro.create.post")}
             </PremiumButton>
           </div>
         )}

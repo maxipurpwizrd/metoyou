@@ -1,4 +1,5 @@
 import type { VibesProPostCardProps } from '../types';
+import { useLanguage } from '../../../contexts/LanguageContext';
 
 export default function VibesProPostCard({
   title,
@@ -10,6 +11,8 @@ export default function VibesProPostCard({
   commentCount = 0,
   onClick,
 }: VibesProPostCardProps) {
+  const { t } = useLanguage();
+
   return (
     <article
       onClick={onClick}
@@ -20,10 +23,10 @@ export default function VibesProPostCard({
           mediaType === 'video' ? (
             <video src={mediaUrl} className="w-full h-full object-cover" muted playsInline />
           ) : (
-            <img src={mediaUrl} alt={title ?? 'Vibes Pro post'} loading="lazy" className="w-full h-full object-cover" />
+            <img src={mediaUrl} alt={title ?? t('vibespro.postAlt')} loading="lazy" className="w-full h-full object-cover" />
           )
         ) : (
-          <div className="flex h-full items-center justify-center text-sm text-white/60">No media</div>
+          <div className="flex h-full items-center justify-center text-sm text-white/60">{t('vibespro.noMedia')}</div>
         )}
       </div>
       <div className="p-3">

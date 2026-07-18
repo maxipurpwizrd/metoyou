@@ -466,7 +466,7 @@ export async function sendTypingIndicator(
     channel.on(
       "broadcast",
       { event: "typing" },
-      (evt) => {
+      () => {
         // Just listen, no response needed
       }
     );
@@ -592,10 +592,7 @@ export function joinPresence(
           online_at: new Date().toISOString(),
         };
 
-        const { error } = await channel.track(presenceData);
-        if (error) {
-          console.error("joinPresence track error", error);
-        }
+        await channel.track(presenceData);
 
         console.debug(`Joined presence for conversation ${conversationId}`);
       }
@@ -610,7 +607,7 @@ export function joinPresence(
 
 export async function leavePresence(
   conversationId: string,
-  userId: string,
+  _userId: string,
   channel?: RealtimeChannel
 ): Promise<void> {
   try {

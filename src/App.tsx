@@ -11,6 +11,8 @@ import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
+import AuthChoice from "./pages/AuthChoice";
+import AboutMeToYou from "./pages/AboutMeToYou";
 import Chat from "./pages/Chat";
 import Messages from "./pages/Messages";
 import Notifications from "./pages/Notifications";
@@ -32,6 +34,8 @@ function App() {
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/feed" element={<RequireAuth><Feed /></RequireAuth>} />
+              <Route path="/welcome" element={<AuthChoice />} />
+              <Route path="/about" element={<AboutMeToYou />} />
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
               <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />

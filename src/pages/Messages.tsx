@@ -1,16 +1,20 @@
 import { Link } from "react-router-dom";
 import { useEffect, useState, useRef } from "react";
 import { useAuth } from "../hooks/useAuth";
+import { useLanguage } from "../contexts/LanguageContext";
 import { getMessageThreads, type MessageThread } from "../lib/messageApi";
 import { getProfile } from "../utils/profileStorage";
+import { useProfile } from "../contexts/ProfileContext";
 import { VibesProFeed } from "../themes/vibespro";
 
 export default function Messages(_props: { embedded?: boolean } = {}) {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [threads, setThreads] = useState<MessageThread[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const mountedRef = useRef(true);
-  const profile = getProfile();
+  const { profile: profileFromContext } = useProfile();
+  const profile = profileFromContext ?? getProfile();
   const isVibesPro = profile?.is_vibes_pro === true;
 
   // Restore/save scroll position for messages list per user
@@ -132,7 +136,7 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
               <Link
                 to="/feed"
                 className="text-slate-900 bg-white/80 shadow-sm rounded-full p-2 hover:bg-white transition"
-                aria-label="Go back"
+                aria-label={t("notifications.goBack")}
               >
                 ←
               </Link>
@@ -142,15 +146,15 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
             </div>
 
             <p className="text-slate-900 text-base sm:text-lg mt-3 leading-7">
-              Rainbow iced, diamond chain energy — chat flex hard.
+              {t("messages.subtitle")}
             </p>
 
             <div className="mt-3 inline-flex items-center gap-2 text-xs uppercase tracking-[0.25em] text-slate-700 justify-center">
               <span className="inline-block px-3 py-1 rounded-full bg-linear-to-r from-fuchsia-500 via-cyan-300 to-amber-300 text-white shadow-lg shadow-fuchsia-200/40">
-                Diamond drip
+                {t("messages.badge")}
               </span>
               <span className="inline-block px-3 py-1 rounded-full bg-white/90 text-slate-900 border border-slate-200 backdrop-blur-sm shadow-sm">
-                Ice cold
+                {t("messages.badgeAlt")}
               </span>
             </div>
           </div>
@@ -159,7 +163,7 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
 
       <div className={`max-w-xl mx-auto ${isVibesPro ? 'pt-8' : ''}`}>
         {isVibesPro && (
-          <h1 className="text-4xl sm:text-5xl font-black text-white mb-8">Messages</h1>
+          <h1 className="text-4xl sm:text-5xl font-black text-white mb-8">{t("messages.title")}</h1>
         )}
 
         {/* Search Bar */}
@@ -170,7 +174,7 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
         }`}>
           <input
             type="text"
-            placeholder="Search conversations..."
+            placeholder={t("messages.searchPlaceholder")}
             className={`w-full outline-none bg-transparent ${
               isVibesPro ? 'text-white placeholder-white/50' : 'text-slate-900 placeholder-slate-700'
             }`}
@@ -186,7 +190,7 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
                 ? 'bg-[#181818] border border-[#D4AF37]/20 text-white/70'
                 : 'bg-white/30 backdrop-blur-3xl border border-white/40 text-slate-700'
             }`}>
-              Loading conversations...
+              {t("messages.loading")}
             </div>
           ) : threads.length === 0 ? (
             <div className={`rounded-[28px] p-6 text-center shadow-sm ${
@@ -194,7 +198,7 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
                 ? 'bg-[#181818] border border-[#D4AF37]/20 text-white/70'
                 : 'bg-white/30 backdrop-blur-3xl border border-white/40 text-slate-700'
             }`}>
-              No conversations yet. Start messaging someone from a profile.
+              {t("messages.empty")}
             </div>
           ) : (
             threads.map((thread) => (
@@ -229,7 +233,7 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
                       <p className={`text-sm truncate ${
                         isVibesPro ? 'text-white/60' : 'text-slate-600'
                       }`}>
-                        {thread.lastText || "No messages yet"}
+                        {thread.lastText || t("messages.noMessages")}
                       </p>
                     </div>
                     {thread.lastTime && (

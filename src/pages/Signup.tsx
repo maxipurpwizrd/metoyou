@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { signUp } from "../lib/auth";
 import { useLanguage } from "../contexts/LanguageContext";
@@ -12,14 +12,18 @@ export default function Signup() {
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedDay, setSelectedDay] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
   const [gender, setGender] = useState("");
   const [loading, setLoading] = useState(false);
-  const [languageStep, setLanguageStep] = useState<"choose-lang" | "choose-english-variant" | "continue">("choose-lang");
   const [selectedLanguage, setSelectedLanguage] = useState<Language>(language);
+
+  useEffect(() => {
+    setSelectedLanguage(language);
+  }, [language]);
 
   const monthOptions = useMemo(() => [
     { value: "01", label: "January" },
@@ -58,98 +62,14 @@ export default function Signup() {
     try {
       await signUp(email, password, firstName, lastName, selectedLanguage, birthDateValue, gender);
       setLanguage(selectedLanguage);
-      alert("Account created 🔥");
+      alert(t("auth.accountCreated"));
       navigate("/login");
     } catch (error) {
-      alert("Signup failed");
+      alert(t("auth.signupFailed"));
       console.error(error);
     } finally {
       setLoading(false);
     }
-  }
-
-  if (languageStep === "choose-lang") {
-    return (
-      <div className="app-screen bg-linear-to-br from-pink-100 via-purple-100 to-blue-100 p-6 pt-32">
-        <div className="max-w-md mx-auto">
-          <div className="bg-white/60 backdrop-blur-xl rounded-2xl p-6 shadow-xl border border-white/60">
-            <h1 className="text-4xl font-black text-center mb-2">{t("app.title")}</h1>
-            <p className="text-center text-slate-600 mb-6">Choose your language</p>
-
-            <div className="space-y-3">
-              <button
-                onClick={() => {
-                  setSelectedLanguage("en-basic");
-                  setLanguageStep("choose-english-variant");
-                }}
-                className="w-full rounded-2xl border px-4 py-3 text-left hover:bg-blue-50"
-              >
-                {t("lang.en-basic")}
-              </button>
-              <button
-                onClick={() => {
-                  setSelectedLanguage("en-street");
-                  setLanguageStep("choose-english-variant");
-                }}
-                className="w-full rounded-2xl border px-4 py-3 text-left hover:bg-blue-50"
-              >
-                {t("lang.en-street")}
-              </button>
-              <button
-                onClick={() => {
-                  setSelectedLanguage("fr-fr");
-                  setLanguageStep("continue");
-                }}
-                className="w-full rounded-2xl border px-4 py-3 text-left hover:bg-blue-50"
-              >
-                {t("lang.fr-fr")}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (languageStep === "choose-english-variant") {
-    return (
-      <div className="app-screen bg-linear-to-br from-pink-100 via-purple-100 to-blue-100 p-6 pt-32">
-        <div className="max-w-md mx-auto">
-          <div className="bg-white/60 backdrop-blur-xl rounded-2xl p-6 shadow-xl border border-white/60">
-            <h1 className="text-4xl font-black text-center mb-2">{t("app.title")}</h1>
-            <p className="text-center text-slate-600 mb-6">Pick your vibe</p>
-
-            <div className="space-y-3 mb-4">
-              <label className="flex items-center gap-3 rounded-2xl border px-4 py-3 cursor-pointer">
-                <input
-                  type="radio"
-                  checked={selectedLanguage === "en-basic"}
-                  onChange={() => setSelectedLanguage("en-basic")}
-                />
-                <span>Basic English</span>
-              </label>
-              <label className="flex items-center gap-3 rounded-2xl border px-4 py-3 cursor-pointer">
-                <input
-                  type="radio"
-                  checked={selectedLanguage === "en-street"}
-                  onChange={() => setSelectedLanguage("en-street")}
-                />
-                <span>Street Slang</span>
-              </label>
-            </div>
-
-            <div className="flex gap-2">
-              <button onClick={() => setLanguageStep("choose-lang")} className="flex-1 rounded-2xl border px-4 py-2">
-                Back
-              </button>
-              <button onClick={() => setLanguageStep("continue")} className="flex-1 rounded-2xl bg-blue-600 text-white px-4 py-2">
-                Continue
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
   }
 
   return (
@@ -242,7 +162,21 @@ export default function Signup() {
           />
 
           <label className="block text-sm mb-2">{t("signup.password")}</label>
-          <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" className="w-full rounded-2xl border px-3 py-2 mb-4" />
+          <div className="relative mb-4">
+            <input
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              type={showPassword ? "text" : "password"}
+              className="w-full rounded-2xl border px-3 py-2 pr-12"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((prev) => !prev)}
+              className="absolute inset-y-0 right-3 flex items-center text-sm font-semibold text-slate-600"
+            >
+              {showPassword ? t("auth.hidePassword") : t("auth.showPassword")}
+            </button>
+          </div>
 
           <p className="text-sm text-slate-600 mb-4">
             {t("signup.language")}: <span className="font-semibold">{selectedLanguage === "en-basic" ? t("lang.en-basic") : selectedLanguage === "en-street" ? t("lang.en-street") : t("lang.fr-fr")}</span>
@@ -255,16 +189,6 @@ export default function Signup() {
           <p className="text-center text-sm text-slate-600">
             {t("signup.loginText")} <Link to="/login" className="text-pink-600 font-semibold">{t("signup.loginLink")}</Link>
           </p>
-
-          <button
-            type="button"
-            onClick={() => {
-              setLanguageStep("choose-lang");
-            }}
-            className="w-full mt-4 text-sm text-slate-500 rounded-2xl border px-4 py-2"
-          >
-            Change Language
-          </button>
         </form>
       </div>
     </div>

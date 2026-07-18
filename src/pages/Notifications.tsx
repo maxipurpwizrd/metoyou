@@ -12,7 +12,9 @@ import {
   type Notification,
 } from "../lib/notificationApi";
 import { getProfile } from "../utils/profileStorage";
+import { useProfile } from "../contexts/ProfileContext";
 import { VibesProFeed } from "../themes/vibespro";
+import { useLanguage } from "../contexts/LanguageContext";
 
 function joinActorNames(names: string[]) {
   if (names.length === 0) return "Someone";
@@ -68,7 +70,9 @@ function groupNotifications(notifications: Notification[]): NotificationItem[] {
 export default function Notifications(_props: { embedded?: boolean } = {}) {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const profile = getProfile();
+  const { t } = useLanguage();
+  const { profile: profileFromContext } = useProfile();
+  const profile = profileFromContext ?? getProfile();
   const isVibesPro = profile?.is_vibes_pro === true;
   const greetingName = (() => {
     const rawFirstName = profile?.firstName?.trim();
@@ -193,7 +197,7 @@ export default function Notifications(_props: { embedded?: boolean } = {}) {
         : Number(timestamp);
 
     if (!Number.isFinite(numericTimestamp) || numericTimestamp <= 0) {
-      return "Just now";
+      return t("notifications.justNow");
     }
 
     const diff = Date.now() - numericTimestamp;
@@ -201,14 +205,14 @@ export default function Notifications(_props: { embedded?: boolean } = {}) {
     const hours = Math.floor(diff / 3600000);
     const days = Math.floor(diff / 86400000);
 
-    if (minutes < 1) return "Just now";
-    if (minutes < 60) return `${minutes}m ago`;
-    if (hours < 24) return `${hours}h ago`;
-    if (days === 1) return "Yesterday";
-    return `${days}d ago`;
+    if (minutes < 1) return t("notifications.justNow");
+    if (minutes < 60) return t("notifications.minutesAgo").replace("{count}", String(minutes));
+    if (hours < 24) return t("notifications.hoursAgo").replace("{count}", String(hours));
+    if (days === 1) return t("notifications.yesterday");
+    return t("notifications.daysAgo").replace("{count}", String(days));
   };
 
-  const unreadCount = useMemo(
+  useMemo(
     () => notifications.filter((notif) => !notif.read).length,
     [notifications]
   );
@@ -274,10 +278,10 @@ export default function Notifications(_props: { embedded?: boolean } = {}) {
         <div className="flex items-center justify-between gap-3 mb-6">
           <div>
             <p className={`text-sm font-semibold uppercase tracking-[0.3em] ${isVibesPro ? 'text-[#D4AF37]' : 'text-pink-600'}`}>
-              Activity
+              {t("notifications.activity")}
             </p>
             <h1 className={`text-4xl sm:text-5xl font-black ${isVibesPro ? 'text-white' : 'text-slate-950'}`}>
-              Notifications
+              {t("notifications.title")}
             </h1>
           </div>
           <button
@@ -290,7 +294,7 @@ export default function Notifications(_props: { embedded?: boolean } = {}) {
             }`}
           >
             <Trash2 size={16} />
-            Delete All
+            {t("notifications.deleteAll")}
           </button>
         </div>
 
@@ -301,7 +305,7 @@ export default function Notifications(_props: { embedded?: boolean } = {}) {
               : 'bg-white/20 backdrop-blur-3xl border border-white/30'
           }`}>
             <p className={isVibesPro ? 'text-white/70' : 'text-slate-600'}>
-              No notifications yet
+              {t("notifications.empty")}
             </p>
           </div>
         ) : (
@@ -336,7 +340,7 @@ export default function Notifications(_props: { embedded?: boolean } = {}) {
                       ? 'bg-white/10 text-white hover:bg-white/15'
                       : 'bg-white/90 text-slate-900 hover:bg-white'
                   }`}
-                  aria-label="Delete notification"
+                  aria-label={t("notifications.deleteSingle")}
                 >
                   <Trash2 size={14} />
                 </button>
@@ -408,12 +412,14 @@ export default function Notifications(_props: { embedded?: boolean } = {}) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
           <div className={`w-full max-w-md rounded-4xl border ${isVibesPro ? 'border-[#D4AF37]/50 bg-[#111111]' : 'border-white/60 bg-white'} p-6 shadow-2xl`}>
             <p className={`text-xl font-bold ${isVibesPro ? 'text-white' : 'text-slate-950'}`}>
-              {confirmDialog.mode === 'all' ? 'Clear all notifications?' : 'Delete this notification?'}
+              {confirmDialog.mode === 'all' ? t("notifications.confirmClearAll") : t("notifications.confirmDelete")}
             </p>
             <p className={`mt-3 text-sm ${isVibesPro ? 'text-white/70' : 'text-slate-600'}`}>
               {confirmDialog.mode === 'all'
-                ? 'Puff! Your activity feed will be refreshed with a clean slate.'
-                : `Are you sure you want to cuddle away ${confirmDialog.item?.count ?? 1} notification${confirmDialog.item?.count === 1 ? '' : 's'}?`}
+                ? t("notifications.confirmClearBody")
+                : t("notifications.confirmDeleteBody")
+                    .replace("{count}", String(confirmDialog.item?.count ?? 1))
+                    .replace("{plural}", confirmDialog.item?.count === 1 ? "" : "s")}
             </p>
             <div className="mt-6 flex flex-wrap justify-end gap-3">
               <button
@@ -421,14 +427,14 @@ export default function Notifications(_props: { embedded?: boolean } = {}) {
                 onClick={cancelDelete}
                 className={`rounded-full border px-4 py-2 text-sm font-medium transition ${isVibesPro ? 'border-white/20 bg-white/5 text-white hover:bg-white/10' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100'}`}
               >
-                Cancel
+                {t("notifications.cancel")}
               </button>
               <button
                 type="button"
                 onClick={confirmDelete}
                 className={`rounded-full px-4 py-2 text-sm font-semibold transition ${isVibesPro ? 'bg-[#D4AF37] text-black hover:bg-[#e0c766]' : 'bg-rose-600 text-white hover:bg-rose-700'}`}
               >
-                {confirmDialog.mode === 'all' ? 'Yes, clear them' : 'Yes, delete it'}
+                {confirmDialog.mode === 'all' ? t("notifications.confirmClearYes") : t("notifications.confirmDeleteYes")}
               </button>
             </div>
           </div>

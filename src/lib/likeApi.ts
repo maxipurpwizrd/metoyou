@@ -25,32 +25,36 @@ export async function likePost(postId: string, userId: string) {
       created_at: new Date().toISOString(),
     };
 
-    const { data, error } = await supabase.from("post_likes").insert(insert).select("id, post_id, user_id, created_at").maybeSingle();
+    const { data, error } = await supabase
+      .from("post_likes")
+      .insert(insert)
+      .select("id, post_id, user_id, created_at")
+      .maybeSingle();
     if (error) throw error;
 
-    const { data: postData, error: postError } = await supabase.from("posts").select("author_id").eq("id", postId).maybeSingle();
+    const { data: postData, error: postError } = await supabase
+      .from("posts")
+      .select("author_id")
+      .eq("id", postId)
+      .maybeSingle();
     if (postError) throw postError;
 
     const authorId = postData?.author_id;
     if (authorId && authorId !== userId) {
-      const { data: actorData, error: actorError } = await supabase.from("profiles").select("username").eq("id", userId).maybeSingle();
+      const { data: actorData, error: actorError } = await supabase
+        .from("profiles")
+        .select("username")
+        .eq("id", userId)
+        .maybeSingle();
       if (!actorError && actorData?.username) {
-        const actorUsername = actorData.username;
         const createdAt = new Date().toISOString();
         const notificationData = {
           type: "like",
-      message: "liked your post",
+          message: "liked your post",
           user_id: authorId,
           created_at: createdAt,
           is_read: false,
         };
-
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-
-        console.log("Current auth uid", user?.id);
-        console.log("Notification insert payload", notificationData);
 
         await supabase.from("notifications").insert(notificationData);
       }

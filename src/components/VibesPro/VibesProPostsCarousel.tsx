@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useLanguage } from "../../contexts/LanguageContext";
 import type { VibesProPostType } from './types';
 
 type VibesProPostsCarouselProps = {
@@ -9,6 +10,7 @@ type VibesProPostsCarouselProps = {
 export default function VibesProPostsCarousel({ posts, onPostSelect }: VibesProPostsCarouselProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const { t } = useLanguage();
 
   useEffect(() => {
     const el = containerRef.current;
@@ -40,7 +42,7 @@ export default function VibesProPostsCarousel({ posts, onPostSelect }: VibesProP
       <div
         ref={containerRef}
         className="flex flex-1 gap-3 overflow-x-auto pb-1 scrollbar-none snap-x snap-mandatory scroll-smooth md:gap-4"
-        aria-label="Vibes Pro posts carousel"
+        aria-label={t("vibespro.postsCarouselAria")}
       >
         {posts.map((post) => (
           <article
@@ -57,10 +59,10 @@ export default function VibesProPostsCarousel({ posts, onPostSelect }: VibesProP
             className="h-[24vh] w-[28vw] shrink-0 snap-start overflow-hidden rounded-2xl border border-amber-600/20 bg-slate-900 text-white shadow-lg relative cursor-pointer transition hover:-translate-y-1 hover:shadow-amber-400/20 md:h-45 md:w-45"
           >
             {post.mediaUrl ? (
-              <img src={post.mediaUrl} alt={post.title ?? 'Vibes Pro post'} loading="lazy" className="h-full w-full object-cover" />
+              <img src={post.mediaUrl} alt={post.title ?? t("vibespro.postAlt")} loading="lazy" className="h-full w-full object-cover" />
             ) : (
               <div className="flex h-full items-center justify-center px-4 text-center text-sm text-white/70">
-                {post.description ?? 'No media'}
+                {post.description ?? t("vibespro.noMedia")}
               </div>
             )}
 
@@ -92,7 +94,7 @@ export default function VibesProPostsCarousel({ posts, onPostSelect }: VibesProP
             <button
               key={i}
               type="button"
-              aria-label={`Go to post ${i + 1}`}
+              aria-label={`${t("vibespro.goToPost")} ${i + 1}`}
               onClick={() => {
                 const el = containerRef.current;
                 if (!el) return;
@@ -105,8 +107,8 @@ export default function VibesProPostsCarousel({ posts, onPostSelect }: VibesProP
         </div>
 
         <div className="text-center">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-amber-300">VibesPro</p>
-          <p className="text-[11px] text-white/70">This is a premium user</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-amber-300">{t("vibespro.title")}</p>
+          <p className="text-[11px] text-white/70">{t("vibespro.premiumUser")}</p>
         </div>
       </div>
     </section>

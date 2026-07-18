@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Mic, Square } from "lucide-react";
-import { getProfile } from "../utils/profileStorage";
+import { useProfile } from "../contexts/ProfileContext";
 import { uploadVideo, type UploadProgress } from "../lib/videoApi";
 import { optimizeImageFile } from "../lib/imageUtils";
 import { getSupportedAudioRecorderOptions, optimizeVoiceNote } from "../lib/mediaOptimizer";
@@ -16,6 +16,7 @@ type Props = {
 
 
 export default function CreatePost({ onPost }: Props) {
+  const { profile } = useProfile();
 
   const [text, setText] = useState("");
 
@@ -720,13 +721,13 @@ export default function CreatePost({ onPost }: Props) {
 
           <div className="w-11 h-11 rounded-2xl bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 flex items-center justify-center text-white font-bold shrink-0">
 
-            {(getProfile()?.username ?? "M")[0].toUpperCase()}
+            {(profile?.username ?? "M")[0].toUpperCase()}
 
           </div>
 
           <div>
 
-            <p className="font-semibold text-slate-900">{getProfile()?.username ?? "User"}</p>
+            <p className="font-semibold text-slate-900">{profile?.username ?? "User"}</p>
 
             <p className="text-sm text-slate-600">Posting to your feed</p>
 

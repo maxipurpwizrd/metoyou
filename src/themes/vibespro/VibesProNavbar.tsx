@@ -1,8 +1,10 @@
 import React from 'react';
 import { Home, Search, MessageCircle, Bell, User } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 export const VibesProNavbar: React.FC = () => {
+  const { t } = useLanguage();
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0B0B0B] border-b border-white/8 shadow-lg">
       <div className="w-full px-2 sm:px-3 md:px-4 lg:px-6">
@@ -10,7 +12,7 @@ export const VibesProNavbar: React.FC = () => {
           {/* Logo */}
           <Link to="/feed" className="flex items-center min-w-0 shrink-0 hover:opacity-80 transition-opacity">
             <span className="text-[1.35rem] sm:text-[1.6rem] font-bold bg-linear-to-r from-[#7C5CFF] to-[#00D4FF] bg-clip-text text-transparent tracking-tight whitespace-nowrap">
-              VibesPro ✨
+              {t('vibespro.title')}
             </span>
           </Link>
 

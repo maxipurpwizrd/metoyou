@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Mic, Square } from "lucide-react";
 import ImageViewer from "./ImageViewer";
-import { getProfile } from "../utils/profileStorage";
+import { useProfile } from "../contexts/ProfileContext";
 import { useAutoplayVideo } from "../hooks/useAutoplayVideo";
 import { useAutoplayAudio } from "../hooks/useAutoplayAudio";
 import { useVideoContext } from "../contexts/VideoContext";
@@ -89,7 +89,7 @@ export default function PostCard({
 }: Props) {
   const navigate = useNavigate();
   const location = useLocation();
-  const currentUser = getProfile();
+  const { profile: currentUser } = useProfile();
   const ownerId = authorId ?? author?.id;
   const isOwner = Boolean(currentUser && ownerId && currentUser.id === ownerId);
 

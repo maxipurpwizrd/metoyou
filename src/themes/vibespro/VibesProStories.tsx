@@ -1,4 +1,5 @@
 import React from 'react';
+import { useLanguage } from '../../contexts/LanguageContext';
 import { Plus } from 'lucide-react';
 import { PremiumCard } from './components/PremiumCard';
 
@@ -18,6 +19,7 @@ export const VibesProStories: React.FC<VibesProStoriesProps> = ({
   stories = [],
   onAddStory,
 }) => {
+  const { t } = useLanguage();
   // Default stories if none provided
   const defaultStories: Story[] = [
     { id: '1', name: 'Jay', timeRemaining: '19h 3m' },
@@ -37,7 +39,7 @@ export const VibesProStories: React.FC<VibesProStoriesProps> = ({
         >
           <PremiumCard withGlow className="w-full h-full flex flex-col items-center justify-center gap-3 hover:shadow-[0_0_40px_rgba(212,175,55,0.2)]">
             <Plus size={24} className="text-[#F0C75E]" />
-            <span className="text-xs font-semibold text-[#D6D6D6] text-center">Your Story</span>
+            <span className="text-xs font-semibold text-[#D6D6D6] text-center">{t('vibespro.yourStory')}</span>
           </PremiumCard>
         </button>
 

@@ -1,13 +1,15 @@
 import { Link, useLocation } from "react-router-dom";
+import { useLanguage } from "../contexts/LanguageContext";
 
 export default function MobileDock() {
   const location = useLocation();
+  const { t } = useLanguage();
 
   const navItems = [
-    { path: "/feed", icon: "🏠" },
-    { path: "/messages", icon: "💬" },
-    { path: "/chat", icon: "🔥" },
-    { path: "/profile", icon: "👤" },
+    { path: "/feed", icon: "🏠", label: t("nav.home") },
+    { path: "/messages", icon: "💬", label: t("nav.messages") },
+    { path: "/chat", icon: "🔥", label: "Chat" },
+    { path: "/profile", icon: "👤", label: t("nav.profile") },
   ];
 
   return (
@@ -34,7 +36,8 @@ export default function MobileDock() {
                 }
               `}
             >
-              {item.icon}
+              <span aria-hidden>{item.icon}</span>
+              <span className="sr-only">{item.label}</span>
             </Link>
           );
         })}
