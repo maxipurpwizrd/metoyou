@@ -262,8 +262,8 @@ export default function ChatBubble({ message, mine = false, onEdit, onDelete, on
   }
 
   return (
-    <div className={`flex ${mine ? "justify-end" : "justify-start"} group`}>
-      <div className={`max-w-[75%] mb-2 text-sm ${mine ? "text-right" : "text-left"}`}>
+    <div className={`flex w-full ${mine ? "justify-end" : "justify-start"} group`}>
+      <div className={`w-full max-w-[min(85%,28rem)] min-w-0 mb-2 text-sm ${mine ? "text-right" : "text-left"}`}>
         {/* Menu button - appears on hover for own messages */}
         {mine && (
           <div className="flex items-center justify-end gap-1 mb-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -351,7 +351,7 @@ export default function ChatBubble({ message, mine = false, onEdit, onDelete, on
         {/* Message bubble */}
         <div
           ref={bubbleWrapperRef}
-          className={`${bubbleBase} inline-block px-4 py-4`}
+          className={`${bubbleBase} inline-flex max-w-full flex-col overflow-hidden px-4 py-4`}
           onPointerDown={startReactionHold}
           onPointerUp={cancelReactionHold}
           onPointerLeave={cancelReactionHold}
@@ -361,11 +361,11 @@ export default function ChatBubble({ message, mine = false, onEdit, onDelete, on
             {hasReply && (
               <div className={`rounded-2xl border px-3 py-2 text-xs ${mine ? "border-white/20 bg-white/10 text-white/80" : "border-slate-300/70 bg-slate-50/80 text-slate-700"}`}>
                 <div className="font-medium opacity-70">Reply</div>
-                <div className="mt-1 whitespace-pre-wrap wrap-break-word">{replyText ?? "Quoted message"}</div>
+                <div className="mt-1 wrap-break-word overflow-wrap-anywhere whitespace-pre-wrap">{replyText ?? "Quoted message"}</div>
               </div>
             )}
             {hasText && (
-              <div className="wrap-break-word whitespace-pre-wrap text-left">{message.text}</div>
+              <div className="wrap-break-word overflow-wrap-anywhere whitespace-pre-wrap text-left">{message.text}</div>
             )}
 
             {hasImage && (

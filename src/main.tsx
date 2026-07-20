@@ -1,25 +1,29 @@
-import { StrictMode, useEffect } from "react";
+import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
 import App from "./App";
 import { LanguageProvider } from "./contexts/LanguageContext";
-import { ProfileProvider, setGlobalProfile } from './contexts/ProfileContext';
+import { ProfileProvider } from './contexts/ProfileContext';
 import { FeedProvider } from "./contexts/FeedContext";
 import { AuthProvider } from "./hooks/useAuth";
+import { AppInitProvider } from './contexts/AppInitContext';
+import { SessionProvider } from './contexts/SessionContext';
+import AppBootstrap from './components/AppBootstrap';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
 import { Analytics } from '@vercel/analytics/react'
-import { fetchProfileFromSupabase } from './lib/profileApi';
-import { saveProfile } from './utils/profileStorage';
+
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
       <LanguageProvider>
+        <SessionProvider>
         <FeedProvider>
-        <StartupSync />
-        <ProfileProvider>
+        <AppInitProvider>
+          <AppBootstrap>
+          <ProfileProvider>
           <div className="relative app-screen overflow-hidden">
 
           {/* Background Blob 1 */}
@@ -34,39 +38,15 @@ createRoot(document.getElementById("root")!).render(
           <App />
           <Analytics />
           </div>
-        </ProfileProvider>
+          </ProfileProvider>
+          </AppBootstrap>
+        </AppInitProvider>
         </FeedProvider>
+        </SessionProvider>
       </LanguageProvider>
       </AuthProvider>
     </QueryClientProvider>
   </StrictMode>
 );
 
-  function StartupSync() {
-    useEffect(() => {
-      let mounted = true;
-      (async () => {
-        try {
-          const serverProfile = await fetchProfileFromSupabase();
-          if (!mounted) return;
-          if (serverProfile) {
-            console.log('[startup] fetched profile from server', { id: serverProfile.id, is_vibes_pro: serverProfile.is_vibes_pro });
-            // Save authoritative server profile to localStorage so entitlements are reconciled
-            saveProfile(serverProfile);
-            // apply any server-driven theme if present
-            if (serverProfile.is_vibes_pro) {
-              document.documentElement.dataset.theme = 'vibespro';
-            }
-            // update global profile context so components re-render without reload
-            try { setGlobalProfile(serverProfile); } catch {}
-          }
-        } catch (e) {
-          console.warn('[startup] failed to fetch profile from supabase', e);
-        }
-      })();
-
-      return () => { mounted = false };
-    }, []);
-
-    return null;
-  }
+  

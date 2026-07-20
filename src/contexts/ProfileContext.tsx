@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext } from 'react';
+import { useSession } from './SessionContext';
 import type { ProfileData } from '../types/profile';
-import { getProfile } from '../utils/profileStorage';
 
 type ProfileContextValue = {
   profile: ProfileData | null;
@@ -9,22 +9,16 @@ type ProfileContextValue = {
 
 const ProfileContext = createContext<ProfileContextValue | undefined>(undefined);
 
-let setProfileGlobal: ((p: ProfileData | null) => void) | null = null;
-
 export function setGlobalProfile(p: ProfileData | null) {
-  if (setProfileGlobal) setProfileGlobal(p);
+  const session = (window as Window & { __metoyouSessionSetter?: (p: ProfileData | null) => void }).__metoyouSessionSetter;
+  session?.(p);
 }
 
 export function ProfileProvider({ children }: { children: React.ReactNode }) {
-  const [profile, setProfile] = useState<ProfileData | null>(() => getProfile() ?? null);
-
-  useEffect(() => {
-    setProfileGlobal = setProfile;
-    return () => { setProfileGlobal = null };
-  }, []);
+  const session = useSession();
 
   return (
-    <ProfileContext.Provider value={{ profile, setProfile }}>
+    <ProfileContext.Provider value={{ profile: session.profile, setProfile: session.setProfile }}>
       {children}
     </ProfileContext.Provider>
   );

@@ -6,11 +6,9 @@ import type { DbProfile, ProfileData, ProfileSearchResult } from "../types/profi
 const PROFILE_PICTURE_BUCKET = "profile-pictures";
 
 function normalizeProfileRecord(result: DbProfile): ProfileData {
-  // Some rows may have `is_vibes_pro` or `vibes_pro` set (legacy vs canonical).
-  // Treat the user as VibesPro if either flag is explicitly true. Avoid using
-  // nullish coalescing which would let an explicit `false` on one field shadow
-  // a `true` on the other.
-  const isVibesPro = Boolean(result.vibes_pro || result.is_vibes_pro);
+  // Prefer the canonical Supabase flag, but keep a compatibility fallback for
+  // older payloads that may still contain the legacy property.
+  const isVibesPro = Boolean(result.is_vibes_pro ?? result.vibes_pro ?? false);
 
   return {
     ...result,
@@ -64,11 +62,11 @@ export async function upsertProfileToSupabase(profile: ProfileData): Promise<Pro
     const existingProfile = (existingProfileRow as DbProfile | null) ?? null;
     const normalizedLanguage = normalizeLanguage(profile.language ?? existingProfile?.language ?? undefined);
     const { profilePic, dateOfBirth, gender } = profile;
-    const vibesProValue = typeof profile.vibes_pro === "boolean"
-      ? profile.vibes_pro
-      : typeof profile.is_vibes_pro === "boolean"
-        ? profile.is_vibes_pro
-        : Boolean(existingProfile?.vibes_pro ?? existingProfile?.is_vibes_pro ?? false);
+    const vibesProValue = typeof profile.is_vibes_pro === "boolean"
+      ? profile.is_vibes_pro
+      : typeof profile.vibes_pro === "boolean"
+        ? profile.vibes_pro
+        : Boolean(existingProfile?.is_vibes_pro ?? existingProfile?.vibes_pro ?? false);
     const dbProfile = {
       id: profile.id,
       username: profile.username ?? existingProfile?.username ?? "",
@@ -77,7 +75,7 @@ export async function upsertProfileToSupabase(profile: ProfileData): Promise<Pro
       profile_pic: profilePic ?? profile.vibes_pro_portrait ?? existingProfile?.profile_pic ?? null,
       date_of_birth: dateOfBirth ?? existingProfile?.date_of_birth ?? null,
       gender: gender ?? existingProfile?.gender ?? null,
-      vibes_pro: vibesProValue,
+      is_vibes_pro: vibesProValue,
       vibes_pro_portrait: profile.vibes_pro_portrait ?? existingProfile?.vibes_pro_portrait ?? null,
       vibes_pro_until: profile.vibes_pro_until ?? existingProfile?.vibes_pro_until ?? null,
       stripe_customer_id: profile.stripe_customer_id ?? existingProfile?.stripe_customer_id ?? null,
@@ -102,7 +100,7 @@ export async function upsertProfileToSupabase(profile: ProfileData): Promise<Pro
     console.log("[trace][profileApi] response", {
       error,
       data,
-      dataIsVibesPro: (data as DbProfile | null | undefined)?.vibes_pro,
+      dataIsVibesPro: (data as DbProfile | null | undefined)?.is_vibes_pro,
       dataLanguage: (data as DbProfile | null | undefined)?.language,
     });
     if (error) throw error;

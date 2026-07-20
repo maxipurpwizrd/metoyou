@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode,
 import { useQueryClient } from '@tanstack/react-query';
 import { fetchPostsFromSupabase } from "../lib/postApi";
 import { useAuth } from "../hooks/useAuth";
+import { isVibesProEnabled } from "../lib/vibesPro";
 import type { PostRecord } from "../types/post";
 
 export type User = {
@@ -44,17 +45,27 @@ export type Post = {
 const PAGE_SIZE = 7;
 const LOAD_MORE_THRESHOLD = 240;
 const FEED_CACHE_KEY = "metoyou-feed-cache";
+const FEED_CACHE_TTL_MS = 45_000;
 
-const readCachedFeed = (): Post[] => {
-  if (typeof window === "undefined") return [];
+type CachedFeedEntry = {
+  posts: Post[];
+  cachedAt: number;
+};
+
+const readCachedFeed = (): { posts: Post[]; cachedAt: number } | null => {
+  if (typeof window === "undefined") return null;
 
   try {
     const raw = window.localStorage.getItem(FEED_CACHE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<CachedFeedEntry>;
+    if (!parsed || !Array.isArray(parsed.posts)) return null;
+    return {
+      posts: parsed.posts as Post[],
+      cachedAt: typeof parsed.cachedAt === "number" ? parsed.cachedAt : 0,
+    };
   } catch {
-    return [];
+    return null;
   }
 };
 
@@ -62,7 +73,11 @@ const writeCachedFeed = (posts: Post[]) => {
   if (typeof window === "undefined") return;
 
   try {
-    window.localStorage.setItem(FEED_CACHE_KEY, JSON.stringify(posts.slice(0, 30)));
+    const entry: CachedFeedEntry = {
+      posts: posts.slice(0, 30),
+      cachedAt: Date.now(),
+    };
+    window.localStorage.setItem(FEED_CACHE_KEY, JSON.stringify(entry));
   } catch {
     // ignore cache write failures and keep the app usable
   }
@@ -90,7 +105,7 @@ export function useFeed() {
 
 export function FeedProvider({ children }: { children: ReactNode }) {
   const { user, isLoading: authLoading } = useAuth();
-  const [posts, setPostsState] = useState<Post[]>(() => readCachedFeed());
+  const [posts, setPostsState] = useState<Post[]>(() => readCachedFeed()?.posts ?? []);
   const [loading, setLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -152,7 +167,7 @@ export function FeedProvider({ children }: { children: ReactNode }) {
         id: r.author_id,
         username: r.profiles?.username ?? r.author_id,
         avatar: r.profiles?.profile_pic ?? undefined,
-        is_vibes_pro: Boolean(r.profiles?.is_vibes_pro),
+        is_vibes_pro: isVibesProEnabled(r.profiles as any),
       },
       authorId: r.author_id,
       author_id: r.author_id,
@@ -293,16 +308,17 @@ export function FeedProvider({ children }: { children: ReactNode }) {
   // Fetch the first page once when provider mounts, but let cached posts render immediately.
   useEffect(() => {
     if (!skipCachedFeed) {
-      const cachedPosts = readCachedFeed();
-      if (cachedPosts.length > 0) {
-        syncPosts(cachedPosts);
+      const cachedFeed = readCachedFeed();
+      const isFresh = Boolean(cachedFeed && Date.now() - cachedFeed.cachedAt < FEED_CACHE_TTL_MS);
+      if (cachedFeed && cachedFeed.posts.length > 0) {
+        syncPosts(cachedFeed.posts);
         setLastFetchTime(Date.now());
       }
-    }
 
-    // Only load remote posts once auth is established.
-    if (!authLoading && user) {
-      void loadPostsPage({ append: false, refresh: true, background: true });
+      // Only load remote posts once auth is established.
+      if (!authLoading && user) {
+        void loadPostsPage({ append: false, refresh: isFresh ? false : true, background: true });
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, user]); 
@@ -327,6 +343,22 @@ export function FeedProvider({ children }: { children: ReactNode }) {
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, [loading, isLoadingMore, hasMore]);
+
+  const handleProfileRefresh = () => {
+    setPosts([]);
+    setLastFetchTime(null);
+    try {
+      window.localStorage.removeItem(FEED_CACHE_KEY);
+    } catch {
+      // ignore
+    }
+    void loadPostsPage({ append: false, refresh: true, background: false });
+  };
+
+  useEffect(() => {
+    window.addEventListener("metoyou:profile-refresh", handleProfileRefresh as EventListener);
+    return () => window.removeEventListener("metoyou:profile-refresh", handleProfileRefresh as EventListener);
+  }, [handleProfileRefresh]);
 
   // Refresh feed when the user returns to the tab or focuses the window,
   // but do it silently and not more often than every 30s.

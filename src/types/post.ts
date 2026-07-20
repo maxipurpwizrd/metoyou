@@ -16,6 +16,7 @@ export type PostRecord = {
     username?: string;
     profile_pic?: string | null;
     is_vibes_pro?: boolean | null;
+    vibes_pro?: boolean | null;
   } | null;
 };
 

@@ -2,20 +2,25 @@ import { Link } from "react-router-dom";
 import { useEffect, useState, useRef } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { useLanguage } from "../contexts/LanguageContext";
+import { useAppInit } from "../contexts/AppInitContext";
 import { getMessageThreads, type MessageThread } from "../lib/messageApi";
-import { getProfile } from "../utils/profileStorage";
-import { useProfile } from "../contexts/ProfileContext";
+import { useSession } from "../contexts/SessionContext";
+import { MessagesSkeleton } from "../components/skeletons/Skeletons";
 import { VibesProFeed } from "../themes/vibespro";
+import { isVibesProEnabled } from "../lib/vibesPro";
 
 export default function Messages(_props: { embedded?: boolean } = {}) {
+  // Prevent rendering until app initialization completes
+  const { appReady } = useAppInit();
+  const { profileReady } = useSession();
+  if (!appReady || !profileReady) return null;
   const { user } = useAuth();
   const { t } = useLanguage();
   const [threads, setThreads] = useState<MessageThread[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const mountedRef = useRef(true);
-  const { profile: profileFromContext } = useProfile();
-  const profile = profileFromContext ?? getProfile();
-  const isVibesPro = profile?.is_vibes_pro === true;
+  const { profile } = useSession();
+  const isVibesPro = isVibesProEnabled(profile);
 
   // Restore/save scroll position for messages list per user
   useEffect(() => {
@@ -185,14 +190,8 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
         {/* Message List */}
         <div className="space-y-4">
           {isLoading ? (
-            <div className={`rounded-[28px] p-6 text-center shadow-sm ${
-              isVibesPro
-                ? 'bg-[#181818] border border-[#D4AF37]/20 text-white/70'
-                : 'bg-white/30 backdrop-blur-3xl border border-white/40 text-slate-700'
-            }`}>
-              {t("messages.loading")}
-            </div>
-          ) : threads.length === 0 ? (
+          <MessagesSkeleton isVibesPro={isVibesPro} />
+        ) : threads.length === 0 ? (
             <div className={`rounded-[28px] p-6 text-center shadow-sm ${
               isVibesPro
                 ? 'bg-[#181818] border border-[#D4AF37]/20 text-white/70'

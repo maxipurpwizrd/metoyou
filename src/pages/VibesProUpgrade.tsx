@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getProfile } from "../utils/profileStorage";
-import { useProfile } from "../contexts/ProfileContext";
+import { useSession } from "../contexts/SessionContext";
 
 const FEATURES = [
   "Gold badge",
@@ -15,8 +14,9 @@ const FEATURES = [
 
 export default function VibesProUpgrade() {
   const navigate = useNavigate();
-  const { profile: profileFromContext } = useProfile();
-  const profile = profileFromContext ?? getProfile();
+  const { profile: profileFromContext } = useSession();
+  if (!profileFromContext) return null;
+  const profile = profileFromContext;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

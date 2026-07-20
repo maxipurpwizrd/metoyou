@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { addComment, getComments, type CommentRecord } from "../lib/commentApi";
 import { getPostLikes, hasUserLiked, likePost, unlikePost } from "../lib/likeApi";
 import { supabase } from "../lib/supabase";
-import { useProfile } from "../contexts/ProfileContext";
+import { useSession } from "../contexts/SessionContext";
 
 type Props = {
   images: string[];
@@ -38,7 +38,7 @@ export default function ImageViewer({ images, initialIndex = 0, onClose, postId,
   const menuButtonRef = useRef<HTMLButtonElement | null>(null);
   const commentsPanelRef = useRef<HTMLDivElement | null>(null);
   const isCommentComposerFocusedRef = useRef(false);
-  const { profile: currentUser } = useProfile();
+  const { profile: currentUser } = useSession();
   const ownerId = authorId ?? undefined;
   const isOwner = Boolean(currentUser && ownerId && currentUser.id === ownerId);
   const startY = useRef<number | null>(null);

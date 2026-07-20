@@ -2,13 +2,14 @@ import Navbar from "../components/Navbar";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { AutoSizer, CellMeasurer, CellMeasurerCache, List, WindowScroller } from "react-virtualized";
 import { useFeed, type Post as FeedPost } from "../contexts/FeedContext";
-import { getProfile } from "../utils/profileStorage";
-import { useProfile } from "../contexts/ProfileContext";
+import { useSession } from "../contexts/SessionContext";
 import { VibesProFeed } from "../themes/vibespro";
+import { useAppInit } from "../contexts/AppInitContext";
+import { isVibesProEnabled } from "../lib/vibesPro";
 
 import CreatePost from "../components/CreatePost";
 import PostCard from "../components/PostCard";
-import PostSkeleton from "../components/PostSkeleton";
+import { FreeFeedSkeleton, VibesProFeedSkeleton } from "../components/skeletons/FeedSkeletons";
 import { savePostToSupabase, deletePostFromSupabase, uploadAudioToSupabase, uploadImageToSupabase } from "../lib/postApi";
 import { addComment, editComment, deleteComment } from "../lib/commentApi";
 import { likePost, unlikePost, getPostLikes } from "../lib/likeApi";
@@ -58,6 +59,9 @@ const mapStoryRecord = (story: StoryRecord): Story => ({
 });
 
 export default function Feed(_props: { embedded?: boolean } = {}) {
+  const { appReady } = useAppInit();
+  const { profileReady } = useSession();
+  if (!appReady || !profileReady) return null;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const musicInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -92,9 +96,9 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
     return saved ? (JSON.parse(saved) as string[]) : [];
   });
 
-  const { profile: currentUserProfileFromContext } = useProfile();
-  const currentUserProfile = currentUserProfileFromContext ?? getProfile();
-  const isStoryOwner = selectedStory?.authorId === currentUserProfile?.id;
+  const { profile: currentUserProfile, isVibesPro } = useSession();
+  const currentUserProfileFromContext = currentUserProfile;
+  const isStoryOwner = selectedStory?.authorId === currentUserProfileFromContext?.id;
 
   useEffect(() => {
     localStorage.setItem("metoyou-saved-stories", JSON.stringify(savedStories));
@@ -718,12 +722,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
     await updateStoryReactionsInSupabase(storyId, newReactions);
   };
 
-  // Check if user is VibesPro and render premium theme
-  console.log("[trace][Feed] before isVibesPro", {
-    currentUserProfileIsVibesPro: currentUserProfile?.is_vibes_pro,
-    currentUserProfileVibesPro: currentUserProfile?.vibes_pro,
-  });
-  const isVibesPro = currentUserProfile?.is_vibes_pro === true;
+  // Determine story card styling based on user's VibesPro status
   const storyCardRadius = isVibesPro ? "1.25rem" : "50% 50% 28% 28% / 18% 18% 70% 70%";
   const storyCardBorderClasses = isVibesPro
     ? "border-2 border-amber-300/25 shadow-[0_0_0_2px_rgba(212,175,55,0.22),0_24px_50px_rgba(212,175,55,0.18)]"
@@ -765,7 +764,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
           <button
             type="button"
             onClick={handleStoryClick}
-            className={`w-[106px] h-[152px] md:w-[140px] md:h-[200px] shrink-0 flex flex-col items-center justify-center ${storyCardBorderClasses} ${storyCardBgClass} hover:scale-[1.02] active:scale-95 transition-all snap-start`}
+            className={`w-26.5 h-38 md:w-35 md:h-50 shrink-0 flex flex-col items-center justify-center ${storyCardBorderClasses} ${storyCardBgClass} hover:scale-[1.02] active:scale-95 transition-all snap-start`}
             style={storyCardStyle}
           >
             <span className="text-2xl md:text-3xl font-light mb-0.5 md:mb-1">+</span>
@@ -777,7 +776,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
             <div
               key={story.id}
               onClick={() => openStoryAtIndex(index)}
-              className={`w-[106px] h-[152px] md:w-[140px] md:h-[200px] shrink-0 relative overflow-hidden ${storyCardBorderClasses} text-white cursor-pointer hover:scale-[1.02] transition-transform snap-start ${story.viewedAt ? 'opacity-70 ring-1 ring-white/20' : ''}`}
+              className={`w-26.5 h-38 md:w-35 md:h-50 shrink-0 relative overflow-hidden ${storyCardBorderClasses} text-white cursor-pointer hover:scale-[1.02] transition-transform snap-start ${story.viewedAt ? 'opacity-70 ring-1 ring-white/20' : ''}`}
               style={storyCardStyle}
             >
               {story.image ? (
@@ -814,7 +813,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                 </div>
               )}
 
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/10"></div>
+              <div className="absolute inset-0 bg-linear-to-t from-black/60 via-transparent to-black/10"></div>
 
               <div className="absolute bottom-2 left-0 right-0 text-center px-1 pointer-events-none">
                 <p className="font-semibold text-[9px] md:text-xs truncate">{story.name}</p>
@@ -836,11 +835,11 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
           )}
 
           {loading && filteredPosts.length === 0 ? (
-            <div className="space-y-4">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <PostSkeleton key={i} />
-              ))}
-            </div>
+            isVibesPro ? (
+              <VibesProFeedSkeleton count={5} />
+            ) : (
+              <FreeFeedSkeleton count={5} />
+            )
           ) : (
             <WindowScroller>
               {({ height, isScrolling, onChildScroll, scrollTop }: any) => (
@@ -888,7 +887,8 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                                 >
                                   <PostCard
                                     author={post.author}
-                                    isVibesPro={Boolean(post.author.is_vibes_pro)}
+                                    isVibesPro={isVibesProEnabled(post.author as any)}
+                                    variant={isVibesProEnabled(post.author as any) ? "gold" : "default"}
                                     postId={post.id}
                                     authorId={post.authorId ?? post.author.id}
                                     time={post.time}
@@ -1109,7 +1109,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
       {/* Story Fullscreen Viewer Modal */}
       {selectedStory && (
         <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/95 backdrop-blur-md"
+          className="fixed inset-0 z-9999 flex items-center justify-center bg-black/95 backdrop-blur-md"
         >
           <button
             type="button"
@@ -1125,7 +1125,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
 
           <div className="relative w-[calc(100vw-1rem)] h-[calc(100vh-2rem)] sm:w-screen sm:h-screen overflow-hidden bg-slate-900 rounded-[1.25rem] sm:rounded-none">
             <div className="absolute inset-0 z-10 rounded-[1.25rem] sm:rounded-none border border-white/25 shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_0_0_1px_rgba(255,255,255,0.06)_inset,0_18px_45px_rgba(0,0,0,0.35)] pointer-events-none" />
-            <div className="absolute inset-3 z-10 rounded-[1rem] sm:rounded-none border border-white/15 pointer-events-none" />
+            <div className="absolute inset-3 z-10 rounded-2xl sm:rounded-none border border-white/15 pointer-events-none" />
             <div className="absolute inset-6 z-10 rounded-[0.9rem] sm:rounded-none border border-fuchsia-400/20 pointer-events-none" />
             <div className="absolute inset-x-0 top-0 z-50 flex gap-1.5 p-2">
               {stories.map((_, index) => (
@@ -1156,7 +1156,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
             </button>
 
             {storyMenuOpen && selectedStory && (
-              <div className="absolute top-16 left-4 z-50 min-w-[180px] rounded-2xl border border-white/15 bg-slate-950/95 p-2 shadow-2xl shadow-black/50">
+              <div className="absolute top-16 left-4 z-50 min-w-45 rounded-2xl border border-white/15 bg-slate-950/95 p-2 shadow-2xl shadow-black/50">
                 <button
                   type="button"
                   onClick={(event) => {
@@ -1203,7 +1203,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
             )}
 
             {confirmDeleteStory && selectedStory && (
-              <div className="fixed inset-0 z-[10001] flex items-center justify-center bg-black/80 p-4">
+              <div className="fixed inset-0 z-10001 flex items-center justify-center bg-black/80 p-4">
                 <div className="w-full max-w-sm rounded-4xl border border-white/20 bg-slate-950 p-6 shadow-2xl shadow-black/60">
                   <p className="text-lg font-semibold text-white">Delete this story?</p>
                   <p className="mt-3 text-sm text-slate-300">This will permanently remove the story from your story tray. Are you sure?</p>
@@ -1238,7 +1238,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
             ) : (
               <div className="relative z-30 w-full h-full bg-linear-to-br from-pink-500 via-purple-500 to-blue-500 px-6 py-8 text-white flex items-center justify-center">
                 <div
-                  className="max-w-[85%] max-h-[70vh] overflow-y-auto whitespace-pre-wrap break-words text-center text-2xl md:text-3xl font-semibold leading-relaxed scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent"
+                  className="max-w-[85%] max-h-[70vh] overflow-y-auto whitespace-pre-wrap wrap-break-word text-center text-2xl md:text-3xl font-semibold leading-relaxed scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent"
                   style={{ overscrollBehavior: "contain" }}
                 >
                   {selectedStory.text}
@@ -1246,7 +1246,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
               </div>
             )}
 
-            <div className="absolute inset-0 z-20 bg-gradient-to-t from-black/80 via-black/20 to-black/40"></div>
+            <div className="absolute inset-0 z-20 bg-linear-to-t from-black/80 via-black/20 to-black/40"></div>
 
             <div className="absolute left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-2 text-xs text-white/70">
               <span className="rounded-full bg-black/30 px-2 py-1">⏳ {getTimeLeft(selectedStory.expiresAt)}</span>
@@ -1296,7 +1296,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
 
       {/* Story Type Choice Overlay */}
       {storyChoiceOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-xs" onClick={() => setStoryChoiceOpen(false)}></div>
 
           <div className="relative w-full max-w-xs bg-white rounded-2xl p-4 shadow-2xl space-y-4">
@@ -1314,7 +1314,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
               <button
                 type="button"
                 onClick={() => openStoryEditor("photo")}
-                className="py-3 rounded-xl bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 text-white font-semibold shadow-md"
+                className="py-3 rounded-xl bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 text-white font-semibold shadow-md"
               >
                 Photo
               </button>
@@ -1334,7 +1334,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                 <img src={selectedImage} alt="preview" className="w-full h-full object-cover" />
               ) : (
                 <div className="w-full h-full bg-linear-to-br from-pink-500 via-purple-500 to-blue-500 overflow-y-auto p-4 flex items-center justify-center text-white font-semibold text-center">
-                  <div className="w-full whitespace-pre-wrap break-words text-xl leading-relaxed">
+                  <div className="w-full whitespace-pre-wrap wrap-break-word text-xl leading-relaxed">
                     {storyText.trim() ? storyText.trim() : "Text Story"}
                   </div>
                 </div>
@@ -1347,7 +1347,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
               value={storyText}
               onChange={(e) => setStoryText(e.target.value)}
               placeholder="Drop a vibe text onto your story..."
-              className="w-full max-h-[13rem] overflow-y-auto text-sm border border-slate-100 bg-slate-50/50 rounded-xl px-3 py-2.5 outline-none resize-none placeholder:text-slate-400 focus:border-pink-300 transition-colors"
+              className="w-full max-h-52 overflow-y-auto text-sm border border-slate-100 bg-slate-50/50 rounded-xl px-3 py-2.5 outline-none resize-none placeholder:text-slate-400 focus:border-pink-300 transition-colors"
               rows={2}
             />
 
@@ -1398,7 +1398,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                   <span>{storyCreateProgress}%</span>
                 </div>
                 <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
-                  <div className="h-full rounded-full bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 transition-all duration-200"
+                  <div className="h-full rounded-full bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 transition-all duration-200"
                     style={{ width: `${storyCreateProgress}%` }}
                   />
                 </div>
@@ -1426,7 +1426,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
               <button
                 type="button"
                 onClick={handleCreateStory}
-                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 text-white shadow-md shadow-purple-200 active:scale-95 transition-transform"
+                className="flex-1 py-2.5 rounded-xl bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 text-white shadow-md shadow-purple-200 active:scale-95 transition-transform"
                 disabled={storyCreating}
               >
                 {storyCreating ? "Working..." : "Post Story 🚀"}

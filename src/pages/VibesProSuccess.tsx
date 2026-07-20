@@ -1,17 +1,16 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchProfileFromSupabase } from "../lib/profileApi";
-import { getProfile, saveProfile } from "../utils/profileStorage";
-import { useProfile } from "../contexts/ProfileContext";
+import { useSession } from "../contexts/SessionContext";
 
 export default function VibesProSuccess() {
   const navigate = useNavigate();
-  const { profile: profileFromContext } = useProfile();
+  const { profile: profileFromContext, setProfile } = useSession();
   const [status, setStatus] = useState("Refreshing your Pro access...");
 
   useEffect(() => {
     const refreshAccess = async () => {
-      const currentProfile = profileFromContext ?? getProfile();
+      const currentProfile = profileFromContext;
       if (!currentProfile?.id) {
         setStatus("Unable to refresh your access because your profile is missing.");
         window.setTimeout(() => navigate("/settings"), 2500);
@@ -21,7 +20,7 @@ export default function VibesProSuccess() {
       try {
         const refreshedProfile = await fetchProfileFromSupabase(currentProfile.id);
         if (refreshedProfile) {
-          saveProfile(refreshedProfile);
+          setProfile(refreshedProfile);
           setStatus("Your VibesPro access is ready. Redirecting...");
           window.setTimeout(() => navigate("/settings"), 1200);
           return;

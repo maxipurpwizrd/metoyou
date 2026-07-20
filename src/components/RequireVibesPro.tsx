@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { useProfile } from "../contexts/ProfileContext";
+import { useSession } from "../contexts/SessionContext";
+import { isVibesProEnabled } from "../lib/vibesPro";
 
 type RequireVibesProProps = {
   children: ReactNode;
@@ -7,8 +8,8 @@ type RequireVibesProProps = {
 };
 
 export default function RequireVibesPro({ children, fallback }: RequireVibesProProps) {
-  const { profile } = useProfile();
-  const isVibesPro = Boolean(profile?.vibes_pro || profile?.is_vibes_pro);
+  const { profile } = useSession();
+  const isVibesPro = isVibesProEnabled(profile);
 
   if (isVibesPro) {
     return <>{children}</>;

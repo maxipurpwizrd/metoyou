@@ -3,8 +3,13 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useLanguage } from "../contexts/LanguageContext";
 import { getUnreadNotificationCount, subscribeToNotifications } from "../lib/notificationApi";
+import { useAppInit } from "../contexts/AppInitContext";
+import { useSession } from "../contexts/SessionContext";
 
 export default function Navbar() {
+  const { appReady } = useAppInit();
+  const { profileReady } = useSession();
+  if (!appReady || !profileReady) return null;
   const { user } = useAuth();
   const { t } = useLanguage();
   const [unreadCount, setUnreadCount] = useState(0);

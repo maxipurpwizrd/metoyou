@@ -3,9 +3,10 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLanguage } from "../contexts/LanguageContext";
 import { searchUsersByUsername } from "../lib/profileApi";
-import { getProfile } from "../utils/profileStorage";
-import { useProfile } from "../contexts/ProfileContext";
+import { useSession } from "../contexts/SessionContext";
+import { SearchSkeleton } from "../components/skeletons/Skeletons";
 import { VibesProFeed } from "../themes/vibespro";
+import { isVibesProEnabled } from "../lib/vibesPro";
 
 type SearchUser = {
   id: string;
@@ -16,9 +17,8 @@ type SearchUser = {
 export default function Search() {
   const navigate = useNavigate();
   const { t } = useLanguage();
-  const { profile: profileFromContext } = useProfile();
-  const profile = profileFromContext ?? getProfile();
-  const isVibesPro = profile?.is_vibes_pro === true;
+  const { profile } = useSession();
+  const isVibesPro = isVibesProEnabled(profile);
   
   const [query, setQuery] = useState("");
   const [users, setUsers] = useState<SearchUser[]>([]);
@@ -73,15 +73,7 @@ export default function Search() {
             </p>
           </div>
         ) : isLoading ? (
-          <div className={`rounded-[28px] shadow-sm p-6 text-center ${
-            isVibesPro
-              ? 'bg-[#181818] border border-[#D4AF37]/20'
-              : 'bg-white/20 backdrop-blur-3xl border border-white/30'
-          }`}>
-            <p className={isVibesPro ? 'text-white/70' : 'text-slate-600'}>
-              {t("search.loading")}
-            </p>
-          </div>
+          <SearchSkeleton isVibesPro={isVibesPro} />
         ) : users.length === 0 ? (
           <div className={`rounded-[28px] shadow-sm p-6 text-center ${
             isVibesPro

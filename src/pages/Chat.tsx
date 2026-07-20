@@ -5,9 +5,9 @@ import { Mic, Paperclip, Send, Smile, Square, X, Pause, Play } from "lucide-reac
 import ChatBubble from "../components/ChatBubble";
 import { useAuth } from "../hooks/useAuth";
 import { useChat } from "../contexts/ChatContext";
-import { useProfile } from "../contexts/ProfileContext";
-import { getProfile } from "../utils/profileStorage";
+import { useSession } from "../contexts/SessionContext";
 import { supabase } from "../lib/supabase";
+import { isVibesProEnabled } from "../lib/vibesPro";
 import {
   sendMessage,
   fetchMessagesPage,
@@ -31,6 +31,7 @@ export default function Chat() {
   const navigate = useNavigate();
   const { getCachedMessages, setCachedMessages, addMessageToCache } = useChat();
   const [messages, setMessages] = useState<Message[]>([]);
+  const [messagesLoading, setMessagesLoading] = useState(false);
   const [inputText, setInputText] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -53,6 +54,9 @@ export default function Chat() {
   const previousMessageCountRef = useRef(0);
   const messagesLoadVersionRef = useRef(0);
   const scrollIdleTimeoutRef = useRef<number | null>(null);
+  const searchBarVisibleRef = useRef(false);
+  const hasMoreMessagesRef = useRef(hasMoreMessages);
+  const isLoadingOlderMessagesRef = useRef(isLoadingOlderMessages);
 
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
@@ -110,9 +114,9 @@ export default function Chat() {
   const recipientId = searchParams.get("recipient") ?? "";
   const recipientName = searchParams.get("username") ?? "Friend";
   const userId = user?.id;
-  const { profile: profileFromContext } = useProfile();
-  const profile = profileFromContext ?? getProfile();
-  const isVibesPro = profile?.is_vibes_pro === true || profile?.vibes_pro === true;
+  const { profile: profileFromContext } = useSession();
+  const profile = profileFromContext;
+  const isVibesPro = isVibesProEnabled(profile);
 
   function createMessageId(prefix = "msg") {
     const randomPart =
@@ -158,32 +162,39 @@ export default function Chat() {
     const loadVersion = ++messagesLoadVersionRef.current;
     const pageSize = 30;
 
+    const cachedMessages = getCachedMessages(conversationId);
+    if (cachedMessages && cachedMessages.length > 0) {
+      setMessages(mergeMessages(cachedMessages));
+      setMessagesLoading(false);
+    } else {
+      setMessages([]);
+      setMessagesLoading(true);
+    }
+
+    setHasMoreMessages(false);
+    setIsLoadingOlderMessages(false);
+
     const load = async () => {
-      setHasMoreMessages(false);
-      setIsLoadingOlderMessages(false);
-
-      const cached = getCachedMessages(conversationId);
-      if (cached && cached.length > 0) {
+      try {
+        const initialPage = await fetchMessagesPage(conversationId, undefined, pageSize + 1);
         if (!mounted || loadVersion !== messagesLoadVersionRef.current) return;
-        setMessages(mergeMessages(cached));
-      }
 
-      const initialPage = await fetchMessagesPage(conversationId, undefined, pageSize + 1);
-      if (!mounted || loadVersion !== messagesLoadVersionRef.current) return;
+        const visibleMessages = initialPage.slice(0, pageSize);
+        const nextMessages = mergeMessages([...(cachedMessages ?? []), ...visibleMessages]);
 
-      const visibleMessages = initialPage.slice(0, pageSize);
-      const nextMessages = mergeMessages([...(cached ?? []), ...visibleMessages]);
-      setMessages(nextMessages);
-      setCachedMessages(conversationId, nextMessages);
-      setHasMoreMessages(initialPage.length > pageSize);
+        setMessages(nextMessages);
+        setCachedMessages(conversationId, nextMessages);
+        setHasMoreMessages(initialPage.length > pageSize);
 
-      // Mark incoming messages as read when conversation is opened
-      if (userId) {
-        void markMessagesAsRead(conversationId, userId);
+        if (userId) {
+          void markMessagesAsRead(conversationId, userId);
+        }
+      } finally {
+        if (mounted) setMessagesLoading(false);
       }
     };
 
-    load();
+    void load();
 
     if (subscriptionRef.current) {
       subscriptionRef.current.unsubscribe();
@@ -203,11 +214,19 @@ export default function Chat() {
             }
           });
         }
-      } else {
-        // Normal message insert/update
-        setMessages((current) => mergeMessages([...current, newMessage]));
-        Promise.resolve().then(() => addMessageToCache(conversationId, newMessage));
+        return;
       }
+
+      // Ignore duplicate incoming messages by id. If message exists, replace it (update), otherwise insert.
+      setMessages((current) => {
+        const exists = current.some((m) => m.id === newMessage.id);
+        if (exists) {
+          return mergeMessages(current.map((m) => (m.id === newMessage.id ? newMessage : m)));
+        }
+        return mergeMessages([...current, newMessage]);
+      });
+
+      Promise.resolve().then(() => addMessageToCache(conversationId, newMessage));
     });
 
     // typing subscription
@@ -708,6 +727,8 @@ export default function Chat() {
     };
   }, []);
 
+  const loadOlderMessagesRef = useRef<() => Promise<void>>(() => Promise.resolve());
+
   async function loadOlderMessages() {
     if (!conversationId || !userId || isLoadingOlderMessages || !hasMoreMessages || messages.length === 0) return;
 
@@ -744,28 +765,46 @@ export default function Chat() {
     });
   }
 
+  loadOlderMessagesRef.current = loadOlderMessages;
+
+  useEffect(() => {
+    hasMoreMessagesRef.current = hasMoreMessages;
+  }, [hasMoreMessages]);
+
+  useEffect(() => {
+    isLoadingOlderMessagesRef.current = isLoadingOlderMessages;
+  }, [isLoadingOlderMessages]);
+
   // Detect when user scrolls manually
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
 
     const handleScroll = () => {
-      const isNearBottom = 
-        container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+      const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
       isUserAtBottomRef.current = isNearBottom;
 
-      setShowSearchBar(true);
+      const shouldRevealSearch = container.scrollTop > 24;
+      if (shouldRevealSearch && !searchBarVisibleRef.current) {
+        searchBarVisibleRef.current = true;
+        setShowSearchBar(true);
+      } else if (!shouldRevealSearch && searchBarVisibleRef.current) {
+        searchBarVisibleRef.current = false;
+        setShowSearchBar(false);
+      }
 
       if (scrollIdleTimeoutRef.current) {
         window.clearTimeout(scrollIdleTimeoutRef.current);
       }
 
       scrollIdleTimeoutRef.current = window.setTimeout(() => {
-        setShowSearchBar(false);
+        if (!searchBarVisibleRef.current) {
+          setShowSearchBar(false);
+        }
       }, 1200);
 
-      if (container.scrollTop < 220 && hasMoreMessages && !isLoadingOlderMessages) {
-        void loadOlderMessages();
+      if (container.scrollTop < 220 && hasMoreMessagesRef.current && !isLoadingOlderMessagesRef.current) {
+        void loadOlderMessagesRef.current();
       }
     };
 
@@ -777,22 +816,17 @@ export default function Chat() {
         scrollIdleTimeoutRef.current = null;
       }
     };
-  }, [conversationId, hasMoreMessages, isLoadingOlderMessages, messages.length]);
+  }, [conversationId]);
 
   // Auto-scroll only if user is already at bottom or messages just loaded
   useEffect(() => {
-    const messageCountChanged = previousMessageCountRef.current !== messages.length;
+    const previousCount = previousMessageCountRef.current;
+    const messageCountChanged = previousCount !== messages.length;
     previousMessageCountRef.current = messages.length;
 
-    // Only auto-scroll if:
-    // 1. This is initial load (no previous messages), OR
-    // 2. User is already at the bottom, OR
-    // 3. A new message was just added (not a reload)
-    if (
-      messageCountChanged &&
-      (isUserAtBottomRef.current || previousMessageCountRef.current <= 1)
-    ) {
-      // Defer scroll to next frame to ensure DOM is updated
+    const shouldAutoScroll = messageCountChanged && (isUserAtBottomRef.current || previousCount === 0) && !isLoadingOlderMessagesRef.current;
+
+    if (shouldAutoScroll) {
       requestAnimationFrame(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
       });
@@ -831,42 +865,41 @@ export default function Chat() {
 
   const shellClassName = isVibesPro
     ? "app-screen min-h-screen bg-[radial-gradient(circle_at_top,rgba(212,175,55,0.18),transparent_35%),linear-gradient(135deg,#0B0B0B_0%,#141414_45%,#0F0F0F_100%)] flex flex-col relative overflow-hidden"
-    : "app-screen bg-linear-to-br from-slate-800 via-slate-700 to-blue-900 flex flex-col relative overflow-hidden";
+    : "app-screen min-h-screen bg-[radial-gradient(circle_at_top,rgba(244,114,182,0.18),transparent_32%),radial-gradient(circle_at_bottom,rgba(129,140,248,0.16),transparent_40%),linear-gradient(135deg,#fdf2f8_0%,#f5e8ff_48%,#e0f2fe_100%)] flex flex-col relative overflow-hidden";
 
   const headerClassName = isVibesPro
     ? "fixed top-0 left-0 right-0 z-50 bg-[#111111]/95 p-3 md:p-6 border-b border-[#D4AF37]/20 shadow-[0_0_40px_rgba(212,175,55,0.12)]"
-    : "fixed top-0 left-0 right-0 z-50 bg-linear-to-br from-slate-800 via-slate-700 to-blue-900 p-3 md:p-6 border-b border-white/20";
+    : "fixed top-0 left-0 right-0 z-50 bg-white/70 backdrop-blur-xl p-3 md:p-6 border-b border-white/70 shadow-[0_10px_35px_rgba(236,72,153,0.08)]";
 
   const headerCardClassName = isVibesPro
     ? "bg-[#181818]/90 backdrop-blur-3xl border border-[#D4AF37]/20 rounded-[28px] p-3 shadow-[0_0_24px_rgba(212,175,55,0.12)] flex flex-col gap-3"
-    : "bg-white/5 backdrop-blur-3xl border border-white/10 rounded-[28px] p-3 shadow-sm flex flex-col gap-3";
+    : "bg-white/80 backdrop-blur-3xl border border-white/80 rounded-[28px] p-3 shadow-[0_10px_40px_rgba(168,85,247,0.12)] flex flex-col gap-3";
 
-  const headerTextClassName = isVibesPro ? "text-[#F2D37C]" : "text-white";
-  const headerSubtextClassName = isVibesPro ? "text-[#EBD39A]/70" : "text-white/60";
+  const headerSubtextClassName = isVibesPro ? "text-[#EBD39A]/70" : "text-slate-600";
   const panelClassName = isVibesPro
     ? "rounded-2xl border border-[#D4AF37]/20 bg-[#181818]/80 px-3 py-2 backdrop-blur-xl"
-    : "rounded-2xl border border-white/10 bg-white/10 px-3 py-2 backdrop-blur-xl";
+    : "rounded-2xl border border-pink-100 bg-white/90 px-3 py-2 backdrop-blur-xl shadow-sm";
 
   const emptyStateClassName = isVibesPro
     ? "bg-[#181818]/80 backdrop-blur-3xl border border-[#D4AF37]/20 rounded-4xl p-8 text-center text-[#EBD39A]/70 shadow-[0_0_30px_rgba(212,175,55,0.08)]"
-    : "bg-white/5 backdrop-blur-3xl border border-white/10 rounded-4xl p-8 text-center text-white/60 shadow-lg";
+    : "bg-white/80 backdrop-blur-3xl border border-pink-100 rounded-4xl p-8 text-center text-slate-700 shadow-[0_10px_35px_rgba(236,72,153,0.08)]";
 
   const messageBoxClassName = isVibesPro
     ? "bg-[#181818]/90 backdrop-blur-3xl border border-[#D4AF37]/20 rounded-3xl md:rounded-4xl p-2 md:p-4 shadow-[0_0_30px_rgba(212,175,55,0.12)]"
-    : "bg-white/5 backdrop-blur-3xl border border-white/10 rounded-3xl md:rounded-4xl p-2 md:p-4 shadow-2xl";
+    : "bg-white/80 backdrop-blur-3xl border border-pink-100 rounded-3xl md:rounded-4xl p-2 md:p-4 shadow-[0_10px_35px_rgba(168,85,247,0.12)]";
 
-  const messagesSurfaceClassName = "flex-1 overflow-y-auto pt-28 md:pt-32 pb-28 md:pb-32 px-3 md:px-6 bg-transparent";
+  const messagesSurfaceClassName = "flex-1 overflow-y-auto overflow-x-hidden pt-28 md:pt-32 pb-28 md:pb-32 px-3 md:px-6 bg-transparent";
   const backgroundOverlayClassName = isVibesPro
     ? "absolute inset-0 pointer-events-none z-0 bg-[radial-gradient(circle_at_top_left,rgba(212,175,55,0.12),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(255,215,0,0.10),transparent_30%)]"
     : "absolute inset-0 pointer-events-none z-0";
 
   const inputClassName = isVibesPro
     ? "w-full bg-transparent outline-none text-[#F7E7B2] placeholder-[#E8C96F]/50 text-sm md:text-base px-2 font-serif"
-    : "w-full bg-transparent outline-none text-white placeholder-white/40 text-sm md:text-base px-2";
+    : "w-full bg-transparent outline-none text-slate-900 placeholder-slate-500 text-sm md:text-base px-2";
 
   const sendButtonClassName = isVibesPro
     ? "bg-linear-to-r from-[#D4AF37] to-[#F0C75E] text-[#111111] h-10 w-10 md:w-auto md:px-4 rounded-full md:rounded-2xl font-bold shadow-lg hover:scale-105 transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex items-center justify-center shrink-0 text-sm md:text-base active:scale-95"
-    : "bg-linear-to-r from-cyan-500 to-blue-600 text-white h-10 w-10 md:w-auto md:px-4 rounded-full md:rounded-2xl font-bold shadow-lg hover:scale-105 transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex items-center justify-center shrink-0 text-sm md:text-base active:scale-95";
+    : "bg-linear-to-r from-fuchsia-500 via-violet-500 to-cyan-400 text-white h-10 w-10 md:w-auto md:px-4 rounded-full md:rounded-2xl font-bold shadow-lg hover:scale-105 transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex items-center justify-center shrink-0 text-sm md:text-base active:scale-95";
 
   return (
     <div className={shellClassName}>
@@ -945,18 +978,18 @@ export default function Chat() {
             <div className="flex items-center gap-3">
               <Link
                 to="/messages"
-                className="text-lg font-bold text-white hover:scale-[1.05] transition"
+                className={`text-lg font-bold hover:scale-[1.05] transition ${isVibesPro ? 'text-white' : 'text-slate-800'}`}
               >
                 ←
               </Link>
 
-              <div className={`grid place-items-center w-10 h-10 rounded-[20px] ${isVibesPro ? 'bg-linear-to-r from-[#D4AF37] to-[#F0C75E] text-[#111111]' : 'bg-linear-to-r from-cyan-400 to-blue-500 text-white'} font-bold text-sm`}>
+              <div className={`grid place-items-center w-10 h-10 rounded-[20px] ${isVibesPro ? 'bg-linear-to-r from-[#D4AF37] to-[#F0C75E] text-[#111111]' : 'bg-linear-to-r from-fuchsia-500 via-violet-500 to-cyan-400 text-white'} font-bold text-sm`}>
                 {recipientName.charAt(0)}
               </div>
 
               <div>
                 <h2 
-                  className={`font-semibold text-sm md:text-base cursor-pointer transition ${isVibesPro ? 'text-[#F7E7B2] hover:text-[#FFD98A]' : 'text-white hover:text-cyan-300'}`}
+                  className={`font-semibold text-sm md:text-base cursor-pointer transition ${isVibesPro ? 'text-[#F7E7B2] hover:text-[#FFD98A]' : 'text-slate-800 hover:text-fuchsia-600'}`}
                   onClick={() => navigate(`/profile/${recipientName}`)}
                 >
                   {recipientName}
@@ -976,7 +1009,7 @@ export default function Chat() {
                 <button
                   onClick={() => alert(`Starting audio call with ${recipientName}`)}
                   title="Audio call"
-                  className="bg-white/5 text-white p-2 rounded-xl hover:bg-white/10 transition"
+                  className={`p-2 rounded-xl transition ${isVibesPro ? 'bg-white/5 text-white hover:bg-white/10' : 'bg-slate-900/10 text-slate-800 hover:bg-slate-900/20'}`}
                 >
                   📞
                 </button>
@@ -984,7 +1017,7 @@ export default function Chat() {
                 <button
                   onClick={() => alert(`Starting video call with ${recipientName}`)}
                   title="Video call"
-                  className="bg-white/5 text-white p-2 rounded-xl hover:bg-white/10 transition"
+                  className={`p-2 rounded-xl transition ${isVibesPro ? 'bg-white/5 text-white hover:bg-white/10' : 'bg-slate-900/10 text-slate-800 hover:bg-slate-900/20'}`}
                 >
                   🎥
                 </button>
@@ -1014,7 +1047,19 @@ export default function Chat() {
               {isLoadingOlderMessages && (
                 <div className="text-center text-white/50 text-sm py-2">Loading older messages…</div>
               )}
-              {messages.length === 0 ? (
+              {messagesLoading ? (
+                <div className="space-y-4 py-8">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} className="flex items-start gap-3 animate-pulse">
+                      <div className="w-10 h-10 rounded-full bg-white/10" />
+                      <div className="flex-1">
+                        <div className="h-3 bg-white/10 rounded w-1/3 mb-2" />
+                        <div className="h-8 bg-white/5 rounded" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : messages.length === 0 ? (
                 <div className="text-center text-white/50 py-8">
                   No messages yet. Start the conversation! 💬
                 </div>
@@ -1057,15 +1102,15 @@ export default function Chat() {
       </div>
 
       {/* Fixed Message Box at Bottom */}
-      <div className={`fixed bottom-0 left-0 right-0 z-50 p-3 md:p-6 ${isVibesPro ? 'bg-[#111111]/95 border-t border-[#D4AF37]/20 shadow-[0_0_40px_rgba(212,175,55,0.10)]' : 'bg-linear-to-br from-slate-800 via-slate-700 to-blue-900 border-t border-white/20'}`}>
+      <div className={`fixed bottom-0 left-0 right-0 z-50 p-3 md:p-6 ${isVibesPro ? 'bg-[#111111]/95 border-t border-[#D4AF37]/20 shadow-[0_0_40px_rgba(212,175,55,0.10)]' : 'bg-white/70 backdrop-blur-xl border-t border-white/70 shadow-[0_-10px_35px_rgba(236,72,153,0.08)]'}`}>
         <div className="max-w-xl mx-auto">
           {replyingTo && (
-            <div className="mb-3 rounded-2xl border border-white/10 bg-white/10 px-3 py-2 text-sm text-white/80 flex items-center justify-between">
+            <div className={`mb-3 rounded-2xl border px-3 py-2 text-sm flex items-center justify-between ${isVibesPro ? 'border-white/10 bg-white/10 text-white/80' : 'border-pink-100 bg-white/90 text-slate-700 shadow-sm'}`}>
               <div className="min-w-0">
-                <div className="text-[11px] uppercase tracking-[0.2em] text-white/50">Replying to</div>
+                <div className={`text-[11px] uppercase tracking-[0.2em] ${isVibesPro ? 'text-white/50' : 'text-slate-500'}`}>Replying to</div>
                 <div className="truncate">{replyingTo.text ?? "message"}</div>
               </div>
-              <button onClick={() => setReplyingTo(null)} className="ml-2 rounded-full p-1 hover:bg-white/10" aria-label="Cancel reply">
+              <button onClick={() => setReplyingTo(null)} className={`ml-2 rounded-full p-1 ${isVibesPro ? 'hover:bg-white/10' : 'hover:bg-slate-100'}`} aria-label="Cancel reply">
                 <X size={16} />
               </button>
             </div>
@@ -1074,7 +1119,7 @@ export default function Chat() {
             <div className="mb-3 p-3 rounded-2xl bg-white/10 flex items-center gap-3">
               <button
                 onClick={togglePlayPreview}
-                className="h-9 w-9 rounded-full bg-white/5 text-white flex items-center justify-center"
+                className={`h-9 w-9 rounded-full flex items-center justify-center ${isVibesPro ? 'bg-white/5 text-white' : 'bg-slate-900/10 text-slate-800'}`}
                 aria-label={isPlaying ? "Pause preview" : "Play preview"}
               >
                 {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
@@ -1082,13 +1127,13 @@ export default function Chat() {
 
               <div className="flex-1">
                 <canvas ref={waveRef} className="w-full h-8" />
-                <div className="text-xs text-white/70 mt-1">Voice note ready</div>
+                <div className={`text-xs mt-1 ${isVibesPro ? 'text-white/70' : 'text-slate-600'}`}>Voice note ready</div>
               </div>
 
               <div className="flex items-center gap-2">
                 <button
                   onClick={clearRecording}
-                  className="h-8 w-8 rounded-full bg-slate-900/60 text-white flex items-center justify-center"
+                  className={`h-8 w-8 rounded-full flex items-center justify-center ${isVibesPro ? 'bg-slate-900/60 text-white' : 'bg-slate-900/10 text-slate-800'}`}
                   aria-label="Remove voice note"
                 >
                   <X className="h-4 w-4" />
@@ -1100,7 +1145,7 @@ export default function Chat() {
           ) : null}
 
           {previewUrl && selectedFile ? (
-            <div className="mb-3 rounded-[28px] bg-white/10 backdrop-blur-3xl border border-white/10 shadow-lg overflow-hidden transition-opacity duration-300 ease-out opacity-100">
+            <div className={`mb-3 rounded-[28px] backdrop-blur-3xl border shadow-lg overflow-hidden transition-opacity duration-300 ease-out opacity-100 ${isVibesPro ? 'bg-white/10 border-white/10' : 'bg-white/90 border-pink-100'}`}>
               <div className="relative">
                 <img
                   src={previewUrl}
@@ -1117,12 +1162,12 @@ export default function Chat() {
                     setSelectedFile(null);
                     setPreviewUrl(null);
                   }}
-                  className="absolute top-3 right-3 h-9 w-9 rounded-full bg-slate-900/80 text-white shadow-lg hover:bg-slate-800 transition shrink-0"
+                  className={`absolute top-3 right-3 h-9 w-9 rounded-full shadow-lg transition shrink-0 ${isVibesPro ? 'bg-slate-900/80 text-white hover:bg-slate-800' : 'bg-slate-900/10 text-slate-800 hover:bg-slate-900/20'}`}
                 >
                   ✕
                 </button>
               </div>
-              <div className="px-4 py-3 text-sm text-white/80">
+              <div className={`px-4 py-3 text-sm ${isVibesPro ? 'text-white/80' : 'text-slate-700'}`}>
                 {selectedFile.name}
               </div>
               {uploadProgress > 0 && isLoading ? (
@@ -1147,7 +1192,7 @@ export default function Chat() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleAttachmentClick}
-                  className="h-10 w-10 rounded-full bg-white/10 text-white hover:bg-white/20 transition flex items-center justify-center shrink-0"
+                  className={`h-10 w-10 rounded-full transition flex items-center justify-center shrink-0 ${isVibesPro ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-slate-900/10 text-slate-800 hover:bg-slate-900/20'}`}
                   title="Add attachment"
                 >
                   <Paperclip className="h-4 w-4" />
@@ -1164,7 +1209,7 @@ export default function Chat() {
                 ) : (
                   <button
                     onClick={startRecording}
-                    className="h-10 w-10 rounded-full bg-white/10 text-white hover:bg-white/20 transition flex items-center justify-center shrink-0"
+                    className={`h-10 w-10 rounded-full transition flex items-center justify-center shrink-0 ${isVibesPro ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-slate-900/10 text-slate-800 hover:bg-slate-900/20'}`}
                     title="Start recording"
                   >
                     <Mic className="h-4 w-4" />
@@ -1192,7 +1237,7 @@ export default function Chat() {
               <div className="relative shrink-0">
                 <button
                   onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                  className="h-10 w-10 rounded-full bg-white/10 text-white hover:bg-white/20 transition flex items-center justify-center"
+                  className={`h-10 w-10 rounded-full transition flex items-center justify-center ${isVibesPro ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-slate-900/10 text-slate-800 hover:bg-slate-900/20'}`}
                   title="Add emoji"
                 >
                   <Smile className="h-4 w-4" />

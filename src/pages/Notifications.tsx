@@ -11,10 +11,12 @@ import {
   deleteAllNotifications,
   type Notification,
 } from "../lib/notificationApi";
-import { getProfile } from "../utils/profileStorage";
-import { useProfile } from "../contexts/ProfileContext";
+import { useSession } from "../contexts/SessionContext";
 import { VibesProFeed } from "../themes/vibespro";
+import { NotificationsSkeleton } from "../components/skeletons/Skeletons";
 import { useLanguage } from "../contexts/LanguageContext";
+import { useAppInit } from "../contexts/AppInitContext";
+import { isVibesProEnabled } from "../lib/vibesPro";
 
 function joinActorNames(names: string[]) {
   if (names.length === 0) return "Someone";
@@ -68,12 +70,15 @@ function groupNotifications(notifications: Notification[]): NotificationItem[] {
 }
 
 export default function Notifications(_props: { embedded?: boolean } = {}) {
+  // Prevent rendering until app initialization completes
+  const { appReady } = useAppInit();
+  const { profileReady } = useSession();
+  if (!appReady || !profileReady) return null;
   const navigate = useNavigate();
   const { user } = useAuth();
   const { t } = useLanguage();
-  const { profile: profileFromContext } = useProfile();
-  const profile = profileFromContext ?? getProfile();
-  const isVibesPro = profile?.is_vibes_pro === true;
+  const { profile } = useSession();
+  const isVibesPro = isVibesProEnabled(profile);
   const greetingName = (() => {
     const rawFirstName = profile?.firstName?.trim();
     if (rawFirstName) return rawFirstName;
@@ -86,6 +91,7 @@ export default function Notifications(_props: { embedded?: boolean } = {}) {
   })();
   
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{
     mode: "single" | "all";
     item?: NotificationItem;
@@ -140,9 +146,11 @@ export default function Notifications(_props: { embedded?: boolean } = {}) {
       if (raw) {
         const cached = JSON.parse(raw) as Notification[];
         updateNotifications(cached);
+      } else {
+        setNotificationsLoading(true);
       }
     } catch (e) {
-      // ignore parse errors
+      setNotificationsLoading(true);
     }
 
     const performBackgroundRefresh = async () => {
@@ -162,6 +170,8 @@ export default function Notifications(_props: { embedded?: boolean } = {}) {
         }
       } catch (err) {
         console.warn("Failed to refresh notifications", err);
+      } finally {
+        setNotificationsLoading(false);
       }
     };
 
@@ -298,7 +308,9 @@ export default function Notifications(_props: { embedded?: boolean } = {}) {
           </button>
         </div>
 
-        {notifications.length === 0 ? (
+        {notificationsLoading && notifications.length === 0 ? (
+          <NotificationsSkeleton isVibesPro={isVibesPro} />
+        ) : notifications.length === 0 ? (
           <div className={`rounded-4xl shadow-2xl p-10 text-center ${
             isVibesPro
               ? 'bg-[#181818] border border-[#D4AF37]/20'

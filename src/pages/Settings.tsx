@@ -20,26 +20,19 @@ import {
   Sparkles,
   User,
 } from "lucide-react";
-import { getProfile, saveProfile, type ProfileData } from "../utils/profileStorage";
-import { useProfile } from "../contexts/ProfileContext";
-import { fetchProfileByUsername, fetchProfileFromSupabase, upsertProfileToSupabase, uploadProfileImage } from "../lib/profileApi";
+import { type ProfileData, DEFAULT_PROFILE } from "../utils/profileStorage";
+import { useSession } from "../contexts/SessionContext";
+import { fetchProfileByUsername, upsertProfileToSupabase, uploadProfileImage } from "../lib/profileApi";
 import { logout } from "../lib/auth";
 
 export default function Settings() {
-  const { profile: profileFromContext } = useProfile();
-  const initialProfile = profileFromContext ?? getProfile();
+  const { profile: profileFromContext, refreshSession } = useSession();
   const { language, setLanguage, t } = useLanguage();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    if (!profileFromContext) return;
-    setProfile(profileFromContext);
-    setName(profileFromContext.firstName ?? profileFromContext.username);
-    setUsername(profileFromContext.username);
-    setProfilePictureUrl(profileFromContext.profilePic ?? "");
-  }, [profileFromContext]);
+  const initialProfile = profileFromContext ?? DEFAULT_PROFILE;
+  
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [profile, setProfile] = useState<ProfileData>(initialProfile);
   const [activeModal, setActiveModal] = useState<"name" | "username" | "picture" | "language" | "logout" | null>(null);
   const [name, setName] = useState(initialProfile.firstName ?? initialProfile.username);
   const [username, setUsername] = useState(initialProfile.username);
@@ -55,36 +48,27 @@ export default function Settings() {
   const [errorMessage, setErrorMessage] = useState<string>("");
 
   useEffect(() => {
+    if (!profileFromContext) return;
+    if (typeof window !== "undefined") {
+      window.requestAnimationFrame(() => {
+        setName(profileFromContext.firstName ?? profileFromContext.username);
+        setUsername(profileFromContext.username);
+        setProfilePictureUrl(profileFromContext.profilePic ?? "");
+      });
+    } else {
+      Promise.resolve().then(() => {
+        setName(profileFromContext.firstName ?? profileFromContext.username);
+        setUsername(profileFromContext.username);
+        setProfilePictureUrl(profileFromContext.profilePic ?? "");
+      });
+    }
+  }, [profileFromContext]);
+
+  useEffect(() => {
     window.localStorage.setItem("metoyou-theme", selectedTheme);
     document.documentElement.dataset.theme = selectedTheme;
   }, [selectedTheme]);
 
-  useEffect(() => {
-    let mounted = true;
-
-    const refreshProfile = async () => {
-      if (!profile.id) return;
-
-      try {
-        const remote = await fetchProfileFromSupabase(profile.id);
-        if (!mounted || !remote) return;
-
-        saveProfile({ ...profile, ...remote });
-        setProfile((prev) => ({ ...prev, ...remote }));
-        setName(remote.firstName ?? remote.username);
-        setUsername(remote.username);
-        setProfilePictureUrl(remote.profilePic ?? "");
-      } catch (error) {
-        console.warn("Failed to refresh profile from Supabase", error);
-      }
-    };
-
-    void refreshProfile();
-
-    return () => {
-      mounted = false;
-    };
-  }, [profile.id]);
 
   useEffect(() => {
     return () => {
@@ -108,19 +92,18 @@ export default function Settings() {
     setIsSaving(true);
     try {
       const updatedProfile: ProfileData = {
-        ...profile,
+        ...(profileFromContext ?? DEFAULT_PROFILE),
         ...updates,
-        firstName: updates.firstName ?? profile.firstName,
-        language: updates.language ?? profile.language,
-      };
+        firstName: updates.firstName ?? profileFromContext?.firstName,
+        language: updates.language ?? profileFromContext?.language,
+      } as ProfileData;
 
       const savedProfile = await upsertProfileToSupabase(updatedProfile);
       if (!savedProfile) {
         throw new Error("Unable to save profile");
       }
-
-      saveProfile({ ...profile, ...savedProfile });
-      setProfile((prev) => ({ ...prev, ...savedProfile }));
+      // Order: update Supabase -> refresh session state
+      await refreshSession();
       setName(savedProfile.firstName ?? savedProfile.username);
       setUsername(savedProfile.username);
       setProfilePictureUrl(savedProfile.profilePic ?? "");
@@ -137,44 +120,27 @@ export default function Settings() {
     setLanguage(selected);
     // Preserve explicit boolean flags; don't overwrite with undefined.
     const updatedProfile: ProfileData = {
-      ...profile,
+      ...(profileFromContext ?? DEFAULT_PROFILE),
       language: selected,
     };
-    if (typeof profile.is_vibes_pro === "boolean") updatedProfile.is_vibes_pro = profile.is_vibes_pro;
-    if (typeof profile.vibes_pro === "boolean") updatedProfile.vibes_pro = profile.vibes_pro;
+    const nextIsVibesPro = typeof profileFromContext?.is_vibes_pro === "boolean"
+      ? profileFromContext.is_vibes_pro
+      : typeof profileFromContext?.vibes_pro === "boolean"
+        ? profileFromContext.vibes_pro
+        : false;
+    updatedProfile.is_vibes_pro = nextIsVibesPro;
 
     console.log("[trace][Settings] before first saveProfile", {
-      profileIsVibesPro: profile?.is_vibes_pro,
-      profileVibesPro: profile?.vibes_pro,
+      profileIsVibesPro: profileFromContext?.is_vibes_pro,
+      profileVibesPro: profileFromContext?.vibes_pro,
       updatedIsVibesPro: updatedProfile.is_vibes_pro,
-      updatedVibesPro: updatedProfile.vibes_pro,
       language: selected,
     });
-
-    const firstSavedProfile = saveProfile({ ...profile, ...updatedProfile });
-    console.log("[trace][Settings] after first saveProfile", {
-      savedIsVibesPro: firstSavedProfile?.is_vibes_pro,
-      savedVibesPro: firstSavedProfile?.vibes_pro,
-      savedLanguage: firstSavedProfile?.language,
-    });
-    setProfile((prev) => ({ ...prev, ...updatedProfile }));
 
     try {
       const savedProfile = await upsertProfileToSupabase(updatedProfile);
       if (savedProfile) {
-        console.log("[trace][Settings] before second saveProfile", {
-          savedProfileIsVibesPro: savedProfile?.is_vibes_pro,
-          savedProfileVibesPro: savedProfile?.vibes_pro,
-          savedProfileLanguage: savedProfile?.language,
-        });
-
-        const secondSavedProfile = saveProfile({ ...profile, ...savedProfile });
-        console.log("[trace][Settings] after second saveProfile", {
-          savedIsVibesPro: secondSavedProfile?.is_vibes_pro,
-          savedVibesPro: secondSavedProfile?.vibes_pro,
-          savedLanguage: secondSavedProfile?.language,
-        });
-        setProfile((prev) => ({ ...prev, ...savedProfile }));
+        try { await refreshSession(); } catch (e) {}
       }
     } catch (error) {
       console.error("Language save error", error);
@@ -237,9 +203,9 @@ export default function Settings() {
         return;
       }
 
-      if (trimmedUsername !== profile.username) {
+      if (trimmedUsername !== profileFromContext?.username) {
         const existingProfile = await fetchProfileByUsername(trimmedUsername);
-        if (existingProfile && existingProfile.id !== profile.id) {
+        if (existingProfile && existingProfile.id !== profileFromContext?.id) {
           setErrorMessage("This username is already taken.");
           return;
         }
@@ -299,7 +265,6 @@ export default function Settings() {
     setErrorMessage("");
     try {
       await logout();
-      window.localStorage.removeItem("metoyou-profile");
       navigate("/login");
     } catch (error) {
       console.error("Logout error", error);
@@ -323,7 +288,7 @@ export default function Settings() {
               <h1 className="text-4xl sm:text-5xl font-black tracking-tight text-slate-950">{t("settings.title")} <span aria-hidden>⚙️</span></h1>
             </div>
 
-            {!Boolean(profile.vibes_pro ?? profile.is_vibes_pro) && (
+            {!((profileFromContext?.is_vibes_pro ?? profileFromContext?.vibes_pro ?? false)) && (
               <div className="rounded-3xl border border-amber-200/70 bg-gradient-to-br from-amber-50 via-white to-orange-50 p-5 shadow-xl">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>

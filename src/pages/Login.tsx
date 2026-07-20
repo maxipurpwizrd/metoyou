@@ -2,14 +2,15 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { login } from "../lib/auth";
 import { fetchProfileFromSupabase, upsertProfileToSupabase } from "../lib/profileApi";
-import { saveProfile } from "../utils/profileStorage";
 import { supabase } from "../lib/supabase";
 import { useLanguage } from "../contexts/LanguageContext";
+import { useSession } from "../contexts/SessionContext";
 import type { Language } from "../lib/i18n";
 
 export default function Login() {
   const navigate = useNavigate();
   const { language, setLanguage, t } = useLanguage();
+  const { refreshSession } = useSession();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -33,10 +34,8 @@ export default function Login() {
         // if remote language differs from selection, update remote
         if (remote.language !== selectedLanguage) {
           await upsertProfileToSupabase({ ...remote, language: selectedLanguage });
-          saveProfile({ ...remote, language: selectedLanguage });
-        } else {
-          saveProfile(remote);
         }
+        await refreshSession();
       } else {
         // create minimal profile with selected language
         const { data } = await supabase.auth.getUser();
@@ -55,8 +54,8 @@ export default function Login() {
           dateOfBirth: "",
           gender: "",
         };
-        await upsertProfileToSupabase(newProfile as any);
-        saveProfile(newProfile as any);
+        const created = await upsertProfileToSupabase(newProfile as any);
+        if (created) await refreshSession();
       }
 
       setLanguage(selectedLanguage);

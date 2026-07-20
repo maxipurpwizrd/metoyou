@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Mic, Square } from "lucide-react";
-import { useProfile } from "../contexts/ProfileContext";
+import { useSession } from "../contexts/SessionContext";
 import { uploadVideo, type UploadProgress } from "../lib/videoApi";
 import { optimizeImageFile } from "../lib/imageUtils";
 import { getSupportedAudioRecorderOptions, optimizeVoiceNote } from "../lib/mediaOptimizer";
@@ -16,7 +16,7 @@ type Props = {
 
 
 export default function CreatePost({ onPost }: Props) {
-  const { profile } = useProfile();
+  const { profile } = useSession();
 
   const [text, setText] = useState("");
 

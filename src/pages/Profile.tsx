@@ -1,8 +1,7 @@
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type { ChangeEvent } from "react";
 import { useMemo, useState, useEffect, useRef } from "react";
-import { getProfile, saveProfile } from "../utils/profileStorage";
-import { useProfile } from "../contexts/ProfileContext";
+import { useSession, setGlobalProfile } from "../contexts/SessionContext";
 import { fetchProfileFromSupabase, fetchProfileByUsername, upsertProfileToSupabase, uploadProfileImage } from "../lib/profileApi";
 import { fetchPostsFromSupabase } from "../lib/postApi";
 import { addComment, getComments, editComment, deleteComment } from "../lib/commentApi";
@@ -16,7 +15,10 @@ import { normalizeLanguage } from "../lib/i18n";
 import ImageViewer from "../components/ImageViewer";
 import PostCard from "../components/PostCard";
 import VibesProProfilePage from "../components/VibesPro/VibesProProfilePage";
+import { ProfileSkeleton } from "../components/skeletons/Skeletons";
 import { Settings2 } from "lucide-react";
+import { useAppInit } from "../contexts/AppInitContext";
+import { isVibesProEnabled } from "../lib/vibesPro";
 
 type ProfileComment = {
   id: string | number;
@@ -28,7 +30,7 @@ type ProfileComment = {
 
 type ProfilePost = {
   id: string | number;
-  author: { id: string; username: string };
+  author: { id: string; username: string; is_vibes_pro?: boolean };
   text: string;
   image?: string;
   highlighted?: boolean;
@@ -41,24 +43,40 @@ type ProfilePost = {
   comment_count?: number;
 };
 
-
-export default function Profile(_props: { embedded?: boolean } = {}) {
+export default function Profile({ embedded }: { embedded?: boolean } = {}) {
+  void embedded;
+  const { appReady } = useAppInit();
   const { setLanguage, t } = useLanguage();
-  const params = useParams();
+  const params = useParams<{ username?: string; userId?: string }>();
   const navigate = useNavigate();
   const routeUsername = params.username;
+  const routeUserId = params.userId;
 
-  const { profile: profileFromContext } = useProfile();
-  const initialProfile = useMemo(() => profileFromContext ?? getProfile(), [profileFromContext]);
-  const [profile, setProfile] = useState<ProfileData>(initialProfile);
+  const { profile: sessionProfile } = useSession();
+  const routeProfileRequested = Boolean(routeUsername || routeUserId);
+  const [viewedProfile, setViewedProfile] = useState<ProfileData | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
   const [myPosts, setMyPosts] = useState<ProfilePost[]>([]);
-
-  useEffect(() => {
-    if (!profileFromContext) return;
-    if (profileFromContext.id !== profile.id || profileFromContext.username !== profile.username || profileFromContext.language !== profile.language) {
-      setProfile(profileFromContext);
+  const [profileRefreshVersion, setProfileRefreshVersion] = useState(0);
+  const isOwnProfile = useMemo(() => {
+    if (!sessionProfile?.id) return false;
+    if (!routeProfileRequested) return true;
+    if (routeUserId && routeUserId === sessionProfile.id) return true;
+    if (routeUsername && sessionProfile.username?.trim().toLowerCase() === routeUsername.trim().toLowerCase()) {
+      return true;
     }
-  }, [profileFromContext, profile.id, profile.username, profile.language]);
+    return Boolean(viewedProfile?.id && viewedProfile.id === sessionProfile.id);
+  }, [routeProfileRequested, routeUserId, routeUsername, sessionProfile?.id, sessionProfile?.username, viewedProfile?.id]);
+  const profile = useMemo(() => {
+    if (isOwnProfile) {
+      return sessionProfile ?? viewedProfile ?? ({} as ProfileData);
+    }
+    return viewedProfile ?? ({} as ProfileData);
+  }, [isOwnProfile, sessionProfile, viewedProfile]);
+
+  console.debug("[Profile] Viewing profile:", routeUsername ?? routeUserId ?? "me");
+  console.debug("[Profile] Session user:", sessionProfile?.id ?? "none");
+  console.debug("[Profile] isOwnProfile:", isOwnProfile);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerImages, setViewerImages] = useState<string[]>([]);
   const [viewerIndex, setViewerIndex] = useState(0);
@@ -92,10 +110,9 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
   const [followLoading, setFollowLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const currentUser = profileFromContext ?? initialProfile;
   const { user: authUser } = useAuth();
-  const viewerId = authUser?.id ?? currentUser?.id;
-  const actorUsername = currentUser?.username ?? authUser?.user_metadata?.first_name ?? "";
+  const viewerId = sessionProfile?.id ?? authUser?.id;
+  const actorUsername = sessionProfile?.username ?? authUser?.user_metadata?.first_name ?? "";
   const followLabel = isFollowing ? t("profile.following") : isFollowedBy ? t("profile.followBack") : t("profile.follow");
 
   const openProfilePictureViewer = () => {
@@ -142,7 +159,7 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
   };
 
   const handleProfilePostLikeToggle = async (post: ProfilePost) => {
-    const profileUser = profileFromContext ?? getProfile();
+    const profileUser = sessionProfile;
     if (!profileUser) return;
 
     const postId = String(post.id);
@@ -185,7 +202,7 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
   };
 
   const handleProfilePostAddComment = async (post: ProfilePost, comment: { id: number; text?: string; voice?: string }) => {
-    const profileUser = profileFromContext ?? getProfile();
+    const profileUser = sessionProfile;
     if (!profileUser) return;
 
     try {
@@ -312,11 +329,11 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
         profilePic: uploadedUrl,
         ...(profile.is_vibes_pro ? { vibes_pro_portrait: uploadedUrl } : {}),
       };
-      setProfile((prev) => ({ ...prev, ...updatedProfile }));
-      saveProfile({ ...profile, ...updatedProfile });
-
       if (viewingOwn) {
-        await upsertProfileToSupabase(updatedProfile);
+        const saved = await upsertProfileToSupabase(updatedProfile);
+        if (saved) {
+          setGlobalProfile(saved);
+        }
       }
 
       setShowUploadSuccess(true);
@@ -474,11 +491,11 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
       }
 
       const updatedProfile = { ...profile, vibes_pro_portrait: uploadedUrl, profilePic: profile.profilePic ?? uploadedUrl };
-      setProfile((prev) => ({ ...prev, ...updatedProfile }));
-      saveProfile({ ...profile, ...updatedProfile });
-
       if (viewingOwn) {
-        await upsertProfileToSupabase(updatedProfile);
+        const saved = await upsertProfileToSupabase(updatedProfile);
+        if (saved) {
+          setGlobalProfile(saved);
+        }
       }
 
       if (portraitPreviewUrl?.startsWith("blob:")) {
@@ -532,8 +549,8 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
   const username = profile.username;
   const email = profile.email;
 
-  const viewingOwn = !routeUsername || routeUsername === currentUser?.username;
-  const isVibesPro = (profile.is_vibes_pro === true);
+  const viewingOwn = isOwnProfile;
+  const isVibesPro = isVibesProEnabled(profile);
 
   const vibesCount = myPosts.length;
   const snapshotsCount = myPosts.filter((post) => Boolean(post.image)).length;
@@ -573,7 +590,7 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
     return () => {
       try {
         sessionStorage.setItem(profileScrollKey, String(window.scrollY || 0));
-      } catch (e) {
+      } catch {
         // ignore storage failures
       }
     };
@@ -581,53 +598,84 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
 
   // Load profile: prefer route `:username` as source of truth.
   useEffect(() => {
+    const handleProfileRefresh = () => {
+      setViewedProfile(null);
+      setProfileLoading(true);
+      setMyPosts([]);
+      setProfileRefreshVersion((value) => value + 1);
+    };
+
+    window.addEventListener("metoyou:profile-refresh", handleProfileRefresh as EventListener);
+    return () => window.removeEventListener("metoyou:profile-refresh", handleProfileRefresh as EventListener);
+  }, []);
+
+  useEffect(() => {
     let mounted = true;
     const cacheKey = routeUsername ? `metoyou-profile:${routeUsername}` : `metoyou-profile:me`;
     const lastKey = `${cacheKey}:lastFetch`;
 
-    try {
-      const raw = sessionStorage.getItem(cacheKey);
-      if (raw) {
-        const cached = JSON.parse(raw) as ProfileData;
-        setProfile((prev: ProfileData) => ({ ...prev, ...cached }));
-        if (cached.language) setLanguage(normalizeLanguage(cached.language));
-      }
-    } catch (e) {
-      // ignore parse failures
+    // Clear previously viewed profile to avoid showing stale data
+    if (typeof window !== "undefined") {
+      window.requestAnimationFrame(() => {
+        setViewedProfile(null);
+        setProfileLoading(true);
+      });
     }
 
     void (async () => {
       try {
         const last = Number(sessionStorage.getItem(lastKey) || "0");
         const now = Date.now();
-        if (last && now - last < 30_000) return;
+        if (last && now - last < 30_000) {
+          // if cached recently, try to read cache first
+          const raw = sessionStorage.getItem(cacheKey);
+          if (raw && mounted) {
+            const cached = JSON.parse(raw) as ProfileData;
+            if (routeProfileRequested) {
+              setViewedProfile(cached);
+            } else {
+              setViewedProfile(null);
+            }
+            if (cached.language) setLanguage(normalizeLanguage(cached.language));
+            setProfileLoading(false);
+            return;
+          }
+        }
 
         const remote = routeUsername
           ? await fetchProfileByUsername(routeUsername)
           : await fetchProfileFromSupabase();
 
-        if (!mounted || !remote) return;
+        if (!mounted || !remote) {
+          setProfileLoading(false);
+          return;
+        }
 
-        setProfile((prev) => ({ ...prev, ...remote }));
+        if (routeProfileRequested) {
+          setViewedProfile(remote);
+        } else {
+          setViewedProfile(null);
+        }
         if (remote.language) setLanguage(normalizeLanguage(remote.language));
 
         try {
           sessionStorage.setItem(cacheKey, JSON.stringify(remote));
           sessionStorage.setItem(lastKey, String(Date.now()));
-        } catch (e) {
+        } catch {
           // ignore storage failures
         }
-      } catch (err) {
-        console.warn("Failed to load profile", err);
+      } catch (error) {
+        console.warn("Failed to load profile", error);
+      } finally {
+        if (mounted) setProfileLoading(false);
       }
     })();
 
     return () => {
       mounted = false;
     };
-  }, [routeUsername, setLanguage]);
+  }, [profileRefreshVersion, routeProfileRequested, routeUsername, routeUserId, setLanguage]);
 
-  // Load user's posts from Supabase when profile id changes
   useEffect(() => {
     let mounted = true;
     if (!profile?.id) return;
@@ -635,32 +683,34 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
     const postsKey = `metoyou-profile-posts:${profile.id}`;
     const postsLastKey = `${postsKey}:lastFetch`;
 
-    try {
-      const raw = sessionStorage.getItem(postsKey);
-      if (raw) {
-        const cached = JSON.parse(raw) as ProfilePost[];
-        setMyPosts(cached);
-      }
-    } catch (e) {
-      // ignore parse failures
-    }
-
     void (async () => {
       try {
         const last = Number(sessionStorage.getItem(postsLastKey) || "0");
         const now = Date.now();
         if (last && now - last < 30_000) return;
 
-        const records = await fetchPostsFromSupabase({ author_id: profile.id, limit: 50 });
+        type PostRecord = {
+          id: string;
+          author_id: string;
+          profiles?: { username?: string };
+          text?: string;
+          image_url?: string;
+          highlighted?: boolean;
+          created_at?: string;
+          likes_count?: number;
+          comments_count?: number;
+        };
+
+        const records = (await fetchPostsFromSupabase({ author_id: profile.id, limit: 50 })) as PostRecord[] | null;
         if (!mounted) return;
 
-        const mapped = (records || []).map((r: any) => ({
+        const mapped = (records ?? []).map((r) => ({
           id: r.id,
           author: { id: r.author_id, username: r.profiles?.username ?? r.author_id },
           text: r.text ?? "",
           image: r.image_url ?? undefined,
           highlighted: Boolean(r.highlighted),
-          time: new Date(r.created_at).toLocaleString(),
+          time: new Date(r.created_at ?? "").toLocaleString(),
           likes: Number(r.likes_count ?? 0),
           liked: false,
           comments: Number(r.comments_count ?? 0),
@@ -671,24 +721,21 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
         try {
           sessionStorage.setItem(postsKey, JSON.stringify(mapped));
           sessionStorage.setItem(postsLastKey, String(Date.now()));
-        } catch (e) {
+        } catch {
           // ignore storage failures
         }
-      } catch (err) {
-        console.warn("Failed to load profile posts", err);
+      } catch (error) {
+        console.warn("Failed to load profile posts", error);
       }
     })();
 
     return () => {
       mounted = false;
     };
-  }, [profile.id]);
+  }, [profile.id, profileRefreshVersion]);
 
   useEffect(() => {
-    if (viewingOwn) {
-      setFollowersCount(profile.hommies_count ?? 0);
-      return;
-    }
+    if (viewingOwn) return;
 
     let mounted = true;
     const followKey = `metoyou-follow:${viewerId}:${profile.id}`;
@@ -698,11 +745,14 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
       const raw = sessionStorage.getItem(followKey);
       if (raw) {
         const cached = JSON.parse(raw) as { isFollowing: boolean; isFollowedBy: boolean; followersCount: number };
-        setIsFollowing(Boolean(cached.isFollowing));
-        setIsFollowedBy(Boolean(cached.isFollowedBy));
-        setFollowersCount(cached.followersCount ?? profile.hommies_count ?? 0);
+        // Defer state updates to avoid synchronous setState in effect
+        window.requestAnimationFrame(() => {
+          setIsFollowing(Boolean(cached.isFollowing));
+          setIsFollowedBy(Boolean(cached.isFollowedBy));
+          setFollowersCount(cached.followersCount ?? profile.hommies_count ?? 0);
+        });
       }
-    } catch (e) {
+    } catch {
       // ignore cache failures
     }
 
@@ -723,18 +773,18 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
         try {
           sessionStorage.setItem(followKey, JSON.stringify(status));
           sessionStorage.setItem(followLastKey, String(Date.now()));
-        } catch (e) {
+        } catch {
           // ignore storage failures
         }
-      } catch (err) {
-        console.warn("Failed to load follow status", err);
+      } catch (error) {
+        console.warn("Failed to load follow status", error);
       }
     })();
 
     return () => {
       mounted = false;
     };
-  }, [profile.id, viewerId, viewingOwn]);
+  }, [profile.id, viewerId, viewingOwn, profile.hommies_count, profileRefreshVersion]);
 
   const handleFollowToggle = async () => {
     if (!viewerId || !profile?.id || viewingOwn || followLoading) return;
@@ -763,7 +813,7 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
     navigate(`/chat?recipient=${profile.id}&username=${encodeURIComponent(profile.username)}`);
   };
 
-  return (
+  return appReady ? (profileLoading ? <ProfileSkeleton /> : (
     <div className={`${isVibesPro ? 'fixed inset-0 z-0 overflow-hidden bg-[#0B0B0B]' : 'app-screen bg-linear-to-br from-pink-100 via-purple-100 to-blue-100 p-3 md:p-6 pt-24 md:pt-32 pb-20 md:pb-24'}`}>
       <div className={`mx-auto ${isVibesPro ? 'w-full max-w-none' : 'max-w-2xl'}`}>
         {!isVibesPro && (
@@ -906,7 +956,7 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
             )}
 
             <div className="mt-6 md:mt-8 text-center">
-              <p className="uppercase text-xs md:text-sm tracking-[0.3em] text-slate-500">@{username.toLowerCase().replace(/\s+/g, "")}</p>
+              <p className="uppercase text-xs md:text-sm tracking-[0.3em] text-slate-500">@{(username ?? "").toLowerCase().replace(/\s+/g, "")}</p>
               <h2 className="text-2xl md:text-3xl font-black mt-2">{username}</h2>
               <p className="text-xs md:text-sm text-slate-600 mt-2">{email}</p>
             </div>
@@ -993,12 +1043,17 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
             <div className="mt-6 md:mt-8">
               <h2 className="font-bold text-xl md:text-2xl mb-3 md:mb-4">{t("profile.mySnapshots")}</h2>
               <div className="space-y-4">
-                {myPosts.map((post) => (
-                  <PostCard
-                    key={post.id}
-                    author={post.author ?? { id: profile.id, username: profile.username }}
-                    authorId={post.author?.id ?? profile.id}
-                    postId={post.id}
+                {myPosts.map((post) => {
+                  const isPostVibesPro = isVibesProEnabled(post.author ?? profile);
+
+                  return (
+                    <PostCard
+                      key={post.id}
+                      author={post.author ?? { id: profile.id, username: profile.username, is_vibes_pro: profile.is_vibes_pro }}
+                      authorId={post.author?.id ?? profile.id}
+                      isVibesPro={isPostVibesPro}
+                      variant={isPostVibesPro ? "gold" : "default"}
+                      postId={post.id}
                     time={post.time ?? ""}
                     text={post.text}
                     image={post.image}
@@ -1014,12 +1069,13 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
                     onClosePost={() => {
                       if (selectedPostId === post.id) setSelectedPostId(null);
                     }}
-                    onInteractionActivity={setAutoCloseSuppressed}
-                    onAddComment={(comment) => void handleProfilePostAddComment(post, comment)}
-                    onDeleteComment={(commentId) => void handleProfileCommentDelete(post, commentId)}
-                    onEditComment={(commentId, newText) => void handleProfileCommentEdit(post, commentId, newText)}
-                  />
-                ))}
+                      onInteractionActivity={setAutoCloseSuppressed}
+                      onAddComment={(comment) => void handleProfilePostAddComment(post, comment)}
+                      onDeleteComment={(commentId) => void handleProfileCommentDelete(post, commentId)}
+                      onEditComment={(commentId, newText) => void handleProfileCommentEdit(post, commentId, newText)}
+                    />
+                  );
+                })}
               </div>
             </div>
 
@@ -1032,7 +1088,7 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
                 postId={viewerPostId ?? undefined}
                 authorId={viewerAuthorId}
                 authorUsername={viewerAuthorUsername}
-                variant={profile?.is_vibes_pro ? "vibespro" : "default"}
+                variant={isVibesProEnabled(profile) ? "vibespro" : "default"}
                 onEditPost={() => {
                   const newText = window.prompt("Edit post text:", viewerImages[viewerIndex] ? undefined : "");
                   if (newText !== null) {
@@ -1053,5 +1109,5 @@ export default function Profile(_props: { embedded?: boolean } = {}) {
         )}
       </div>
     </div>
-  );
+  )) : null;
 }
