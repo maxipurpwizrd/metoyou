@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { login } from "../lib/auth";
 import { fetchProfileFromSupabase, upsertProfileToSupabase } from "../lib/profileApi";
 import { supabase } from "../lib/supabase";
@@ -9,6 +9,7 @@ import type { Language } from "../lib/i18n";
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { language, setLanguage, t } = useLanguage();
   const { refreshSession } = useSession();
 
@@ -21,6 +22,9 @@ export default function Login() {
   useEffect(() => {
     setSelectedLanguage(language);
   }, [language]);
+
+  // Always return to the feed after login to avoid returning to previous protected pages
+  const returnTo = "/feed";
 
   async function handleLogin(e?: FormEvent) {
     e?.preventDefault();
@@ -59,7 +63,7 @@ export default function Login() {
       }
 
       setLanguage(selectedLanguage);
-      navigate("/feed");
+      navigate(returnTo, { replace: true });
     } catch (error) {
       alert(t("auth.loginFailed"));
       console.error(error);

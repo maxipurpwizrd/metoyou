@@ -265,7 +265,33 @@ export default function Settings() {
     setErrorMessage("");
     try {
       await logout();
-      navigate("/login");
+      try {
+        await refreshSession();
+      } catch (e) {
+        // ignore errors refreshing session after logout
+      }
+
+      // Clear client-side session/cache keys to avoid restoring previous user's state
+      try {
+        window.localStorage.removeItem("metoyou-session-cache");
+        window.localStorage.removeItem("metoyou-language");
+        // remove any sessionStorage keys used by the app
+        Object.keys(window.sessionStorage).forEach((key) => {
+          if (key.startsWith("metoyou-")) window.sessionStorage.removeItem(key);
+        });
+      } catch (e) {
+        // ignore storage cleanup errors
+      }
+
+      // Reset browser history entry to make back navigation return to login/feed
+      try {
+        window.history.replaceState(null, "", "/login");
+        window.history.pushState(null, "", "/login");
+      } catch (e) {
+        // ignore history manipulation errors
+      }
+
+      navigate("/login", { replace: true });
     } catch (error) {
       console.error("Logout error", error);
       setErrorMessage("Unable to logout. Please try again.");

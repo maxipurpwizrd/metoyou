@@ -5,7 +5,7 @@ import { useSession, setGlobalProfile } from "../contexts/SessionContext";
 import { fetchProfileFromSupabase, fetchProfileByUsername, upsertProfileToSupabase, uploadProfileImage } from "../lib/profileApi";
 import { fetchPostsFromSupabase } from "../lib/postApi";
 import { addComment, getComments, editComment, deleteComment } from "../lib/commentApi";
-import { likePost, unlikePost, getPostLikes } from "../lib/likeApi";
+import { likePost, unlikePost, getPostLikes, hydratePostLikeState } from "../lib/likeApi";
 import { followUser, unfollowUser, getFollowStatus } from "../lib/followApi";
 import FollowButton from "../components/social/FollowButton";
 import { useAuth } from "../hooks/useAuth";
@@ -113,7 +113,13 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
   const { user: authUser } = useAuth();
   const viewerId = sessionProfile?.id ?? authUser?.id;
   const actorUsername = sessionProfile?.username ?? authUser?.user_metadata?.first_name ?? "";
-  const followLabel = isFollowing ? t("profile.following") : isFollowedBy ? t("profile.followBack") : t("profile.follow");
+  const followLabel = isFollowing && isFollowedBy
+    ? t("profile.homie")
+    : isFollowing
+      ? t("profile.following")
+      : isFollowedBy
+        ? t("profile.followBack")
+        : t("profile.follow");
 
   const openProfilePictureViewer = () => {
     if (!profilePic) return;
@@ -599,8 +605,7 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
   // Load profile: prefer route `:username` as source of truth.
   useEffect(() => {
     const handleProfileRefresh = () => {
-      setViewedProfile(null);
-      setProfileLoading(true);
+      // Keep currently shown profile while refresh runs to avoid flicker.
       setMyPosts([]);
       setProfileRefreshVersion((value) => value + 1);
     };
@@ -614,13 +619,9 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
     const cacheKey = routeUsername ? `metoyou-profile:${routeUsername}` : `metoyou-profile:me`;
     const lastKey = `${cacheKey}:lastFetch`;
 
-    // Clear previously viewed profile to avoid showing stale data
-    if (typeof window !== "undefined") {
-      window.requestAnimationFrame(() => {
-        setViewedProfile(null);
-        setProfileLoading(true);
-      });
-    }
+    // Don't clear previously viewed profile on remount; keep it visible
+    // while we check cache/remote so the UI doesn't flicker to skeletons.
+    // (leave viewedProfile as-is and only set loading state when needed)
 
     void (async () => {
       try {
@@ -704,7 +705,7 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
         const records = (await fetchPostsFromSupabase({ author_id: profile.id, limit: 50 })) as PostRecord[] | null;
         if (!mounted) return;
 
-        const mapped = (records ?? []).map((r) => ({
+        const mapped = (await hydratePostLikeState((records ?? []).map((r) => ({
           id: r.id,
           author: { id: r.author_id, username: r.profiles?.username ?? r.author_id },
           text: r.text ?? "",
@@ -715,7 +716,7 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
           liked: false,
           comments: Number(r.comments_count ?? 0),
           commentList: undefined,
-        } as ProfilePost));
+        } as ProfilePost)), sessionProfile?.id ?? authUser?.id));
 
         setMyPosts(mapped);
         try {
@@ -788,6 +789,13 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
 
   const handleFollowToggle = async () => {
     if (!viewerId || !profile?.id || viewingOwn || followLoading) return;
+
+    if (isFollowing && isFollowedBy) {
+      const shouldUnfollow = window.confirm(
+        `${profile.username} is your homie. Would you like to unfollow them?`
+      );
+      if (!shouldUnfollow) return;
+    }
 
     setFollowLoading(true);
 

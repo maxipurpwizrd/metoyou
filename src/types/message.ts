@@ -29,8 +29,10 @@ export type Conversation = {
 };
 
 export type MessageThread = {
+  conversationId: string;
   otherId: string;
   otherUsername: string;
   lastText?: string | null;
   lastTime?: string;
+  hasOutgoingMessages?: boolean;
 };

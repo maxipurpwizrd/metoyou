@@ -6,6 +6,7 @@ import { useSession } from "../contexts/SessionContext";
 import { VibesProFeed } from "../themes/vibespro";
 import { useAppInit } from "../contexts/AppInitContext";
 import { isVibesProEnabled } from "../lib/vibesPro";
+import { supabase } from "../lib/supabase";
 
 import CreatePost from "../components/CreatePost";
 import PostCard from "../components/PostCard";
@@ -18,7 +19,6 @@ import {
   deleteStoryFromSupabase,
   fetchStoriesFromSupabase,
   subscribeToStories,
-  updateStoryReactionsInSupabase,
   type StoryRecord,
   type StoryType,
 } from "../lib/storyApi";
@@ -64,8 +64,6 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
   if (!appReady || !profileReady) return null;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const musicInputRef = useRef<HTMLInputElement>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
 
   const [selectedStory, setSelectedStory] = useState<Story | null>(null);
   const [selectedStoryIndex, setSelectedStoryIndex] = useState<number | null>(null);
@@ -74,6 +72,8 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
   const [storyCreating, setStoryCreating] = useState(false);
   const [storyCreateProgress, setStoryCreateProgress] = useState(0);
   const [storyCreateStatus, setStoryCreateStatus] = useState<string | null>(null);
+  const [storyCreateError, setStoryCreateError] = useState<string | null>(null);
+  const [storyNotice, setStoryNotice] = useState<string | null>(null);
   const [savedStories, setSavedStories] = useState<string[]>(() => {
     const saved = localStorage.getItem("metoyou-saved-stories");
     return saved ? (JSON.parse(saved) as string[]) : [];
@@ -118,9 +118,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
   const [storyDuration, setStoryDuration] = useState<number>(24);
   const [storyMusic, setStoryMusic] = useState<string | undefined>(undefined);
   const [storyVoice, setStoryVoice] = useState<string | undefined>(undefined);
-  const [isRecording, setIsRecording] = useState<boolean>(false);
   const [currentTime, setCurrentTime] = useState<number>(() => Date.now());
-  const [userReactions, setUserReactions] = useState<Record<string, string | null>>({});
   const { posts, setPosts, savedScrollY, setSavedScrollY, selectedPostId, setSelectedPostId, loading } = useFeed();
   const filteredPosts = useMemo(
     () => posts.filter((post) => !mutedUsers.includes(post.author.id)),
@@ -296,6 +294,14 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
     );
   };
 
+  const showStoryNotice = (message: string) => {
+    setStoryNotice(message);
+    window.clearTimeout((window as Window & { __storyNoticeTimer?: number }).__storyNoticeTimer);
+    (window as Window & { __storyNoticeTimer?: number }).__storyNoticeTimer = window.setTimeout(() => {
+      setStoryNotice(null);
+    }, 3000);
+  };
+
   const goToNextStory = () => {
     if (selectedStoryIndex === null) return;
     const nextIndex = (selectedStoryIndex + 1) % stories.length;
@@ -310,6 +316,17 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
 
   useEffect(() => {
     if (!selectedStory || selectedStoryIndex === null) return;
+
+    if (selectedStory.voice) {
+      showStoryNotice("Coming Soon");
+      const delayTimer = window.setTimeout(() => {
+        goToNextStory();
+      }, 3000);
+
+      return () => {
+        window.clearTimeout(delayTimer);
+      };
+    }
 
     setStoryProgress(0);
     const progressInterval = window.setInterval(() => {
@@ -594,10 +611,17 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
     const profile = currentUserProfile;
     if (!profile) return;
 
+    if (storyVoice || storyMusic) {
+      setStoryCreateError("Audio stories are coming soon.");
+      showStoryNotice("Coming Soon");
+      return;
+    }
+
     const displayName = profile?.username || "Maxi";
     const storyType: StoryType = selectedImage ? "photo" : storyVoice ? "voice" : "text";
     const isMediaStory = Boolean(selectedImage || storyVoice);
 
+    setStoryCreateError(null);
     setStoryCreating(true);
     setStoryCreateProgress(0);
     setStoryCreateStatus(isMediaStory ? "Uploading" : "Posting");
@@ -617,8 +641,10 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
       });
     }, 250);
 
+    let createdStory: StoryRecord | null = null;
+
     try {
-      const createdStory = await createStoryToSupabase({
+      createdStory = await createStoryToSupabase({
         authorId: profile.id,
         username: displayName,
         profilePic: profile.profilePic ?? null,
@@ -630,16 +656,29 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
       });
 
       if (createdStory) {
-        setStories((prevStories) => [mapStoryRecord(createdStory), ...prevStories.filter((story) => story.id !== createdStory.id)]);
+        const mappedStory = mapStoryRecord(createdStory);
+        setStories((prevStories) => [mappedStory, ...prevStories.filter((story) => story.id !== mappedStory.id)]);
+      } else {
+        setStoryCreateError("Story could not be posted right now.");
       }
+    } catch (error) {
+      console.error("Failed to create story", error);
+      setStoryCreateError("Story could not be posted right now.");
     } finally {
       window.clearInterval(progressInterval);
       setStoryCreateProgress(100);
       setStoryCreateStatus(isMediaStory ? "Uploaded" : "Posted");
       setTimeout(() => {
+        if (!createdStory) {
+          setStoryCreateProgress(0);
+          setStoryCreateStatus(null);
+          return;
+        }
+
         setStoryCreating(false);
         setStoryCreateStatus(null);
         setStoryCreateProgress(0);
+        setStoryCreateError(null);
         setStoryEditorOpen(false);
         setStoryChoiceOpen(false);
         setStoryMode(null);
@@ -652,32 +691,6 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
     }
   };
 
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-      mediaRecorder.ondataavailable = (event) => {
-        audioChunksRef.current.push(event.data);
-      };
-      mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        const audioUrl = URL.createObjectURL(audioBlob);
-        setStoryVoice(audioUrl);
-      };
-      mediaRecorder.start();
-      setIsRecording(true);
-    } catch {
-      alert('Microphone permission denied.');
-    }
-  };
-
-  const stopRecording = () => {
-    mediaRecorderRef.current?.stop();
-    setIsRecording(false);
-  };
-
   const getTimeLeft = (expiresAt: number) => {
     const diff = expiresAt - currentTime;
     if (diff <= 0) return "Expired";
@@ -687,39 +700,6 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
 
     if (hours === 0) return `${minutes}m`;
     return `${hours}h ${minutes}m`;
-  };
-
-  const handleReaction = async (storyId: string, emoji: string) => {
-    const targetStory = stories.find((story) => story.id === storyId);
-    if (!targetStory) return;
-
-    const currentReaction = userReactions[storyId];
-    const isToggling = currentReaction === emoji;
-    const newReactions = targetStory.reactions ? { ...targetStory.reactions } : {};
-
-    if (currentReaction) {
-      if (!newReactions[currentReaction]) newReactions[currentReaction] = [];
-      newReactions[currentReaction] = newReactions[currentReaction].filter((user) => user !== "You");
-      if (newReactions[currentReaction].length === 0) {
-        delete newReactions[currentReaction];
-      }
-    }
-
-    if (!isToggling) {
-      if (!newReactions[emoji]) newReactions[emoji] = [];
-      newReactions[emoji] = [...newReactions[emoji], "You"];
-    }
-
-    setStories((prevStories) =>
-      prevStories.map((story) => (story.id === storyId ? { ...story, reactions: newReactions } : story))
-    );
-    setSelectedStory((prev) => (prev && prev.id === storyId ? { ...prev, reactions: newReactions } : prev));
-    setUserReactions((prev) => ({
-      ...prev,
-      [storyId]: isToggling ? null : emoji,
-    }));
-
-    await updateStoryReactionsInSupabase(storyId, newReactions);
   };
 
   // Determine story card styling based on user's VibesPro status
@@ -1030,7 +1010,18 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                                       const profile = currentUserProfile;
                                       if (!profile) return;
 
+                                      console.log("Feed: posting comment", { postId: post.id, profileId: profile.id, comment });
+                                      try {
+                                        const userResp = await supabase.auth.getUser();
+                                        console.log("Feed: supabase.getUser()", userResp);
+                                      } catch (e) {
+                                        console.warn("Feed: supabase.getUser() error", e);
+                                      }
+
                                       const added = await addComment(String(post.id), profile.id, comment.text, comment.voice);
+                                      console.log("Feed: addComment result", added);
+                                      if (!added) console.warn("Feed: addComment returned null — DB insert may have failed or been swallowed");
+
                                       setPosts((prevPosts) =>
                                         prevPosts.map((p) =>
                                           p.id === post.id
@@ -1239,7 +1230,10 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
               <div className="relative z-30 w-full h-full bg-linear-to-br from-pink-500 via-purple-500 to-blue-500 px-6 py-8 text-white flex items-center justify-center">
                 <div
                   className="max-w-[85%] max-h-[70vh] overflow-y-auto whitespace-pre-wrap wrap-break-word text-center text-2xl md:text-3xl font-semibold leading-relaxed scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent"
-                  style={{ overscrollBehavior: "contain" }}
+                  style={{
+                    overscrollBehavior: "contain",
+                    textShadow: "-1px -1px 0 rgba(0,0,0,0.45), 1px -1px 0 rgba(0,0,0,0.45), -1px 1px 0 rgba(0,0,0,0.45), 1px 1px 0 rgba(0,0,0,0.45)",
+                  }}
                 >
                   {selectedStory.text}
                 </div>
@@ -1253,42 +1247,12 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
               {selectedStory.music && <span className="rounded-full bg-black/30 px-2 py-1">🎵 {selectedStory.music}</span>}
             </div>
 
-            <div className="absolute bottom-6 left-0 right-0 text-center text-white px-4 space-y-3">
-
-              {selectedStory.voice && (
-                <div className="mx-auto max-w-xs">
-                  <audio controls src={selectedStory.voice} className="w-full h-6 opacity-80" />
-                </div>
-              )}
-
-              <div>
-                <h2 className="font-bold text-xl tracking-tight">
+            <div className="absolute bottom-6 left-0 right-0 z-50 px-4 text-center text-white">
+              <div className="mx-auto inline-flex items-center rounded-full border border-white/20 bg-white/10 px-4 py-3 shadow-[0_10px_30px_rgba(0,0,0,0.35)] backdrop-blur-md">
+                <h2 className="text-xl font-bold tracking-tight drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)]">
                   {currentUserProfile?.username && selectedStory.name === currentUserProfile.username ? "Your Story" : selectedStory.name}
                 </h2>
-                <p className="text-xs text-white/60 mt-0.5">{selectedStory.duration}</p>
               </div>
-
-              {!(currentUserProfile?.username && selectedStory.name === currentUserProfile.username) && (
-                <div className="pt-2 flex gap-1.5 justify-center">
-                  {['❤️', '😂', '🔥', '😮', '👏'].map((emoji) => {
-                    const count = selectedStory.reactions?.[emoji]?.length || 0;
-                    const isUserReacted = userReactions[selectedStory.id] === emoji;
-                    return (
-                      <button
-                        key={emoji}
-                        onClick={() => handleReaction(selectedStory.id, emoji)}
-                        className={`px-2.5 py-1 rounded-full text-xs transition-all ${
-                          isUserReacted
-                            ? 'bg-white text-slate-900 scale-105 font-bold shadow-md'
-                            : 'bg-white/10 text-white hover:bg-white/20'
-                        }`}
-                      >
-                        {emoji} <span className="text-[10px] opacity-90">{count > 0 ? count : ''}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -1323,6 +1287,15 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
         </div>
       )}
 
+      {storyNotice ? (
+        <div className="fixed inset-0 z-70 flex items-center justify-center bg-black/55 px-4 backdrop-blur-sm">
+          <div className="rounded-3xl border border-white/20 bg-white/95 px-6 py-5 text-center shadow-2xl">
+            <p className="text-lg font-black text-slate-900">Coming Soon</p>
+            <p className="mt-1 text-sm text-slate-600">Audio stories are being prepared for a future update.</p>
+          </div>
+        </div>
+      ) : null}
+
       {/* Story Builder/Editor Overlay */}
       {storyEditorOpen && (selectedImage || storyMode === "text") && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -1354,19 +1327,29 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
             <div className="grid grid-cols-2 gap-2 text-xs font-semibold">
               <button
                 type="button"
-                onClick={() => musicInputRef.current?.click()}
+                onClick={() => {
+                  showStoryNotice("Coming Soon");
+                }}
                 className="bg-purple-50 text-purple-600 py-2.5 rounded-xl hover:bg-purple-100 transition-colors"
               >
                 🎵 {storyMusic ? "Change Audio" : "Add Music"}
               </button>
               <button
                 type="button"
-                onClick={isRecording ? stopRecording : startRecording}
-                className={`py-2.5 rounded-xl transition-colors ${isRecording ? "bg-red-500 text-white animate-pulse" : "bg-blue-50 text-blue-600 hover:bg-blue-100"}`}
+                onClick={() => {
+                  showStoryNotice("Coming Soon");
+                }}
+                className="py-2.5 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
               >
-                {isRecording ? "⏹ Stop Record" : "🎙 Record Voice"}
+                🎙 Record Voice
               </button>
             </div>
+
+            {storyCreateError ? (
+              <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-600">
+                {storyCreateError}
+              </p>
+            ) : null}
 
             {storyMusic && <p className="text-[11px] text-purple-600 font-medium truncate px-1">Selected: {storyMusic}</p>}
             {storyVoice && <audio controls src={storyVoice} className="w-full h-6 opacity-80" />}

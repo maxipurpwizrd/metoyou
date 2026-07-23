@@ -96,6 +96,8 @@ export default function PostCard({
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const menuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [displayLikes, setDisplayLikes] = useState(likes);
+  const [displayLiked, setDisplayLiked] = useState(Boolean(liked));
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
   const [newComment, setNewComment] = useState("");
@@ -189,6 +191,11 @@ export default function PostCard({
 
   const hasVisualMedia = Boolean(image || video);
   const showMedia = Boolean(image || video || audio || text);
+
+  useEffect(() => {
+    setDisplayLikes(likes);
+    setDisplayLiked(Boolean(liked));
+  }, [likes, liked]);
 
   useEffect(() => {
     if (import.meta.env.DEV) {
@@ -883,11 +890,13 @@ export default function PostCard({
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
+                      setDisplayLiked((prev) => !prev);
+                      setDisplayLikes((prev) => prev + (displayLiked ? -1 : 1));
                       onToggleLike?.();
                     }}
                     className={`py-1.5 md:py-2.5 text-xs font-bold text-center transition-colors rounded-lg border ${isPremiumTheme ? "text-amber-800 hover:bg-amber-100/70 border-amber-200/70" : "text-pink-600 hover:bg-pink-50/40 border-pink-200/50 md:border-slate-100"}`}
                   >
-                    {liked ? "❤️" : "🤍"} {likes}
+                    {displayLiked ? "❤️" : "🤍"} {displayLikes}
                   </button>
                   <button
                     type="button"
@@ -927,11 +936,13 @@ export default function PostCard({
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
+                    setDisplayLiked((prev) => !prev);
+                    setDisplayLikes((prev) => prev + (displayLiked ? -1 : 1));
                     onToggleLike?.();
                   }}
                   className={`flex-1 py-2.5 text-xs font-bold text-center transition-colors ${isPremiumTheme ? "text-amber-800 hover:bg-amber-100/70" : "text-pink-600 hover:bg-pink-50/40"}`}
                 >
-                  {liked ? "❤️" : "🤍"} {likes} Likes
+                  {displayLiked ? "❤️" : "🤍"} {displayLikes} Likes
                 </button>
                 <div className="w-px bg-slate-100"></div>
                 <button

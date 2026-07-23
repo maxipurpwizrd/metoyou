@@ -34,3 +34,9 @@ create policy "Users can update their stories"
   on public.stories
   for update
   using (auth.uid() = author_id);
+
+drop policy if exists "Users can delete their stories" on public.stories;
+create policy "Users can delete their stories"
+  on public.stories
+  for delete
+  using (auth.uid() = author_id);

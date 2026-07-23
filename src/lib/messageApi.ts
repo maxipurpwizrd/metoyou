@@ -60,17 +60,42 @@ export async function getMessageThreads(
       }
     });
 
+    const { data: outgoingMessages, error: outgoingError } = await supabase
+      .from("messages")
+      .select("conversation_id")
+      .in("conversation_id", conversationIds)
+      .eq("sender_id", userId);
+
+    if (outgoingError) throw outgoingError;
+
+    const outgoingConversationIds = new Set<string>();
+    (outgoingMessages || []).forEach((msg) => {
+      if (msg.conversation_id) {
+        outgoingConversationIds.add(msg.conversation_id);
+      }
+    });
+
     // Assemble threads from memory-cached data (already sorted by last_message_at DESC from query)
-    const threads: MessageThread[] = conversations.map((conv) => {
+    const uniqueConversations = new Map<string, typeof conversations[number]>();
+    for (const conv of conversations) {
+      const otherId = conv.user_1 === userId ? conv.user_2 : conv.user_1;
+      if (!uniqueConversations.has(otherId)) {
+        uniqueConversations.set(otherId, conv);
+      }
+    }
+
+    const threads: MessageThread[] = Array.from(uniqueConversations.values()).map((conv) => {
       const otherId = conv.user_1 === userId ? conv.user_2 : conv.user_1;
       const profile = profileMap.get(otherId);
       const lastMessage = latestMessageMap.get(conv.id);
 
       return {
+        conversationId: conv.id,
         otherId,
         otherUsername: profile?.username ?? "User",
         lastText: lastMessage?.text,
         lastTime: lastMessage?.created_at,
+        hasOutgoingMessages: outgoingConversationIds.has(conv.id),
       };
     });
 
@@ -86,8 +111,35 @@ export async function findOrCreateConversation(
   userId2: string
 ): Promise<Conversation | null> {
   try {
+    // Diagnostic: log the auth user and the requested participants
+    try {
+      const { data: sessionData } = await supabase.auth.getUser();
+      const authUserId = sessionData?.user?.id ?? null;
+      console.debug("[messageApi] findOrCreateConversation inputs", { userId1, userId2, authUserId });
+    } catch (e) {
+      console.debug("[messageApi] findOrCreateConversation unable to read auth session", e);
+    }
     // Normalize user IDs for consistent ordering to prevent duplicates
     const [minId, maxId] = userId1 < userId2 ? [userId1, userId2] : [userId2, userId1];
+    console.debug("[messageApi] findOrCreateConversation normalized", { minId, maxId });
+
+    // Defensive checks: ensure auth user matches one of the participants and inputs are present
+    const { data: sessionData } = await supabase.auth.getUser();
+    const authUserId = sessionData?.user?.id ?? null;
+    if (!minId || !maxId) {
+      console.error("[messageApi] findOrCreateConversation missing participant ids", { userId1, userId2 });
+      return null;
+    }
+
+    if (!authUserId) {
+      console.error("[messageApi] findOrCreateConversation no auth session available", { userId1, userId2 });
+      return null;
+    }
+
+    if (authUserId !== userId1 && authUserId !== userId2) {
+      console.error("[messageApi] findOrCreateConversation auth user is not a participant", { authUserId, userId1, userId2 });
+      return null;
+    }
 
     // Search for conversation with BOTH possible orderings (in case of legacy duplicates)
     const { data: existing, error: selectError } = await supabase
@@ -130,6 +182,7 @@ export async function findOrCreateConversation(
       .single();
 
     if (error) {
+      console.error("[messageApi] conversation insert error", error, { minId, maxId });
       // Handle race condition: another request already created it
       if (error.code === "23505" || error.message?.includes("unique")) {
         // Retry search - should find it now
@@ -217,6 +270,10 @@ export async function fetchMessages(
       .select("*")
       .eq("conversation_id", conversationId)
       .order("created_at", { ascending: true });
+
+    if (error && error.code === "42501") {
+      console.error("[messageApi] fetchMessages RLS violation", { conversationId, error });
+    }
 
     if (error) {
       console.error("fetchMessages query failed", error);

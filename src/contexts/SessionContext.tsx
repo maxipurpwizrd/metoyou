@@ -126,6 +126,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const userRef = useRef<User | null>(user);
   const profileRef = useRef<ProfileData | null>(profile);
   const languageRef = useRef<AppLanguage>(language);
+  const hasLoadedProfileRef = useRef(false);
+  const prevUserIdRef = useRef<string | null | undefined>(user?.id);
 
   useEffect(() => {
     userRef.current = user;
@@ -183,6 +185,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     lastRefreshAtRef.current = now;
 
     if (!currentUserId) {
+      hasLoadedProfileRef.current = true;
       setProfileState(null);
       setProfileReady(true);
       setIsLoadingSession(false);
@@ -192,7 +195,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
     refreshInFlightRef.current = true;
     setIsLoadingSession(true);
-    setProfileReady(false);
+    if (!hasLoadedProfileRef.current) {
+      setProfileReady(false);
+    }
 
     try {
       const remoteProfile = await fetchProfileFromSupabase(currentUserId);
@@ -220,6 +225,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       }
 
       setProfileReady(true);
+      hasLoadedProfileRef.current = true;
     } catch {
       const cached = readSessionCache();
       const fallbackProfile = canonicalizeProfile(cached?.profile ?? null);
@@ -230,6 +236,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         writeSessionCache(fallbackProfile, fallbackLanguage);
       }
       setProfileReady(true);
+      hasLoadedProfileRef.current = true;
     } finally {
       refreshInFlightRef.current = false;
       setIsLoadingSession(false);
@@ -250,6 +257,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [profile, language, setProfile]);
 
   useEffect(() => {
+    const currentUserId = user?.id;
+    if (prevUserIdRef.current !== currentUserId) {
+      hasLoadedProfileRef.current = false;
+      prevUserIdRef.current = currentUserId;
+    }
+
     if (authLoading) {
       setIsLoadingSession(true);
       setProfileReady(false);

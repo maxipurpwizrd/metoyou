@@ -1,7 +1,9 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode, type SetStateAction } from "react";
 import { useQueryClient } from '@tanstack/react-query';
 import { fetchPostsFromSupabase } from "../lib/postApi";
+import { hydratePostComments } from "../lib/commentApi";
 import { useAuth } from "../hooks/useAuth";
+import { hydratePostLikeState } from "../lib/likeApi";
 import { isVibesProEnabled } from "../lib/vibesPro";
 import type { PostRecord } from "../types/post";
 
@@ -158,10 +160,10 @@ export function FeedProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const mapRecords = async (records: PostRecord[] | null | undefined) => {
+  const mapRecords = async (records: PostRecord[] | null | undefined, currentUserId?: string) => {
     const safeRecords = Array.isArray(records) ? records : [];
 
-    return safeRecords.map((r: PostRecord) => ({
+    const mapped = safeRecords.map((r: PostRecord) => ({
       id: r.id,
       author: {
         id: r.author_id,
@@ -184,6 +186,8 @@ export function FeedProvider({ children }: { children: ReactNode }) {
       liked: false,
       highlighted: Boolean(r.highlighted),
     } as Post));
+
+    return hydratePostLikeState(mapped, currentUserId);
   };  const syncPosts = (nextPosts: Post[]) => {
     setPosts(nextPosts);
   };
@@ -260,7 +264,33 @@ export function FeedProvider({ children }: { children: ReactNode }) {
       const records = refresh
         ? await fetchPostsFromSupabase({ limit: PAGE_SIZE, after: newestCursor })
         : await fetchPostsFromSupabase({ limit: PAGE_SIZE, before: oldestCursor });
-      const withMeta = await mapRecords(Array.isArray(records) ? (records as PostRecord[]) : []);
+      let withMeta = await mapRecords(Array.isArray(records) ? (records as PostRecord[]) : [], user?.id);
+
+      // Attach comments for posts so persisted comments show after refresh/load.
+      try {
+        withMeta = await hydratePostComments(withMeta);
+        // Normalize comment records into the UI-friendly `Comment` shape expected by PostCard
+        withMeta = withMeta.map((post) => {
+          const rawComments = (post as any).comments as any[] | undefined;
+          const mappedComments = Array.isArray(rawComments)
+            ? rawComments.map((c) => ({
+                id: c.id,
+                user: { id: c.author_id ?? c.user_id ?? "", username: c.profiles?.username ?? c.author_id ?? c.user_id ?? "", avatar: c.profiles?.profile_pic ?? undefined },
+                text: c.text ?? undefined,
+                voice: c.voice_url ?? c.voice ?? undefined,
+                likes: Number(c.likes ?? 0),
+              }))
+            : [];
+
+          return {
+            ...post,
+            comments: mappedComments,
+            comments_count: mappedComments.length,
+          } as typeof post;
+        });
+      } catch (e) {
+        devLog("hydratePostComments failed", e);
+      }
 
       if (!isMountedRef.current || currentRequestId.current !== requestId) {
         devLog("loadPostsPage ignored stale response", requestId);
