@@ -33,6 +33,7 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
   const [storyMode, setStoryMode] = useState<"text" | "photo" | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [storyText, setStoryText] = useState<string>("");
+  const [storyDuration, setStoryDuration] = useState<number>(24);
   const [storyCreating, setStoryCreating] = useState(false);
   const [storyCreateError, setStoryCreateError] = useState<string | null>(null);
   const [storyCreateProgress, setStoryCreateProgress] = useState(0);
@@ -54,7 +55,9 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
   const [contextMenuThreadId, setContextMenuThreadId] = useState<string | null>(null);
   const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showBottomNav, setShowBottomNav] = useState(false);
   const pressTimerRef = useRef<number | null>(null);
+  const hideBottomNavTimerRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
   const { profile } = useSession();
   const isVibesPro = isVibesProEnabled(profile);
@@ -251,6 +254,7 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
     setStoryEditorOpen(true);
     setSelectedImage(null);
     setStoryText("");
+    setStoryDuration(24);
     setStoryCreateError(null);
     setStoryCreateProgress(0);
     setStoryCreateStatus(null);
@@ -265,6 +269,7 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
       setSelectedImage(reader.result as string);
       setStoryEditorOpen(true);
       setStoryText("");
+      setStoryDuration(24);
       setStoryCreateError(null);
       setStoryCreateProgress(0);
       setStoryCreateStatus(null);
@@ -296,7 +301,7 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
         text: storyText.trim() || undefined,
         image: selectedImage ?? undefined,
         storyType,
-        durationHours: 24,
+        durationHours: storyDuration,
       });
 
       if (!createdStory) {
@@ -307,6 +312,7 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
         setStoryMode(null);
         setSelectedImage(null);
         setStoryText("");
+        setStoryDuration(24);
       }
     } catch (error) {
       console.error("Failed to create story", error);
@@ -325,6 +331,7 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
     setStoryMode(null);
     setSelectedImage(null);
     setStoryText("");
+    setStoryDuration(24);
     setStoryCreateError(null);
     setStoryCreateProgress(0);
     setStoryCreateStatus(null);
@@ -483,6 +490,37 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
     window.addEventListener("pointerdown", handlePointerDown);
     return () => window.removeEventListener("pointerdown", handlePointerDown);
   }, [isMenuOpen]);
+
+  useEffect(() => {
+    if (!isVibesPro) return;
+
+    const revealBottomNav = () => {
+      setShowBottomNav(true);
+      if (hideBottomNavTimerRef.current) {
+        window.clearTimeout(hideBottomNavTimerRef.current);
+      }
+      hideBottomNavTimerRef.current = window.setTimeout(() => {
+        setShowBottomNav(false);
+      }, 1800);
+    };
+
+    const handleScroll = () => revealBottomNav();
+    const handlePointerDown = () => revealBottomNav();
+    const handleTouchStart = () => revealBottomNav();
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("touchstart", handleTouchStart, { passive: true });
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("touchstart", handleTouchStart);
+      if (hideBottomNavTimerRef.current) {
+        window.clearTimeout(hideBottomNavTimerRef.current);
+      }
+    };
+  }, [isVibesPro]);
 
   useEffect(() => {
     if (!isVibesPro) return;
@@ -696,21 +734,31 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
 
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-20 px-6 pb-4 backdrop-blur-xl sm:px-0">
-        <div className="mx-auto max-w-xl rounded-t-4xl overflow-hidden border border-white/10 bg-[#070707]/95 shadow-2xl">
-          <div className={`flex text-center text-sm font-semibold uppercase tracking-[0.15em] text-white/80 ${
-            isVibesPro ? '' : 'bg-white/10'
+      <div className={`fixed inset-x-0 bottom-0 z-20 px-6 pb-4 backdrop-blur-xl sm:px-0 transition-all duration-300 ease-out ${
+        isVibesPro
+          ? showBottomNav
+            ? 'translate-y-0 opacity-100 pointer-events-auto'
+            : 'translate-y-6 opacity-0 pointer-events-none'
+          : 'translate-y-0 opacity-100 pointer-events-auto'
+      }`}>
+        <div className={`mx-auto max-w-xl rounded-t-4xl overflow-hidden border shadow-2xl ${
+          isVibesPro ? 'border-white/10 bg-[#070707]/95' : 'border-white/40 bg-white/80 backdrop-blur-3xl'
+        }`}>
+          <div className={`flex text-center text-sm font-semibold uppercase tracking-[0.15em] ${
+            isVibesPro ? 'text-white/80' : 'text-slate-900'
           }`}>
             <Link
               to="/messages/spam"
-              className="flex-1 px-4 py-4 border-r border-white/10 hover:bg-white/5 transition-colors text-left"
+              className={`flex-1 px-4 py-4 transition-colors text-left ${
+                isVibesPro ? 'border-r border-white/10 hover:bg-white/5' : 'border-r border-white/50 hover:bg-white/50'
+              }`}
             >
               Spam
             </Link>
             <button
               type="button"
               onClick={() => navigate("/messages/archived")}
-              className="flex-1 px-4 py-4 hover:bg-white/5 transition-colors"
+              className={`flex-1 px-4 py-4 transition-colors ${isVibesPro ? 'hover:bg-white/5' : 'hover:bg-white/50'}`}
             >
               Archived
             </button>
@@ -719,28 +767,30 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
       </div>
       {isMenuOpen && contextMenuThreadId && contextMenuPosition ? (
         <div
-          className="fixed z-30 rounded-3xl border border-white/10 bg-[#080808]/95 p-3 shadow-2xl"
+          className={`fixed z-30 rounded-3xl border p-3 shadow-2xl ${
+            isVibesPro ? 'border-white/10 bg-[#080808]/95' : 'border-white/40 bg-white/90 backdrop-blur-3xl'
+          }`}
           style={{ left: contextMenuPosition.x, top: contextMenuPosition.y, minWidth: 180 }}
           onPointerDown={(event) => event.stopPropagation()}
         >
           <button
             type="button"
             onClick={() => handleArchiveThread(contextMenuThreadId)}
-            className="w-full rounded-2xl px-3 py-2 text-left text-sm text-white hover:bg-white/5"
+            className={`w-full rounded-2xl px-3 py-2 text-left text-sm ${isVibesPro ? 'text-white hover:bg-white/5' : 'text-slate-900 hover:bg-white/60'}`}
           >
             Archive
           </button>
           <button
             type="button"
             onClick={() => handleBlockThread(contextMenuThreadId)}
-            className="w-full rounded-2xl px-3 py-2 text-left text-sm text-white hover:bg-white/5"
+            className={`w-full rounded-2xl px-3 py-2 text-left text-sm ${isVibesPro ? 'text-white hover:bg-white/5' : 'text-slate-900 hover:bg-white/60'}`}
           >
             Block
           </button>
           <button
             type="button"
             onClick={() => handleReportThread(contextMenuThreadId)}
-            className="w-full rounded-2xl px-3 py-2 text-left text-sm text-white hover:bg-white/5"
+            className={`w-full rounded-2xl px-3 py-2 text-left text-sm ${isVibesPro ? 'text-white hover:bg-white/5' : 'text-slate-900 hover:bg-white/60'}`}
           >
             Report
           </button>
@@ -800,7 +850,9 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
             </div>
             <div className="mt-4 space-y-4">
               {selectedImage ? (
-                <img src={selectedImage} alt="Story preview" className="w-full rounded-3xl object-cover" />
+                <div className="flex max-h-[60vh] items-center justify-center overflow-hidden rounded-3xl bg-black/40">
+                  <img src={selectedImage} alt="Story preview" className="max-h-[60vh] w-full object-contain" />
+                </div>
               ) : (
                 <textarea
                   value={storyText}
@@ -813,24 +865,36 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
               {storyCreateError ? (
                 <p className="text-sm text-red-400">{storyCreateError}</p>
               ) : null}
-              <div className="flex items-center justify-between gap-3">
+
+              <div className="space-y-2">
+                <div className={`text-[11px] font-semibold uppercase tracking-[0.2em] ${isVibesPro ? 'text-[#E8C96F]/70' : 'text-slate-400'}`}>
+                  Story Duration
+                </div>
+                <div className="grid grid-cols-5 gap-2">
+                  {[2, 4, 8, 12, 24].map((hours) => (
+                    <button
+                      key={hours}
+                      type="button"
+                      onClick={() => setStoryDuration(hours)}
+                      className={`rounded-xl border px-2 py-2 text-sm font-semibold transition ${storyDuration === hours
+                        ? 'border-[#D4AF37] bg-[#D4AF37]/20 text-[#F7E7B2]'
+                        : 'border-white/10 bg-white/5 text-white/70 hover:bg-white/10'}`}
+                    >
+                      {hours}h
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-center pt-2">
                 <button
                   type="button"
                   onClick={handleCreateStory}
                   disabled={storyCreating}
-                  className="min-w-30 rounded-2xl bg-linear-to-r from-fuchsia-500 via-cyan-500 to-amber-400 px-4 py-3 text-sm font-semibold text-black transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="min-w-36 rounded-2xl bg-linear-to-r from-fuchsia-500 via-cyan-500 to-amber-400 px-4 py-3 text-sm font-semibold text-black transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {storyCreating ? "Posting..." : "Share Story"}
                 </button>
-                {selectedImage ? null : (
-                  <button
-                    type="button"
-                    onClick={() => openStoryEditor("photo")}
-                    className="rounded-2xl border border-white/10 px-4 py-3 text-sm font-semibold text-white hover:bg-white/10"
-                  >
-                    Add Photo Instead
-                  </button>
-                )}
               </div>
             </div>
           </div>

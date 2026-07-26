@@ -15,6 +15,7 @@ export default function VibesProHero({
   followLabel,
   onFollow,
   onMessage,
+  onOpenHommiesList,
   viewingOwn = false,
   onUploadPortrait,
   onRequestPortraitUpload,
@@ -277,7 +278,13 @@ export default function VibesProHero({
           </div>
         )}
 
-        <div className="text-sm text-white/85">{hommiesCount} Hommies</div>
+        <button
+          type="button"
+          onClick={onOpenHommiesList}
+          className="text-sm text-white/85 transition hover:text-white"
+        >
+          {hommiesCount} Hommies
+        </button>
 
         {!viewingOwn && (
           <div className="flex flex-wrap items-center justify-center gap-3 pt-1">

@@ -3,6 +3,54 @@ export type Language = AppLanguage;
 
 export const DEFAULT_LANGUAGE: AppLanguage = "en-basic";
 
+const streetSlangOverrides: Record<string, string> = {
+  "auth.chooseLanguage": "Pick your lingo",
+  "auth.pickVibe": "Pick your vibe",
+  "auth.basicEnglish": "Basic English",
+  "auth.streetSlang": "Street Slang",
+  "auth.changeLanguage": "Change Lingo",
+  "settings.languageModalTitle": "Pick your lingo",
+  "settings.languageOption.basic": "Basic English",
+  "settings.languageOption.street": "Street Slang",
+  "settings.languageOption.french": "French",
+  "profile.language": "Lingo",
+  "login.subtitle": "Yo, welcome back twin 🔥",
+  "login.button": "Hit The Streets 🔥",
+  "login.signupText": "New to the fam?",
+  "signup.language": "Lingo",
+  "signup.button": "Create Account 🚀",
+  "profile.logout": "Peace Out",
+  "profile.save": "Save",
+};
+
+const streetSlangReplacements: Array<[RegExp, string]> = [
+  [/\bChoose\b/g, "Pick"],
+  [/\bchoose\b/g, "pick"],
+  [/\bLanguage\b/g, "Lingo"],
+  [/\blanguage\b/g, "lingo"],
+  [/\bFamily\b/g, "Fam"],
+  [/\bfamily\b/g, "fam"],
+  [/\bcommunity\b/g, "crew"],
+  [/\bCommunity\b/g, "Crew"],
+  [/\bconnect\b/g, "link up"],
+  [/\bConnect\b/g, "Link up"],
+  [/\bWelcome back\b/g, "Yo, welcome back"],
+  [/\bEnter\b/g, "Hit"],
+  [/\benter\b/g, "hit"],
+  [/\bpeople\b/g, "people"],
+  [/\bPeople\b/g, "People"],
+  [/\bFriends\b/g, "Fam"],
+  [/\bfriends\b/g, "fam"],
+  [/\bchat\b/g, "chat"],
+  [/\bChat\b/g, "Chat"],
+  [/\bmessage\b/g, "message"],
+  [/\bMessage\b/g, "Message"],
+];
+
+const applyStreetSlang = (text: string): string => {
+  return streetSlangReplacements.reduce((value, [pattern, replacement]) => value.replace(pattern, replacement), text);
+};
+
 const normalizeLanguageCode = (language?: string): AppLanguage => {
   if (!language) return DEFAULT_LANGUAGE;
   const normalized = language.trim().toLowerCase();
@@ -411,6 +459,11 @@ export const translations: Record<AppLanguage, Record<string, string>> = {
     "profile.uploadSuccess": "Congratulations! Your profile picture was successfully updated.",
     "profile.messageUser": "Message user",
     "profile.hommies": "Hommies",
+    "profile.hommiesList.title": "Mutual Hommies",
+    "profile.hommiesList.searchPlaceholder": "Search hommies...",
+    "profile.hommiesList.loading": "Loading hommies...",
+    "profile.hommiesList.empty": "No mutual hommies yet.",
+    "profile.hommiesList.noSearchResults": "No matching hommies found.",
     "profile.snapshots": "Snapshots",
     "profile.vibes": "Vibes",
     "profile.aboutMe": "About Me",
@@ -676,6 +729,11 @@ export const translations: Record<AppLanguage, Record<string, string>> = {
     "profile.uploadSuccess": "Félicitations ! Votre photo de profil a été mise à jour avec succès.",
     "profile.messageUser": "Envoyer un message",
     "profile.hommies": "Hommies",
+    "profile.hommiesList.title": "Hommies mutuels",
+    "profile.hommiesList.searchPlaceholder": "Rechercher des hommies...",
+    "profile.hommiesList.loading": "Chargement des hommies...",
+    "profile.hommiesList.empty": "Aucun hommie mutuel pour le moment.",
+    "profile.hommiesList.noSearchResults": "Aucun hommie correspondant.",
     "profile.snapshots": "Snapshots",
     "profile.vibes": "Vibes",
     "profile.aboutMe": "À propos de moi",
@@ -829,5 +887,19 @@ export function getTranslation(language: string, key: string): string {
   const normalized = normalizeLanguageCode(language);
   const defaultTrans = translations[DEFAULT_LANGUAGE];
   const currentTrans = translations[normalized] || defaultTrans;
+
+  if (normalized === "en-street") {
+    const direct = currentTrans[key];
+    if (direct) return direct;
+
+    const fallback = defaultTrans[key];
+    if (fallback) {
+      const override = streetSlangOverrides[key];
+      return override ?? applyStreetSlang(fallback);
+    }
+
+    return key;
+  }
+
   return currentTrans[key] || defaultTrans[key] || key;
 }

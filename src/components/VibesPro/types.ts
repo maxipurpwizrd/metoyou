@@ -68,8 +68,17 @@ export type VibesProHeroProps = {
   followLabel?: string;
   onFollow?: () => void;
   onMessage?: () => void;
+  onOpenHommiesList?: () => void;
   onGift?: () => void;
   viewingOwn?: boolean;
+  hommiesListOpen?: boolean;
+  onCloseHommiesList?: () => void;
+  hommiesListLoading?: boolean;
+  hommiesSearch?: string;
+  onHommiesSearchChange?: (value: string) => void;
+  mutualConnections?: Array<{ id: string; username: string; profilePic?: string | null }>;
+  filteredMutualConnections?: Array<{ id: string; username: string; profilePic?: string | null }>;
+  onSelectHommie?: (connection: { id: string; username: string; profilePic?: string | null }) => void;
   onUploadPortrait?: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onRequestPortraitUpload?: () => void;
   onConfirmPortraitUpload?: () => void;

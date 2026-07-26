@@ -6,7 +6,7 @@ import { fetchProfileFromSupabase, fetchProfileByUsername, upsertProfileToSupaba
 import { fetchPostsFromSupabase } from "../lib/postApi";
 import { addComment, getComments, editComment, deleteComment } from "../lib/commentApi";
 import { likePost, unlikePost, getPostLikes, hydratePostLikeState } from "../lib/likeApi";
-import { followUser, unfollowUser, getFollowStatus } from "../lib/followApi";
+import { followUser, unfollowUser, getFollowStatus, getMutualConnections, type MutualConnection } from "../lib/followApi";
 import FollowButton from "../components/social/FollowButton";
 import { useAuth } from "../hooks/useAuth";
 import type { ProfileData } from "../types/profile";
@@ -106,7 +106,11 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
   const vibesProFileInputRef = useRef<HTMLInputElement | null>(null);
   const [isFollowing, setIsFollowing] = useState(false);
   const [isFollowedBy, setIsFollowedBy] = useState(false);
-  const [followersCount, setFollowersCount] = useState(profile.hommies_count ?? 0);
+  const [hommiesCount, setHommiesCount] = useState(profile.hommies_count ?? 0);
+  const [mutualConnections, setMutualConnections] = useState<MutualConnection[]>([]);
+  const [hommiesListOpen, setHommiesListOpen] = useState(false);
+  const [hommiesListLoading, setHommiesListLoading] = useState(false);
+  const [hommiesSearch, setHommiesSearch] = useState("");
   const [followLoading, setFollowLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -120,6 +124,23 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
       : isFollowedBy
         ? t("profile.followBack")
         : t("profile.follow");
+
+  const openHommiesList = async () => {
+    if (!profile?.id) return;
+
+    setHommiesListOpen(true);
+    setHommiesListLoading(true);
+
+    try {
+      const nextConnections = await getMutualConnections(profile.id);
+      setMutualConnections(nextConnections);
+      setHommiesCount(nextConnections.length);
+    } catch (error) {
+      console.error("Failed to load mutual connections", error);
+    } finally {
+      setHommiesListLoading(false);
+    }
+  };
 
   const openProfilePictureViewer = () => {
     if (!profilePic) return;
@@ -560,7 +581,12 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
 
   const vibesCount = myPosts.length;
   const snapshotsCount = myPosts.filter((post) => Boolean(post.image)).length;
-  const hommiesCount = viewingOwn ? profile.hommies_count ?? 0 : followersCount;
+  const filteredMutualConnections = useMemo(() => {
+    const query = hommiesSearch.trim().toLowerCase();
+    if (!query) return mutualConnections;
+
+    return mutualConnections.filter((connection) => connection.username.toLowerCase().includes(query));
+  }, [hommiesSearch, mutualConnections]);
 
   // Initialize language from profile when component mounts
   useEffect(() => {
@@ -586,6 +612,20 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
 
     return () => window.clearInterval(interval);
   }, [isUploading]);
+
+  useEffect(() => {
+    if (!hommiesListOpen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, [hommiesListOpen]);
 
   useEffect(() => {
     const savedPosition = Number(sessionStorage.getItem(profileScrollKey) || "0");
@@ -635,6 +675,8 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
             if (routeProfileRequested) {
               setViewedProfile(cached);
             } else {
+              // viewing own profile: update global session so UI reads fresh values
+              try { setGlobalProfile(cached); } catch (e) {}
               setViewedProfile(null);
             }
             if (cached.language) setLanguage(normalizeLanguage(cached.language));
@@ -655,6 +697,8 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
         if (routeProfileRequested) {
           setViewedProfile(remote);
         } else {
+          // viewing own profile: update global session so UI reads fresh values
+          try { setGlobalProfile(remote); } catch (e) {}
           setViewedProfile(null);
         }
         if (remote.language) setLanguage(normalizeLanguage(remote.language));
@@ -736,8 +780,6 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
   }, [profile.id, profileRefreshVersion]);
 
   useEffect(() => {
-    if (viewingOwn) return;
-
     let mounted = true;
     const followKey = `metoyou-follow:${viewerId}:${profile.id}`;
     const followLastKey = `${followKey}:lastFetch`;
@@ -750,7 +792,7 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
         window.requestAnimationFrame(() => {
           setIsFollowing(Boolean(cached.isFollowing));
           setIsFollowedBy(Boolean(cached.isFollowedBy));
-          setFollowersCount(cached.followersCount ?? profile.hommies_count ?? 0);
+          setHommiesCount(cached.followersCount ?? profile.hommies_count ?? 0);
         });
       }
     } catch {
@@ -764,12 +806,16 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
         const now = Date.now();
         if (last && now - last < 30_000) return;
 
-        const status = await getFollowStatus(viewerId, profile.id);
+        const [status, nextConnections] = await Promise.all([
+          getFollowStatus(viewerId, profile.id),
+          getMutualConnections(profile.id),
+        ]);
         if (!mounted) return;
 
         setIsFollowing(status.isFollowing);
         setIsFollowedBy(status.isFollowedBy);
-        setFollowersCount(status.followersCount);
+        setHommiesCount(nextConnections.length);
+        setMutualConnections(nextConnections);
 
         try {
           sessionStorage.setItem(followKey, JSON.stringify(status));
@@ -803,13 +849,17 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
       const success = await unfollowUser(viewerId, profile.id);
       if (success) {
         setIsFollowing(false);
-        setFollowersCount((count: number) => Math.max(0, count - 1));
+        const nextConnections = await getMutualConnections(profile.id);
+        setMutualConnections(nextConnections);
+        setHommiesCount(nextConnections.length);
       }
     } else {
       const success = await followUser(viewerId, profile.id, actorUsername);
       if (success) {
         setIsFollowing(true);
-        setFollowersCount((count: number) => count + 1);
+        const nextConnections = await getMutualConnections(profile.id);
+        setMutualConnections(nextConnections);
+        setHommiesCount(nextConnections.length);
       }
     }
 
@@ -856,6 +906,18 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
               viewingOwn={viewingOwn}
               onFollow={handleFollowToggle}
               onMessage={handleMessage}
+              onOpenHommiesList={openHommiesList}
+              hommiesListOpen={hommiesListOpen}
+              onCloseHommiesList={() => setHommiesListOpen(false)}
+              hommiesListLoading={hommiesListLoading}
+              hommiesSearch={hommiesSearch}
+              onHommiesSearchChange={setHommiesSearch}
+              mutualConnections={mutualConnections}
+              filteredMutualConnections={filteredMutualConnections}
+              onSelectHommie={(connection) => {
+                setHommiesListOpen(false);
+                navigate(`/profile/${encodeURIComponent(connection.username)}`);
+              }}
               onUploadPortrait={handleVibesProPortraitFileChange}
               onRequestPortraitUpload={handleRequestPortraitChange}
               onConfirmPortraitUpload={handleConfirmPortraitChange}
@@ -990,10 +1052,14 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
             )}
 
             <div className="grid grid-cols-3 gap-2 md:gap-4 mt-6 md:mt-8">
-              <div className="bg-white/30 rounded-2xl p-3 md:p-4 text-center shadow-lg">
+              <button
+                type="button"
+                onClick={openHommiesList}
+                className="bg-white/30 rounded-2xl p-3 md:p-4 text-center shadow-lg transition hover:scale-[1.01]"
+              >
                 <h2 className="font-black text-2xl md:text-3xl text-slate-900">{hommiesCount}</h2>
                 <p className="text-slate-700 text-xs md:text-sm mt-2">{t("profile.hommies")}</p>
-              </div>
+              </button>
               <div className="bg-white/30 rounded-2xl p-3 md:p-4 text-center shadow-lg">
                 <h2 className="font-black text-2xl md:text-3xl text-slate-900">{snapshotsCount}</h2>
                 <p className="text-slate-700 text-xs md:text-sm mt-2">{t("profile.snapshots")}</p>
@@ -1003,6 +1069,75 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
                 <p className="text-slate-700 text-xs md:text-sm mt-2">{t("profile.vibes")}</p>
               </div>
             </div>
+
+            {hommiesListOpen && (
+              <div className="fixed inset-0 z-70 flex items-center justify-center bg-slate-900/70 px-4 py-6" onClick={() => setHommiesListOpen(false)}>
+                <div className="w-full max-w-md rounded-3xl border border-white/70 bg-white/95 p-4 shadow-2xl backdrop-blur-xl" onClick={(event) => event.stopPropagation()}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-black text-slate-900">{t("profile.hommiesList.title")}</h3>
+                      <p className="text-sm text-slate-600">{t("profile.hommies")}</p>
+                    </div>
+                    <button type="button" onClick={() => setHommiesListOpen(false)} className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">
+                      ✕
+                    </button>
+                  </div>
+
+                  <div className="mt-4">
+                    <label className="mb-3 flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                      <span>🔎</span>
+                      <input
+                        type="text"
+                        value={hommiesSearch}
+                        onChange={(event) => setHommiesSearch(event.target.value)}
+                        placeholder={t("profile.hommiesList.searchPlaceholder")}
+                        className="w-full border-0 bg-transparent outline-none"
+                      />
+                    </label>
+
+                    <div className="max-h-[min(55vh,28rem)] overflow-y-auto pr-1">
+                      {hommiesListLoading ? (
+                        <div className="rounded-2xl bg-slate-50 px-4 py-6 text-center text-sm text-slate-600">
+                          {t("profile.hommiesList.loading")}
+                        </div>
+                      ) : filteredMutualConnections.length === 0 ? (
+                        <div className="rounded-2xl bg-slate-50 px-4 py-6 text-center text-sm text-slate-600">
+                          {hommiesSearch.trim()
+                            ? t("profile.hommiesList.noSearchResults")
+                            : t("profile.hommiesList.empty")}
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {filteredMutualConnections.map((connection) => (
+                          <button
+                            key={connection.id}
+                            type="button"
+                            onClick={() => {
+                              setHommiesListOpen(false);
+                              navigate(`/profile/${encodeURIComponent(connection.username)}`);
+                            }}
+                            className="flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-3 text-left shadow-sm transition hover:bg-slate-50"
+                          >
+                            <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-linear-to-br from-pink-500 via-purple-500 to-blue-500 text-sm font-semibold text-white">
+                              {connection.profilePic ? (
+                                <img src={connection.profilePic} alt={connection.username} className="h-full w-full object-cover" />
+                              ) : (
+                                connection.username.charAt(0).toUpperCase()
+                              )}
+                            </div>
+                            <div>
+                              <p className="font-semibold text-slate-900">{connection.username}</p>
+                              <p className="text-xs text-slate-500">{t("profile.homie")}</p>
+                            </div>
+                          </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {bio && (
               <div className="mt-6 md:mt-8 bg-white/30 rounded-3xl p-4 md:p-6 shadow-lg">

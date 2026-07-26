@@ -90,6 +90,8 @@ type FeedContextValue = {
   setPosts: (updater: SetStateAction<Post[]>) => void;
   loading: boolean;
   refreshPosts: (force?: boolean) => Promise<void>;
+  loadMorePosts: () => Promise<void>;
+  hasMore: boolean;
   lastFetchTime: number | null;
   savedScrollY: number;
   setSavedScrollY: (y: number) => void;
@@ -333,7 +335,25 @@ export function FeedProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.error("FeedProvider: failed to refetch posts", err);
     }
-  }; 
+  };
+
+  const loadMorePosts = async () => {
+    if (loading || isLoadingMore || !hasMore) return;
+    await loadPostsPage({ append: true, refresh: false });
+  };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (loading || isLoadingMore || !hasMore || !user || authLoading) return;
+
+    const id = window.requestAnimationFrame(() => {
+      if (window.innerHeight + LOAD_MORE_THRESHOLD >= document.documentElement.scrollHeight) {
+        void loadPostsPage({ append: true, refresh: false });
+      }
+    });
+
+    return () => window.cancelAnimationFrame(id);
+  }, [posts.length, loading, isLoadingMore, hasMore, user, authLoading]);
 
   // Fetch the first page once when provider mounts, but let cached posts render immediately.
   useEffect(() => {
@@ -465,6 +485,8 @@ export function FeedProvider({ children }: { children: ReactNode }) {
     setPosts,
     loading: loading || isLoadingMore,
     refreshPosts: fetchIfNeeded,
+    loadMorePosts,
+    hasMore,
     lastFetchTime,
     savedScrollY,
     setSavedScrollY: (y: number) => setSavedScrollY(y),

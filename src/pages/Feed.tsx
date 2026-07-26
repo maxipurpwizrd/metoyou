@@ -1,6 +1,6 @@
 import Navbar from "../components/Navbar";
-import { useMemo, useState, useEffect, useRef } from "react";
-import { AutoSizer, CellMeasurer, CellMeasurerCache, List, WindowScroller } from "react-virtualized";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
+import { AutoSizer, CellMeasurer, CellMeasurerCache, List, WindowScroller, type ListRowRenderer } from "react-virtualized";
 import { useFeed, type Post as FeedPost } from "../contexts/FeedContext";
 import { useSession } from "../contexts/SessionContext";
 import { VibesProFeed } from "../themes/vibespro";
@@ -64,6 +64,13 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
   if (!appReady || !profileReady) return null;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const musicInputRef = useRef<HTMLInputElement>(null);
+  const voiceInputRef = useRef<HTMLInputElement>(null);
+  const [audioChoiceOpen, setAudioChoiceOpen] = useState(false);
+  const [audioMode, setAudioMode] = useState<"record" | "upload" | null>(null);
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
 
   const [selectedStory, setSelectedStory] = useState<Story | null>(null);
   const [selectedStoryIndex, setSelectedStoryIndex] = useState<number | null>(null);
@@ -100,6 +107,45 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
   const currentUserProfileFromContext = currentUserProfile;
   const isStoryOwner = selectedStory?.authorId === currentUserProfileFromContext?.id;
 
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedAudioFile, setSelectedAudioFile] = useState<File | null>(null);
+  const [audioDuration, setAudioDuration] = useState<number | null>(null);
+  const [audioTrimStart, setAudioTrimStart] = useState(0);
+  const [audioTrimEnd, setAudioTrimEnd] = useState(35);
+  const [audioSelectionError, setAudioSelectionError] = useState<string | null>(null);
+  const [activeTrimHandle, setActiveTrimHandle] = useState<"start" | "end" | null>(null);
+  const timelineRef = useRef<HTMLDivElement>(null);
+  const maxTrimDuration = Math.min(audioDuration ?? 35, 35);
+
+  const updateTrimSelection = useCallback((clientX: number) => {
+    if (!timelineRef.current) return;
+
+    const rect = timelineRef.current.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    const nextValue = ratio * maxTrimDuration;
+
+    if (activeTrimHandle === "start") {
+      setAudioTrimStart(Math.min(Math.max(0, nextValue), Math.max(0, audioTrimEnd - 0.1)));
+    } else if (activeTrimHandle === "end") {
+      setAudioTrimEnd(Math.max(Math.min(maxTrimDuration, nextValue), audioTrimStart + 0.1));
+    }
+  }, [activeTrimHandle, audioTrimEnd, audioTrimStart, maxTrimDuration]);
+
+  useEffect(() => {
+    if (!activeTrimHandle) return;
+
+    const handlePointerMove = (event: PointerEvent) => updateTrimSelection(event.clientX);
+    const handlePointerUp = () => setActiveTrimHandle(null);
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, [activeTrimHandle, updateTrimSelection]);
+
   useEffect(() => {
     localStorage.setItem("metoyou-saved-stories", JSON.stringify(savedStories));
   }, [savedStories]);
@@ -110,7 +156,6 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
     }
   }, [selectedStory]);
 
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [storyEditorOpen, setStoryEditorOpen] = useState<boolean>(false);
   const [storyChoiceOpen, setStoryChoiceOpen] = useState<boolean>(false);
   const [storyMode, setStoryMode] = useState<"text" | "photo" | null>(null);
@@ -119,7 +164,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
   const [storyMusic, setStoryMusic] = useState<string | undefined>(undefined);
   const [storyVoice, setStoryVoice] = useState<string | undefined>(undefined);
   const [currentTime, setCurrentTime] = useState<number>(() => Date.now());
-  const { posts, setPosts, savedScrollY, setSavedScrollY, selectedPostId, setSelectedPostId, loading } = useFeed();
+  const { posts, setPosts, savedScrollY, setSavedScrollY, selectedPostId, setSelectedPostId, loading, loadMorePosts, hasMore } = useFeed();
   const filteredPosts = useMemo(
     () => posts.filter((post) => !mutedUsers.includes(post.author.id)),
     [posts, mutedUsers]
@@ -574,6 +619,145 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
     setStoryChoiceOpen(true);
   };
 
+  const resetStoryComposer = () => {
+    setStoryEditorOpen(false);
+    setStoryMode(null);
+    setSelectedImage(null);
+    setSelectedAudioFile(null);
+    setAudioDuration(null);
+    setAudioTrimStart(0);
+    setAudioTrimEnd(35);
+    setAudioSelectionError(null);
+    setStoryText("");
+    setStoryDuration(24);
+    setStoryMusic(undefined);
+    setStoryVoice(undefined);
+    setAudioChoiceOpen(false);
+    setAudioMode(null);
+    setIsRecordingVoice(false);
+    audioChunksRef.current = [];
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+  };
+
+  const getAudioDuration = async (file: File) => {
+    const arrayBuffer = await file.arrayBuffer();
+    const AudioContextCtor = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextCtor) throw new Error("Audio playback is not supported in this browser");
+
+    const audioContext = new AudioContextCtor();
+    try {
+      const decoded = await audioContext.decodeAudioData(arrayBuffer.slice(0));
+      return decoded.duration;
+    } finally {
+      await audioContext.close();
+    }
+  };
+
+  const createTrimmedAudioBlob = async (file: File, start: number, end: number) => {
+    const arrayBuffer = await file.arrayBuffer();
+    const AudioContextCtor = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextCtor) throw new Error("Audio playback is not supported in this browser");
+
+    const audioContext = new AudioContextCtor();
+    try {
+      const decoded = await audioContext.decodeAudioData(arrayBuffer.slice(0));
+      const safeStart = Math.max(0, Math.min(start, decoded.duration));
+      const safeEnd = Math.max(safeStart + 0.1, Math.min(end, decoded.duration));
+      const duration = safeEnd - safeStart;
+
+      const offlineContext = new OfflineAudioContext(decoded.numberOfChannels, Math.max(1, Math.floor(duration * decoded.sampleRate)), decoded.sampleRate);
+      const source = offlineContext.createBufferSource();
+      source.buffer = decoded;
+      source.connect(offlineContext.destination);
+      source.start(0, safeStart, duration);
+      const rendered = await offlineContext.startRendering();
+
+      const wavBuffer = new ArrayBuffer(44 + rendered.length * rendered.numberOfChannels * 2);
+      const view = new DataView(wavBuffer);
+      const writeString = (offset: number, value: string) => {
+        for (let i = 0; i < value.length; i += 1) {
+          view.setUint8(offset + i, value.charCodeAt(i));
+        }
+      };
+
+      writeString(0, "RIFF");
+      view.setUint32(4, 36 + rendered.length * rendered.numberOfChannels * 2, true);
+      writeString(8, "WAVE");
+      writeString(12, "fmt ");
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, rendered.numberOfChannels, true);
+      view.setUint32(24, rendered.sampleRate, true);
+      view.setUint32(28, rendered.sampleRate * rendered.numberOfChannels * 2, true);
+      view.setUint16(32, rendered.numberOfChannels * 2, true);
+      view.setUint16(34, 16, true);
+      writeString(36, "data");
+      view.setUint32(40, rendered.length * rendered.numberOfChannels * 2, true);
+
+      let offset = 44;
+      for (let i = 0; i < rendered.length; i += 1) {
+        for (let channel = 0; channel < rendered.numberOfChannels; channel += 1) {
+          const sample = Math.max(-1, Math.min(1, rendered.getChannelData(channel)[i]));
+          view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+          offset += 2;
+        }
+      }
+
+      return new Blob([wavBuffer], { type: "audio/wav" });
+    } finally {
+      await audioContext.close();
+    }
+  };
+
+  const handleAudioSelection = async (file: File) => {
+    if (file.size > 20 * 1024 * 1024) {
+      setAudioSelectionError("Audio files must be smaller than 20MB.");
+      return;
+    }
+
+    try {
+      setAudioSelectionError(null);
+      setStoryCreateError(null);
+      setSelectedAudioFile(file);
+      const duration = await getAudioDuration(file);
+      const cappedDuration = Math.min(duration, 35);
+      setAudioDuration(duration);
+      setAudioTrimStart(0);
+      setAudioTrimEnd(cappedDuration);
+      setStoryEditorOpen(true);
+      if (storyVoice?.startsWith("blob:")) {
+        URL.revokeObjectURL(storyVoice);
+      }
+      const trimmedBlob = await createTrimmedAudioBlob(file, 0, cappedDuration);
+      const audioUrl = URL.createObjectURL(trimmedBlob);
+      setStoryVoice(audioUrl);
+      setStoryMusic(undefined);
+    } catch (error) {
+      console.error("Failed to prepare audio", error);
+      setAudioSelectionError("We could not prepare this audio file. Please try another one.");
+    }
+  };
+
+  const handleApplyAudioTrim = async () => {
+    if (!selectedAudioFile) return;
+
+    try {
+      setAudioSelectionError(null);
+      if (storyVoice?.startsWith("blob:")) {
+        URL.revokeObjectURL(storyVoice);
+      }
+      const trimmedBlob = await createTrimmedAudioBlob(selectedAudioFile, audioTrimStart, audioTrimEnd);
+      const audioUrl = URL.createObjectURL(trimmedBlob);
+      setStoryVoice(audioUrl);
+    } catch (error) {
+      console.error("Failed to trim audio", error);
+      setAudioSelectionError("We could not trim this audio file.");
+    }
+  };
+
   const openStoryEditor = (mode: "text" | "photo") => {
     setStoryMode(mode);
     setStoryChoiceOpen(false);
@@ -606,20 +790,19 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
   };
 
   const handleCreateStory = async () => {
-    if (!selectedImage && !storyText.trim()) return;
+    if (!selectedImage && !storyText.trim() && !storyVoice && !storyMusic) return;
 
     const profile = currentUserProfile;
     if (!profile) return;
 
-    if (storyVoice || storyMusic) {
-      setStoryCreateError("Audio stories are coming soon.");
-      showStoryNotice("Coming Soon");
+    if (!selectedImage && !storyText.trim() && !storyVoice && !storyMusic) {
+      setStoryCreateError("Add some content to your story.");
       return;
     }
 
     const displayName = profile?.username || "Maxi";
-    const storyType: StoryType = selectedImage ? "photo" : storyVoice ? "voice" : "text";
-    const isMediaStory = Boolean(selectedImage || storyVoice);
+    const storyType: StoryType = selectedImage ? "photo" : storyVoice ? "voice" : storyMusic ? "voice" : "text";
+    const isMediaStory = Boolean(selectedImage || storyVoice || storyMusic);
 
     setStoryCreateError(null);
     setStoryCreating(true);
@@ -650,7 +833,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
         profilePic: profile.profilePic ?? null,
         text: storyText.trim() || undefined,
         image: selectedImage ?? undefined,
-        voice: storyVoice,
+        voice: storyVoice || storyMusic,
         storyType,
         durationHours: storyDuration,
       });
@@ -681,12 +864,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
         setStoryCreateError(null);
         setStoryEditorOpen(false);
         setStoryChoiceOpen(false);
-        setStoryMode(null);
-        setSelectedImage(null);
-        setStoryText("");
-        setStoryDuration(24);
-        setStoryMusic(undefined);
-        setStoryVoice(undefined);
+        resetStoryComposer();
       }, 400);
     }
   };
@@ -730,10 +908,30 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
           ref={musicInputRef}
           type="file"
           accept="audio/*"
-          onChange={(e) => {
+          onChange={async (e) => {
             const file = e.target.files?.[0];
             if (!file) return;
-            setStoryMusic(file.name);
+            try {
+              const uploadedUrl = await uploadAudioToSupabase(file);
+              setStoryVoice(uploadedUrl);
+              setStoryMusic(undefined);
+              setStoryEditorOpen(true);
+            } catch (error) {
+              console.error("Failed to upload audio", error);
+              setStoryCreateError("Could not upload audio. Please try again.");
+            }
+          }}
+          className="hidden"
+        />
+
+        <input
+          ref={voiceInputRef}
+          type="file"
+          accept="audio/*"
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            await handleAudioSelection(file);
           }}
           className="hidden"
         />
@@ -1083,6 +1281,11 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                           </CellMeasurer>
                         );
                       }}
+                      onRowsRendered={({ startIndex, stopIndex }: any) => {
+                        if (hasMore && stopIndex >= filteredPosts.length - 3) {
+                          void loadMorePosts();
+                        }
+                      }}
                       onScroll={onChildScroll}
                       scrollTop={scrollTop}
                       isScrolling={isScrolling}
@@ -1263,27 +1466,50 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
         <div className="fixed inset-0 z-60 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-xs" onClick={() => setStoryChoiceOpen(false)}></div>
 
-          <div className="relative w-full max-w-xs bg-white rounded-2xl p-4 shadow-2xl space-y-4">
-            <h3 className="text-center font-bold text-base text-slate-800">Create Story</h3>
-            <p className="text-sm text-center text-slate-500">Choose what you want to share.</p>
-
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => openStoryEditor("text")}
-                className="py-3 rounded-xl bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200 transition-colors"
-              >
-                Text
-              </button>
-              <button
-                type="button"
-                onClick={() => openStoryEditor("photo")}
-                className="py-3 rounded-xl bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 text-white font-semibold shadow-md"
-              >
-                Photo
-              </button>
+          {isVibesPro ? (
+            <div className="relative w-full max-w-xs rounded-3xl border border-white/10 bg-[#111111] p-5 text-white shadow-2xl">
+              <h2 className="text-lg font-bold">Create Story</h2>
+              <p className="mt-2 text-sm text-white/70">Choose the content type for your story.</p>
+              <div className="mt-4 grid gap-3">
+                <button
+                  type="button"
+                  onClick={() => openStoryEditor("text")}
+                  className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm font-semibold text-white hover:bg-white/15"
+                >
+                  Text
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openStoryEditor("photo")}
+                  className="rounded-2xl bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-pink-500/20"
+                >
+                  Photo
+                </button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="relative w-full max-w-xs bg-white rounded-2xl p-4 shadow-2xl space-y-4">
+              <h3 className="text-center font-bold text-base text-slate-800">Create Story</h3>
+              <p className="text-sm text-center text-slate-500">Choose what you want to share.</p>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => openStoryEditor("text")}
+                  className="py-3 rounded-xl bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200 transition-colors"
+                >
+                  Text
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openStoryEditor("photo")}
+                  className="py-3 rounded-xl bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 text-white font-semibold shadow-md"
+                >
+                  Photo
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1296,126 +1522,384 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
         </div>
       ) : null}
 
-      {/* Story Builder/Editor Overlay */}
-      {storyEditorOpen && (selectedImage || storyMode === "text") && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-xs" onClick={() => {setStoryEditorOpen(false); setStoryMode(null); setSelectedImage(null); setStoryText(""); setStoryDuration(24); setStoryMusic(undefined); setStoryVoice(undefined);}}></div>
-
-          <div className="relative w-full max-w-xs bg-white rounded-2xl p-4 shadow-2xl space-y-4">
-            <div className="w-full aspect-square overflow-hidden rounded-xl bg-slate-100">
-              {selectedImage ? (
-                <img src={selectedImage} alt="preview" className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full bg-linear-to-br from-pink-500 via-purple-500 to-blue-500 overflow-y-auto p-4 flex items-center justify-center text-white font-semibold text-center">
-                  <div className="w-full whitespace-pre-wrap wrap-break-word text-xl leading-relaxed">
-                    {storyText.trim() ? storyText.trim() : "Text Story"}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <h3 className="text-center font-bold text-base text-slate-800">Create Story</h3>
-
-            <textarea
-              value={storyText}
-              onChange={(e) => setStoryText(e.target.value)}
-              placeholder="Drop a vibe text onto your story..."
-              className="w-full max-h-52 overflow-y-auto text-sm border border-slate-100 bg-slate-50/50 rounded-xl px-3 py-2.5 outline-none resize-none placeholder:text-slate-400 focus:border-pink-300 transition-colors"
-              rows={2}
-            />
-
-            <div className="grid grid-cols-2 gap-2 text-xs font-semibold">
+      {audioChoiceOpen && isVibesPro && (
+        <div className="fixed inset-0 z-70 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-xs" onClick={() => setAudioChoiceOpen(false)} />
+          <div className="relative w-full max-w-xs rounded-3xl border border-white/10 bg-[#111111] p-5 text-white shadow-2xl">
+            <h2 className="text-lg font-bold">Add Audio</h2>
+            <p className="mt-2 text-sm text-white/70">Choose how you want to add your voice story.</p>
+            <div className="mt-4 grid gap-3">
               <button
                 type="button"
                 onClick={() => {
-                  showStoryNotice("Coming Soon");
+                  setAudioMode("record");
+                  setAudioChoiceOpen(false);
+                  setStoryCreateError(null);
+                  void (async () => {
+                    try {
+                      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                      streamRef.current = stream;
+                      const recorder = new MediaRecorder(stream);
+                      mediaRecorderRef.current = recorder;
+                      audioChunksRef.current = [];
+                      recorder.ondataavailable = (event) => {
+                        if (event.data.size > 0) audioChunksRef.current.push(event.data);
+                      };
+                      recorder.onstop = async () => {
+                        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+                        const file = new File([blob], `voice-story-${Date.now()}.webm`, { type: "audio/webm" });
+                        const uploadedUrl = await uploadAudioToSupabase(file);
+                        setStoryVoice(uploadedUrl);
+                        setStoryMusic(undefined);
+                        setStoryEditorOpen(true);
+                        stream.getTracks().forEach((track) => track.stop());
+                        streamRef.current = null;
+                      };
+                      recorder.start();
+                      setIsRecordingVoice(true);
+                    } catch (error) {
+                      console.error("Failed to start recording", error);
+                      setStoryCreateError("Microphone access was denied.");
+                    }
+                  })();
                 }}
-                className="bg-purple-50 text-purple-600 py-2.5 rounded-xl hover:bg-purple-100 transition-colors"
+                className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm font-semibold text-white hover:bg-white/15"
               >
-                🎵 {storyMusic ? "Change Audio" : "Add Music"}
+                Record Voice
               </button>
               <button
                 type="button"
                 onClick={() => {
-                  showStoryNotice("Coming Soon");
+                  setAudioMode("upload");
+                  setAudioChoiceOpen(false);
+                  voiceInputRef.current?.click();
                 }}
-                className="py-2.5 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
+                className="rounded-2xl bg-linear-to-r from-fuchsia-500 via-cyan-500 to-amber-400 px-4 py-3 text-sm font-semibold text-black"
               >
-                🎙 Record Voice
-              </button>
-            </div>
-
-            {storyCreateError ? (
-              <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-600">
-                {storyCreateError}
-              </p>
-            ) : null}
-
-            {storyMusic && <p className="text-[11px] text-purple-600 font-medium truncate px-1">Selected: {storyMusic}</p>}
-            {storyVoice && <audio controls src={storyVoice} className="w-full h-6 opacity-80" />}
-
-            {/* Expiry Time Selectors */}
-            <div className="space-y-1.5">
-              <span className="text-[11px] font-bold text-slate-400 block px-1">Story Lifespan</span>
-              <div className="flex justify-between gap-1">
-                {[2, 4, 8, 12, 24].map((h) => (
-                  <button
-                    key={h}
-                    onClick={() => setStoryDuration(h)}
-                    className={`flex-1 py-1.5 text-xs font-medium rounded-lg border transition-all ${
-                      storyDuration === h
-                        ? "bg-pink-500 border-pink-500 text-white shadow-xs"
-                        : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                    }`}
-                  >
-                    {h}h
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {storyCreating && storyCreateStatus ? (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
-                  <span>{storyCreateStatus}</span>
-                  <span>{storyCreateProgress}%</span>
-                </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
-                  <div className="h-full rounded-full bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 transition-all duration-200"
-                    style={{ width: `${storyCreateProgress}%` }}
-                  />
-                </div>
-              </div>
-            ) : null}
-
-            <div className="flex gap-2 pt-2 text-xs font-bold">
-              <button
-                type="button"
-                onClick={() => {
-                  if (storyCreating) return;
-                  setStoryEditorOpen(false);
-                  setStoryMode(null);
-                  setSelectedImage(null);
-                  setStoryText("");
-                  setStoryDuration(24);
-                  setStoryMusic(undefined);
-                  setStoryVoice(undefined);
-                }}
-                className="flex-1 py-2.5 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
-                disabled={storyCreating}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleCreateStory}
-                className="flex-1 py-2.5 rounded-xl bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 text-white shadow-md shadow-purple-200 active:scale-95 transition-transform"
-                disabled={storyCreating}
-              >
-                {storyCreating ? "Working..." : "Post Story 🚀"}
+                Upload Audio
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {isRecordingVoice && isVibesPro && (
+        <div className="fixed inset-x-0 bottom-6 z-75 flex justify-center px-4">
+          <div className="rounded-full border border-white/10 bg-[#111111]/95 px-4 py-2 text-sm font-semibold text-white shadow-xl">
+            Recording… Tap the audio button again to stop
+          </div>
+        </div>
+      )}
+
+      {/* Story Builder/Editor Overlay */}
+      {storyEditorOpen && (selectedImage || storyMode === "text" || storyVoice || storyMusic) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-xs" onClick={() => {setStoryEditorOpen(false); setStoryMode(null); setSelectedImage(null); setStoryText(""); setStoryDuration(24); setStoryMusic(undefined); setStoryVoice(undefined);}}></div>
+
+          {isVibesPro ? (
+            <div className="relative w-full max-w-md rounded-3xl border border-white/10 bg-[#111111] p-5 text-white shadow-2xl">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold">Share Story</h2>
+                  <p className="mt-1 text-sm text-white/70">Add a photo or text story for your friends.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (storyCreating) return;
+                    setStoryEditorOpen(false);
+                    setStoryMode(null);
+                    setSelectedImage(null);
+                    setStoryText("");
+                    setStoryDuration(24);
+                    setStoryMusic(undefined);
+                    setStoryVoice(undefined);
+                  }}
+                  className="rounded-full border border-white/20 bg-white/10 px-3 py-2 text-sm text-white hover:bg-white/15"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="mt-4 space-y-4">
+                {selectedImage ? (
+                  <div className="flex max-h-[60vh] items-center justify-center overflow-hidden rounded-3xl bg-black/40">
+                    <img src={selectedImage} alt="Story preview" className="max-h-[60vh] w-full object-contain" />
+                  </div>
+                ) : (
+                  <textarea
+                    value={storyText}
+                    onChange={(e) => setStoryText(e.target.value)}
+                    rows={5}
+                    placeholder="Write your story..."
+                    className="w-full rounded-3xl border border-white/10 bg-black/60 p-4 text-sm text-white outline-none placeholder:text-white/40"
+                  />
+                )}
+
+                {storyCreateError ? (
+                  <p className="text-sm text-red-400">{storyCreateError}</p>
+                ) : null}
+
+                {storyVoice ? (
+                  <div className="rounded-2xl border border-white/10 bg-black/40 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <div className="text-[10px] uppercase tracking-[0.2em] text-[#E8C96F]/70">Audio clip</div>
+                        <div className="mt-1 text-xs text-white/70">Drag the handles to choose the part you want to upload.</div>
+                      </div>
+                      {selectedAudioFile ? (
+                        <div className="text-[11px] text-white/60">{selectedAudioFile.name}</div>
+                      ) : null}
+                    </div>
+
+                    <audio controls src={storyVoice} className="mt-3 h-8 w-full" />
+
+                    <div className="mt-3 space-y-2">
+                      <div ref={timelineRef} className="overflow-x-auto rounded-2xl border border-white/10 bg-black/70 p-2">
+                        <div className="relative h-16 min-w-65">
+                          <div className="absolute inset-0 flex items-center">
+                            <div className="flex min-w-full items-center gap-1">
+                              {Array.from({ length: Math.max(1, Math.ceil(maxTrimDuration)) }, (_, index) => {
+                                const isSelected = index >= Math.floor(audioTrimStart) && index < Math.ceil(audioTrimEnd);
+                                return (
+                                  <div
+                                    key={index}
+                                    className={`h-8 flex-1 rounded-sm ${isSelected ? "bg-[#D4AF37]" : "bg-white/10"}`}
+                                  />
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          <div className="absolute inset-y-0 left-0 right-0">
+                            <div
+                              className="absolute inset-y-0 rounded-full border border-[#E8C96F]/60 bg-[#D4AF37]/25"
+                              style={{
+                                left: `${(audioTrimStart / maxTrimDuration) * 100}%`,
+                                width: `${((audioTrimEnd - audioTrimStart) / maxTrimDuration) * 100}%`,
+                              }}
+                            />
+                            <div
+                              className="absolute top-0 bottom-0 w-3 -translate-x-1/2 cursor-ew-resize rounded-full border border-[#F7E7B2] bg-[#D4AF37]"
+                              style={{ left: `${(audioTrimStart / maxTrimDuration) * 100}%` }}
+                              onPointerDown={(event) => {
+                                event.preventDefault();
+                                setActiveTrimHandle("start");
+                              }}
+                            />
+                            <div
+                              className="absolute top-0 bottom-0 w-3 -translate-x-1/2 cursor-ew-resize rounded-full border border-[#F7E7B2] bg-[#D4AF37]"
+                              style={{ left: `${(audioTrimEnd / maxTrimDuration) * 100}%` }}
+                              onPointerDown={(event) => {
+                                event.preventDefault();
+                                setActiveTrimHandle("end");
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[11px] text-white/70">
+                        <span>{audioTrimStart.toFixed(1)}s</span>
+                        <span>{audioTrimEnd.toFixed(1)}s</span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleApplyAudioTrim}
+                        className="w-full rounded-2xl border border-[#D4AF37]/30 bg-[#D4AF37]/15 px-3 py-2 text-sm font-semibold text-[#F7E7B2]"
+                      >
+                        Apply trim
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+
+                {audioSelectionError ? (
+                  <p className="text-sm text-amber-400">{audioSelectionError}</p>
+                ) : null}
+
+                <div className="space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#E8C96F]/70">
+                    Story Duration
+                  </div>
+                  <div className="grid grid-cols-5 gap-2">
+                    {[2, 4, 8, 12, 24].map((hours) => (
+                      <button
+                        key={hours}
+                        type="button"
+                        onClick={() => setStoryDuration(hours)}
+                        className={`rounded-xl border px-2 py-2 text-sm font-semibold transition ${storyDuration === hours
+                          ? 'border-[#D4AF37] bg-[#D4AF37]/20 text-[#F7E7B2]'
+                          : 'border-white/10 bg-white/5 text-white/70 hover:bg-white/10'}`}
+                      >
+                        {hours}h
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex flex-col items-center gap-2 pt-2">
+                  {storyVoice ? (
+                    <div className="w-full rounded-2xl border border-white/10 bg-black/40 p-2">
+                      <div className="text-[10px] uppercase tracking-[0.2em] text-[#E8C96F]/70">Audio attached</div>
+                      <audio controls src={storyVoice} className="mt-1 h-8 w-full" />
+                    </div>
+                  ) : null}
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!isVibesPro) return;
+                        if (isRecordingVoice && mediaRecorderRef.current) {
+                          mediaRecorderRef.current.stop();
+                          setIsRecordingVoice(false);
+                          return;
+                        }
+                        setAudioChoiceOpen(true);
+                      }}
+                      className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/15"
+                    >
+                      🎙 {isRecordingVoice ? "Stop Recording" : "Add Audio"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCreateStory}
+                      disabled={storyCreating}
+                      className="min-w-36 rounded-2xl bg-linear-to-r from-fuchsia-500 via-cyan-500 to-amber-400 px-4 py-3 text-sm font-semibold text-black transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {storyCreating ? "Posting..." : "Share Story"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="relative w-full max-w-xs bg-white rounded-2xl p-4 shadow-2xl space-y-4">
+              <div className="w-full aspect-square overflow-hidden rounded-xl bg-slate-100">
+                {selectedImage ? (
+                  <img src={selectedImage} alt="preview" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full bg-linear-to-br from-pink-500 via-purple-500 to-blue-500 overflow-y-auto p-4 flex items-center justify-center text-white font-semibold text-center">
+                    <div className="w-full whitespace-pre-wrap wrap-break-word text-xl leading-relaxed">
+                      {storyText.trim() ? storyText.trim() : "Text Story"}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <h3 className="text-center font-bold text-base text-slate-800">Create Story</h3>
+
+              <textarea
+                value={storyText}
+                onChange={(e) => setStoryText(e.target.value)}
+                placeholder="Drop a vibe text onto your story..."
+                className="w-full max-h-52 overflow-y-auto text-sm border border-slate-100 bg-slate-50/50 rounded-xl px-3 py-2.5 outline-none resize-none placeholder:text-slate-400 focus:border-pink-300 transition-colors"
+                rows={2}
+              />
+
+              <div className="grid grid-cols-2 gap-2 text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => {
+                    showStoryNotice("Coming Soon");
+                  }}
+                  className="bg-purple-50 text-purple-600 py-2.5 rounded-xl hover:bg-purple-100 transition-colors"
+                >
+                  🎵 {storyMusic ? "Change Audio" : "Add Music"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isVibesPro) {
+                      showStoryNotice("Coming Soon");
+                      return;
+                    }
+                    if (isRecordingVoice && mediaRecorderRef.current) {
+                      mediaRecorderRef.current.stop();
+                      setIsRecordingVoice(false);
+                      return;
+                    }
+                    setAudioChoiceOpen(true);
+                  }}
+                  className="py-2.5 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
+                >
+                  🎙 {isRecordingVoice ? "Stop Recording" : "Add Audio"}
+                </button>
+              </div>
+
+              {storyCreateError ? (
+                <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-600">
+                  {storyCreateError}
+                </p>
+              ) : null}
+
+              {storyMusic && <p className="text-[11px] text-purple-600 font-medium truncate px-1">Selected: {storyMusic}</p>}
+              {storyVoice && <audio controls src={storyVoice} className="w-full h-6 opacity-80" />}
+
+              {/* Expiry Time Selectors */}
+              <div className="space-y-1.5">
+                <span className="text-[11px] font-bold text-slate-400 block px-1">Story Lifespan</span>
+                <div className="flex justify-between gap-1">
+                  {[2, 4, 8, 12, 24].map((h) => (
+                    <button
+                      key={h}
+                      onClick={() => setStoryDuration(h)}
+                      className={`flex-1 py-1.5 text-xs font-medium rounded-lg border transition-all ${
+                        storyDuration === h
+                          ? "bg-pink-500 border-pink-500 text-white shadow-xs"
+                          : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      {h}h
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {storyCreating && storyCreateStatus ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
+                    <span>{storyCreateStatus}</span>
+                    <span>{storyCreateProgress}%</span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
+                    <div className="h-full rounded-full bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 transition-all duration-200"
+                      style={{ width: `${storyCreateProgress}%` }}
+                    />
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="flex gap-2 pt-2 text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (storyCreating) return;
+                    setStoryEditorOpen(false);
+                    setStoryMode(null);
+                    setSelectedImage(null);
+                    setStoryText("");
+                    setStoryDuration(24);
+                    setStoryMusic(undefined);
+                    setStoryVoice(undefined);
+                  }}
+                  className="flex-1 py-2.5 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+                  disabled={storyCreating}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCreateStory}
+                  className="flex-1 py-2.5 rounded-xl bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 text-white shadow-md shadow-purple-200 active:scale-95 transition-transform"
+                  disabled={storyCreating}
+                >
+                  {storyCreating ? "Working..." : "Post Story 🚀"}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
