@@ -130,17 +130,14 @@ export default function Settings() {
         : false;
     updatedProfile.is_vibes_pro = nextIsVibesPro;
 
-    console.log("[trace][Settings] before first saveProfile", {
-      profileIsVibesPro: profileFromContext?.is_vibes_pro,
-      profileVibesPro: profileFromContext?.vibes_pro,
-      updatedIsVibesPro: updatedProfile.is_vibes_pro,
-      language: selected,
-    });
-
     try {
       const savedProfile = await upsertProfileToSupabase(updatedProfile);
       if (savedProfile) {
-        try { await refreshSession(); } catch (e) {}
+        try {
+          await refreshSession();
+        } catch {
+          // ignore session refresh errors
+        }
       }
     } catch (error) {
       console.error("Language save error", error);
@@ -267,7 +264,7 @@ export default function Settings() {
       await logout();
       try {
         await refreshSession();
-      } catch (e) {
+      } catch {
         // ignore errors refreshing session after logout
       }
 
@@ -279,7 +276,7 @@ export default function Settings() {
         Object.keys(window.sessionStorage).forEach((key) => {
           if (key.startsWith("metoyou-")) window.sessionStorage.removeItem(key);
         });
-      } catch (e) {
+      } catch {
         // ignore storage cleanup errors
       }
 
@@ -287,7 +284,7 @@ export default function Settings() {
       try {
         window.history.replaceState(null, "", "/login");
         window.history.pushState(null, "", "/login");
-      } catch (e) {
+      } catch {
         // ignore history manipulation errors
       }
 

@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { login } from "../lib/auth";
 import { fetchProfileFromSupabase, upsertProfileToSupabase } from "../lib/profileApi";
 import { supabase } from "../lib/supabase";
@@ -9,7 +9,6 @@ import type { Language } from "../lib/i18n";
 
 export default function Login() {
   const navigate = useNavigate();
-  const location = useLocation();
   const { language, setLanguage, t } = useLanguage();
   const { refreshSession } = useSession();
 

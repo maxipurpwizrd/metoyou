@@ -1,6 +1,7 @@
 import Navbar from "../components/Navbar";
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
-import { AutoSizer, CellMeasurer, CellMeasurerCache, List, WindowScroller, type ListRowRenderer } from "react-virtualized";
+import { AutoSizer, CellMeasurer, CellMeasurerCache, List, WindowScroller } from "react-virtualized";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useFeed, type Post as FeedPost } from "../contexts/FeedContext";
 import { useSession } from "../contexts/SessionContext";
 import { VibesProFeed } from "../themes/vibespro";
@@ -11,7 +12,7 @@ import { supabase } from "../lib/supabase";
 import CreatePost from "../components/CreatePost";
 import PostCard from "../components/PostCard";
 import { FreeFeedSkeleton, VibesProFeedSkeleton } from "../components/skeletons/FeedSkeletons";
-import { savePostToSupabase, deletePostFromSupabase, uploadAudioToSupabase, uploadImageToSupabase } from "../lib/postApi";
+import { savePostToSupabase, deletePostFromSupabase, updatePostInSupabase, uploadAudioToSupabase, uploadImageToSupabase, fetchPostByIdFromSupabase } from "../lib/postApi";
 import { addComment, editComment, deleteComment } from "../lib/commentApi";
 import { likePost, unlikePost, getPostLikes } from "../lib/likeApi";
 import {
@@ -62,17 +63,26 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
   const { appReady } = useAppInit();
   const { profileReady } = useSession();
   if (!appReady || !profileReady) return null;
+  const location = useLocation();
+  const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const musicInputRef = useRef<HTMLInputElement>(null);
   const voiceInputRef = useRef<HTMLInputElement>(null);
   const [audioChoiceOpen, setAudioChoiceOpen] = useState(false);
-  const [audioMode, setAudioMode] = useState<"record" | "upload" | null>(null);
+  const [, setAudioMode] = useState<"record" | "upload" | null>(null);
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
 
   const [selectedStory, setSelectedStory] = useState<Story | null>(null);
+  const [focusedPost, setFocusedPost] = useState<FeedPost | null>(null);
+  const requestedPostId = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    const value = params.get("postId");
+    return value ? String(value) : null;
+  }, [location.search]);
+  const shouldFocusOnPost = Boolean(requestedPostId);
   const [selectedStoryIndex, setSelectedStoryIndex] = useState<number | null>(null);
   const [storyProgress, setStoryProgress] = useState(0);
   const [storyMenuOpen, setStoryMenuOpen] = useState(false);
@@ -165,15 +175,83 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
   const [storyVoice, setStoryVoice] = useState<string | undefined>(undefined);
   const [currentTime, setCurrentTime] = useState<number>(() => Date.now());
   const { posts, setPosts, savedScrollY, setSavedScrollY, selectedPostId, setSelectedPostId, loading, loadMorePosts, hasMore } = useFeed();
-  const filteredPosts = useMemo(
-    () => posts.filter((post) => !mutedUsers.includes(post.author.id)),
-    [posts, mutedUsers]
-  );
+  const filteredPosts = useMemo(() => {
+    const basePosts = posts.filter((post) => !mutedUsers.includes(post.author.id));
+
+    if (!requestedPostId) return basePosts;
+
+    return basePosts.filter((post) => String(post.id) === requestedPostId);
+  }, [posts, mutedUsers, requestedPostId]);
 
   useEffect(() => {
     cache.current.clearAll();
     listRef.current?.recomputeRowHeights();
   }, [filteredPosts.length, selectedPostId]);
+
+  useEffect(() => {
+    if (!requestedPostId) {
+      setFocusedPost(null);
+      setSelectedPostId(null);
+      return;
+    }
+
+    let active = true;
+
+    const loadFocusedPost = async () => {
+      const existing = posts.find((post) => String(post.id) === requestedPostId);
+      if (existing) {
+        if (active) {
+          setFocusedPost(existing);
+          setSelectedPostId(requestedPostId);
+        }
+        return;
+      }
+
+      const record = await fetchPostByIdFromSupabase(requestedPostId);
+      if (!active) return;
+
+      if (!record) {
+        setFocusedPost(null);
+        setSelectedPostId(requestedPostId);
+        return;
+      }
+
+      const mappedPost: FeedPost = {
+        id: record.id,
+        author: {
+          id: record.author_id,
+          username: record.profiles?.username ?? record.author_id,
+          avatar: record.profiles?.profile_pic ?? undefined,
+          is_vibes_pro: isVibesProEnabled(record.profiles as any),
+        },
+        authorId: record.author_id,
+        author_id: record.author_id,
+        time: "just now",
+        created_at: record.created_at,
+        text: record.text ?? "",
+        image: record.image_url ?? undefined,
+        video: record.video_url ?? undefined,
+        audio: record.audio_url ?? undefined,
+        comments: [],
+        likes: record.likes_count ?? 0,
+        likes_count: record.likes_count ?? 0,
+        comments_count: record.comments_count ?? 0,
+        liked: false,
+        highlighted: Boolean(record.highlighted),
+        persisted: true,
+      };
+
+      setFocusedPost(mappedPost);
+      setSelectedPostId(requestedPostId);
+    };
+
+    void loadFocusedPost();
+
+    return () => {
+      active = false;
+    };
+  }, [posts, requestedPostId, setSelectedPostId]);
+
   const suppressAutoCloseRef = useRef(false);
 
   const handleShareStory = async () => {
@@ -889,13 +967,55 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
   const storyCardBgClass = isVibesPro ? "bg-[#111111]/85 text-white" : "bg-white/80 text-pink-500";
   const storyCardStyle = { borderRadius: storyCardRadius };
 
+  const focusedPostContent = shouldFocusOnPost ? (
+    <div className={`app-screen ${isVibesPro ? 'bg-[#0B0B0B]' : 'bg-linear-to-br from-blue-100 via-pink-100 to-purple-100'} px-4 sm:px-6`}>
+      <div className="mx-auto max-w-md pb-24 pt-4">
+        {focusedPost ? (
+          <div className={`rounded-[32px] border p-2 shadow-2xl backdrop-blur-md ${isVibesPro ? 'border-[#D4AF37]/20 bg-[#181818]' : 'border-white/40 bg-white/70'}`}>
+            <PostCard
+              author={focusedPost.author}
+              isVibesPro={isVibesProEnabled(focusedPost.author as any)}
+              variant={isVibesProEnabled(focusedPost.author as any) ? "gold" : "default"}
+              postId={focusedPost.id}
+              authorId={focusedPost.authorId ?? focusedPost.author.id}
+              time={focusedPost.time}
+              text={focusedPost.text}
+              image={focusedPost.image}
+              video={focusedPost.video}
+              comments={focusedPost.comments}
+              likes={focusedPost.likes ?? 0}
+              liked={Boolean(focusedPost.liked)}
+              isSelected={true}
+              onToggleLike={() => undefined}
+              onSelectPost={() => undefined}
+              onClosePost={() => undefined}
+              onRepost={() => undefined}
+              onSavePost={() => undefined}
+              onMuteUser={() => undefined}
+              onDeletePost={() => undefined}
+              onRetryPost={() => undefined}
+              onEditPost={() => undefined}
+              onDeleteImage={() => undefined}
+              onDeleteVideo={() => undefined}
+              onHighlight={() => undefined}
+              audio={focusedPost.audio}
+            />
+          </div>
+        ) : (
+          <div className={`rounded-[32px] border p-8 text-center text-sm shadow-2xl backdrop-blur-md ${isVibesPro ? 'border-[#D4AF37]/20 bg-[#181818] text-white/80' : 'border-white/40 bg-white/70 text-slate-600'}`}>
+            Loading post...
+          </div>
+        )}
+      </div>
+    </div>
+  ) : null;
+
   // Normal feed content that can be wrapped by VibesProFeed theme
   const feedContent = (
     <div className={`app-screen ${isVibesPro ? 'bg-[#0B0B0B]' : 'bg-linear-to-br from-blue-100 via-pink-100 to-purple-100'} px-4 sm:px-6`}>
-      {/* Dynamic Floating Navbar Container - only show if not VibesPro (VibesProFeed has its own navbar) */}
-      {!isVibesPro && <Navbar />}
+      {!shouldFocusOnPost && !isVibesPro && <Navbar />}
 
-      <div className={`max-w-md mx-auto pb-24 space-y-5 ${isVibesPro ? 'pt-8' : 'pt-28'}`}>
+      <div className={`max-w-md mx-auto pb-24 space-y-5 ${shouldFocusOnPost ? 'pt-4' : isVibesPro ? 'pt-8' : 'pt-28'}`}>
         <input
           ref={fileInputRef}
           type="file"
@@ -936,8 +1056,8 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
           className="hidden"
         />
 
-        {/* Stories Horizontal Tray */}
-        <div className="flex gap-2 md:gap-3 overflow-x-auto pb-2 scrollbar-none snap-x snap-mandatory">
+        {!shouldFocusOnPost && (
+          <div className="flex gap-2 md:gap-3 overflow-x-auto pb-2 scrollbar-none snap-x snap-mandatory">
           {/* Add Story Button */}
           <button
             type="button"
@@ -999,9 +1119,10 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
               </div>
             </div>
           ))}
-        </div>
+          </div>
+        )}
 
-        <CreatePost onPost={handlePost} />
+        {!shouldFocusOnPost && <CreatePost onPost={handlePost} />}
 
         {/* Dynamic Post Interaction Container */}
         <div
@@ -1048,6 +1169,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                                 ref={registerChild}
                                 style={{ ...style, width: "100%" }}
                                 className="mb-4 px-1 sm:px-2"
+                                data-post-id={String(post.id)}
                               >
                                 <div
                                   onClick={(e) => {
@@ -1157,10 +1279,16 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                                     onRetryPost={() => {
                                       void retryPost(post.id);
                                     }}
-                                    onEditPost={() => {
-                                      const newText = window.prompt("Edit post text:", post.text || "");
-                                      if (newText !== null) {
-                                        setPosts((prev) => prev.map((p) => (p.id === post.id ? { ...p, text: newText } : p)));
+                                    onEditPost={async (nextText) => {
+                                      const trimmed = nextText.trim();
+                                      setPosts((prev) => prev.map((p) => (p.id === post.id ? { ...p, text: trimmed } : p)));
+
+                                      if (post.persisted && post.id) {
+                                        try {
+                                          await updatePostInSupabase(String(post.id), { text: trimmed });
+                                        } catch (err) {
+                                          console.error("Failed to update post in Supabase", err);
+                                        }
                                       }
                                     }}
                                     onDeleteImage={() => {
@@ -1281,7 +1409,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                           </CellMeasurer>
                         );
                       }}
-                      onRowsRendered={({ startIndex, stopIndex }: any) => {
+                      onRowsRendered={({ stopIndex }: any) => {
                         if (hasMore && stopIndex >= filteredPosts.length - 3) {
                           void loadMorePosts();
                         }
@@ -1904,6 +2032,25 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
       )}
     </div>
   );
+
+  useEffect(() => {
+    if (!shouldFocusOnPost) return;
+
+    const handlePopState = () => {
+      navigate('/notifications');
+    };
+
+    window.history.pushState(null, "", window.location.href);
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [navigate, shouldFocusOnPost]);
+
+  if (shouldFocusOnPost) {
+    return focusedPostContent;
+  }
 
   // Wrap with VibesProFeed if user is premium, otherwise return normal feed
   if (isVibesPro) {

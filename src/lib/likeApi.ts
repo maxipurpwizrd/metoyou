@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { normalizeTimestamp } from "./time";
 
 export type PostLikeRecord = {
   id: string;
@@ -45,7 +46,7 @@ export async function likePost(postId: string, userId: string) {
     const insert = {
       post_id: postId,
       user_id: userId,
-      created_at: new Date().toISOString(),
+      created_at: normalizeTimestamp(new Date()) ?? new Date().toISOString(),
     };
 
     const { data, error } = await supabase
@@ -72,7 +73,7 @@ export async function likePost(postId: string, userId: string) {
         .eq("id", userId)
         .maybeSingle();
       if (!actorError && actorData?.username) {
-        const createdAt = new Date().toISOString();
+        const createdAt = normalizeTimestamp(new Date()) ?? new Date().toISOString();
         const notificationData = {
           type: "like",
           message: "liked your post",

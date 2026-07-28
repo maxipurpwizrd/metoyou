@@ -18,7 +18,7 @@ export default function AudioCallScreen({
   onEndCall,
 }: AudioCallScreenProps) {
   const [callDuration, setCallDuration] = useState(0);
-  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'poor' | 'disconnected'>('connected');
+  const [connectionStatus] = useState<'connecting' | 'connected' | 'poor' | 'disconnected'>('connected');
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const animationRef = useRef<number | null>(null);
 

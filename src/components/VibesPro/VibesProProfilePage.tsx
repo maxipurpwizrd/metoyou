@@ -27,6 +27,7 @@ type VibesProProfilePageProps = {
   mutualConnections?: Array<{ id: string; username: string; profilePic?: string | null }>;
   filteredMutualConnections?: Array<{ id: string; username: string; profilePic?: string | null }>;
   onSelectHommie?: (connection: { id: string; username: string; profilePic?: string | null }) => void;
+  recentFollowerIds?: string[];
   onUploadPortrait?: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onRequestPortraitUpload?: () => void;
   onConfirmPortraitUpload?: () => void;
@@ -72,6 +73,7 @@ export default function VibesProProfilePage({
   onHommiesSearchChange,
   filteredMutualConnections = [],
   onSelectHommie,
+  recentFollowerIds = [],
   onUploadPortrait,
   onRequestPortraitUpload,
   onConfirmPortraitUpload,
@@ -213,7 +215,7 @@ export default function VibesProProfilePage({
                         key={connection.id}
                         type="button"
                         onClick={() => onSelectHommie?.(connection)}
-                        className="flex w-full items-center gap-3 rounded-2xl border border-amber-200/20 bg-white/10 px-3 py-3 text-left shadow-sm transition hover:bg-white/15"
+                        className="relative flex w-full items-center gap-3 rounded-2xl border border-amber-200/20 bg-white/10 px-3 py-3 text-left shadow-sm transition hover:bg-white/15"
                       >
                         <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-linear-to-br from-[#FFD700] via-[#FFB800] to-[#B8860B] text-sm font-semibold text-slate-950">
                           {connection.profilePic ? (
@@ -226,6 +228,9 @@ export default function VibesProProfilePage({
                           <p className="font-semibold text-[#FFF3B0]">{connection.username}</p>
                           <p className="text-xs text-amber-100/70">{t("profile.homie")}</p>
                         </div>
+                        {recentFollowerIds.includes(connection.id) ? (
+                          <span className="ml-auto h-2.5 w-2.5 rounded-full bg-red-500 shadow-[0_0_0_4px_rgba(239,68,68,0.16)]" aria-label="recent follower" />
+                        ) : null}
                       </button>
                     ))}
                   </div>

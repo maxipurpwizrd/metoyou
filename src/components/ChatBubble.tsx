@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { MoreVertical, Edit2, Trash2, Reply } from "lucide-react";
 import type { Message } from "../lib/messageApi";
 import { updateMessageReactions } from "../lib/messageApi";
+import { formatDisplayTime } from "../lib/time";
 
 type Props = {
   message: Message;
@@ -12,13 +13,7 @@ type Props = {
 };
 
 function formatMessageTime(dateString?: string) {
-  if (!dateString) return "";
-
-  const date = new Date(dateString);
-  return date.toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatDisplayTime(dateString);
 }
 
 function getStatusIcon(status?: string) {

@@ -5,14 +5,14 @@ import { Mic, Paperclip, Send, Smile, Square, X, Pause, Play } from "lucide-reac
 import ChatBubble from "../components/ChatBubble";
 import AudioCallScreen from "../components/AudioCallScreen";
 import VideoCallScreen from "../components/VideoCallScreen";
-import CallControls from "../components/CallControls";
 import { useMediaStream } from "../hooks/useMediaStream";
 import { useAuth } from "../hooks/useAuth";
 import { useChat } from "../contexts/ChatContext";
 import { useSession } from "../contexts/SessionContext";
 import { supabase } from "../lib/supabase";
 import { isVibesProEnabled } from "../lib/vibesPro";
-import type { CallSession, CallType } from "../types/call";
+import { createPeerConnection, attachLocalStreamToPeerConnection } from "../lib/webrtc";
+import type { CallSession } from "../types/call";
 import {
   sendMessage,
   fetchMessagesPage,
@@ -57,8 +57,15 @@ export default function Chat() {
   const [isCameraOff, setIsCameraOff] = useState(false);
   const [isRemoteAudioActive, setIsRemoteAudioActive] = useState(false);
   const [isRemoteVideoActive, setIsRemoteVideoActive] = useState(false);
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
+  const remoteMediaStreamRef = useRef<MediaStream | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const callChannelRef = useRef<RealtimeChannel | null>(null);
+  const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const activeCallTargetRef = useRef<string | null>(null);
 
   // Media streams
   const audioStream = useMediaStream({ audio: true, video: false });
@@ -92,22 +99,91 @@ export default function Chat() {
   const typingStateRef = useRef<boolean>(false);
   const typingTimeoutRef = useRef<number | null>(null);
 
-  // Call handlers
-  async function handleStartAudioCall() {
-    if (!userId || !recipientId) return;
+  async function sendCallSignal(event: string, payload: Record<string, unknown>) {
+    if (!callChannelRef.current || !userId) return;
 
-    try {
-      await audioStream.startStream();
-    } catch (error) {
-      console.warn('Media stream failed (likely no hardware in test env), proceeding with call screen:', error);
-      // Continue anyway - in production with hardware this would work
+    await callChannelRef.current.send({
+      type: "broadcast",
+      event,
+      payload,
+    });
+  }
+
+  function closePeerConnection() {
+    const peerConnection = peerConnectionRef.current;
+    if (peerConnection) {
+      peerConnection.onicecandidate = null;
+      peerConnection.ontrack = null;
+      peerConnection.onconnectionstatechange = null;
+      peerConnection.close();
+      peerConnectionRef.current = null;
     }
+
+    pendingIceCandidatesRef.current = [];
+  }
+
+  function resetCallState() {
+    setRemoteStream(null);
+    setIsRemoteAudioActive(false);
+    setIsRemoteVideoActive(false);
+    setIsMuted(false);
+    setIsCameraOff(false);
+    closePeerConnection();
+    activeCallTargetRef.current = null;
+  }
+
+  async function startCall(callType: "audio" | "video") {
+    if (!userId || !recipientId || !conversationId) return;
+
+    const mediaStream = callType === "video" ? await videoStream.startStream() : await audioStream.startStream();
+    localStreamRef.current = mediaStream;
+
+    const peerConnection = createPeerConnection();
+    peerConnectionRef.current = peerConnection;
+    pendingIceCandidatesRef.current = [];
+    attachLocalStreamToPeerConnection(peerConnection, mediaStream);
+
+    peerConnection.onicecandidate = (event) => {
+      if (!event.candidate) return;
+      void sendCallSignal("call-ice-candidate", {
+        senderId: userId,
+        recipientId,
+        candidate: event.candidate.toJSON(),
+      });
+    };
+
+    peerConnection.ontrack = (event) => {
+      const [incomingStream] = event.streams;
+      if (!incomingStream) return;
+      remoteMediaStreamRef.current = incomingStream;
+      setRemoteStream(incomingStream);
+      if (callType === "video") {
+        setIsRemoteVideoActive(true);
+      } else {
+        setIsRemoteAudioActive(true);
+      }
+    };
+
+    peerConnection.onconnectionstatechange = () => {
+      if (peerConnection.connectionState === "connected") {
+        setActiveCallSession((current) =>
+          current ? { ...current, status: "connected" } : current
+        );
+        if (callType === "video") {
+          setIsRemoteVideoActive(true);
+        } else {
+          setIsRemoteAudioActive(true);
+        }
+      }
+    };
+
+    activeCallTargetRef.current = recipientId;
 
     const callSession: CallSession = {
       id: `call-${Date.now()}`,
-      conversationId: conversationId || 'demo-call',
-      callType: 'audio',
-      status: 'ringing',
+      conversationId,
+      callType,
+      status: "ringing",
       startTime: new Date(),
       remoteUserId: recipientId,
       remoteUsername: recipientName,
@@ -116,32 +192,36 @@ export default function Chat() {
 
     setActiveCallSession(callSession);
     setIsMuted(false);
+    setIsCameraOff(callType === "video" ? false : isCameraOff);
+
+    const offer = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offer);
+    await sendCallSignal("call-offer", {
+      senderId: userId,
+      recipientId,
+      callType,
+      sdp: offer,
+    });
+  }
+
+  async function handleStartAudioCall() {
+    if (!userId || !recipientId) return;
+
+    try {
+      await startCall("audio");
+    } catch (error) {
+      console.warn("Audio call failed", error);
+    }
   }
 
   async function handleStartVideoCall() {
     if (!userId || !recipientId) return;
 
     try {
-      await videoStream.startStream();
+      await startCall("video");
     } catch (error) {
-      console.warn('Media stream failed (likely no hardware in test env), proceeding with call screen:', error);
-      // Continue anyway - in production with hardware this would work
+      console.warn("Video call failed", error);
     }
-
-    const callSession: CallSession = {
-      id: `call-${Date.now()}`,
-      conversationId: conversationId || 'demo-call',
-      callType: 'video',
-      status: 'ringing',
-      startTime: new Date(),
-      remoteUserId: recipientId,
-      remoteUsername: recipientName,
-      remoteAvatarUrl: undefined,
-    };
-
-    setActiveCallSession(callSession);
-    setIsMuted(false);
-    setIsCameraOff(false);
   }
 
   function handleToggleMute() {
@@ -161,15 +241,25 @@ export default function Chat() {
     videoStream.toggleVideo(!newCameraState);
   }
 
-  function handleEndCall() {
+  async function handleEndCall() {
+    if (userId && activeCallTargetRef.current) {
+      await sendCallSignal("call-hangup", {
+        senderId: userId,
+        recipientId: activeCallTargetRef.current,
+      });
+    }
+
     audioStream.stopStream();
     videoStream.stopStream();
     setActiveCallSession(null);
-    setIsMuted(false);
-    setIsCameraOff(false);
-    setIsRemoteAudioActive(false);
-    setIsRemoteVideoActive(false);
+    resetCallState();
   }
+
+  useEffect(() => {
+    if (remoteVideoRef.current && remoteStream) {
+      remoteVideoRef.current.srcObject = remoteStream;
+    }
+  }, [remoteStream]);
 
   // Connect local video stream to ref when available
   useEffect(() => {
@@ -404,6 +494,129 @@ export default function Chat() {
   }, [conversationId, getCachedMessages, setCachedMessages, addMessageToCache, userId, recipientName]);
 
   useEffect(() => {
+    if (!conversationId || !userId) return;
+
+    const channel = supabase.channel(`calls:${conversationId}`);
+
+    channel.on("broadcast", { event: "call-offer" }, async (payload) => {
+      const eventPayload = payload.payload as {
+        senderId?: string;
+        recipientId?: string;
+        callType?: "audio" | "video";
+        sdp?: RTCSessionDescriptionInit;
+      };
+
+      if (!eventPayload.senderId || !eventPayload.recipientId || eventPayload.recipientId !== userId) return;
+      if (activeCallSession || !eventPayload.sdp) return;
+
+      const callType = eventPayload.callType ?? "audio";
+      const mediaStream = callType === "video" ? await videoStream.startStream() : await audioStream.startStream();
+      localStreamRef.current = mediaStream;
+
+      const peerConnection = createPeerConnection();
+      peerConnectionRef.current = peerConnection;
+      pendingIceCandidatesRef.current = [];
+      attachLocalStreamToPeerConnection(peerConnection, mediaStream);
+
+      peerConnection.onicecandidate = (event) => {
+        if (!event.candidate) return;
+        void sendCallSignal("call-ice-candidate", {
+          senderId: userId,
+          recipientId: eventPayload.senderId,
+          candidate: event.candidate.toJSON(),
+        });
+      };
+
+      peerConnection.ontrack = (event) => {
+        const [incomingStream] = event.streams;
+        if (!incomingStream) return;
+        remoteMediaStreamRef.current = incomingStream;
+        setRemoteStream(incomingStream);
+        if (callType === "video") {
+          setIsRemoteVideoActive(true);
+        } else {
+          setIsRemoteAudioActive(true);
+        }
+      };
+
+      peerConnection.onconnectionstatechange = () => {
+        if (peerConnection.connectionState === "connected") {
+          setActiveCallSession((current) =>
+            current ? { ...current, status: "connected" } : current
+          );
+        }
+      };
+
+      activeCallTargetRef.current = eventPayload.senderId ?? null;
+
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(eventPayload.sdp));
+
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
+      await sendCallSignal("call-answer", {
+        senderId: userId,
+        recipientId: eventPayload.senderId,
+        callType,
+        sdp: answer,
+      });
+
+      setActiveCallSession({
+        id: `call-${Date.now()}`,
+        conversationId,
+        callType,
+        status: "connected",
+        startTime: new Date(),
+        remoteUserId: eventPayload.senderId ?? recipientId,
+        remoteUsername: recipientName,
+        remoteAvatarUrl: undefined,
+      });
+      setIsMuted(false);
+      setIsCameraOff(false);
+    });
+
+    channel.on("broadcast", { event: "call-answer" }, async (payload) => {
+      const eventPayload = payload.payload as {
+        senderId?: string;
+        recipientId?: string;
+        sdp?: RTCSessionDescriptionInit;
+      };
+
+      if (!eventPayload.senderId || !eventPayload.recipientId || eventPayload.recipientId !== userId) return;
+      if (!peerConnectionRef.current || !eventPayload.sdp) return;
+
+      await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(eventPayload.sdp));
+      pendingIceCandidatesRef.current.forEach((candidate) => {
+        peerConnectionRef.current?.addIceCandidate(new RTCIceCandidate(candidate));
+      });
+      pendingIceCandidatesRef.current = [];
+    });
+
+    channel.on("broadcast", { event: "call-ice-candidate" }, async (payload) => {
+      const eventPayload = payload.payload as {
+        senderId?: string;
+        recipientId?: string;
+        candidate?: RTCIceCandidateInit;
+      };
+
+      if (!eventPayload.senderId || !eventPayload.recipientId || eventPayload.recipientId !== userId) return;
+      if (!peerConnectionRef.current || !eventPayload.candidate) return;
+
+      try {
+        await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(eventPayload.candidate));
+      } catch (error) {
+        pendingIceCandidatesRef.current.push(eventPayload.candidate);
+        console.warn("Queued ICE candidate", error);
+      }
+    });
+
+    channel.on("broadcast", { event: "call-hangup" }, () => {
+      resetCallState();
+      setActiveCallSession(null);
+    });
+
+    channel.subscribe();
+    callChannelRef.current = channel;
+
     return () => {
       if (recordingTimerRef.current) {
         window.clearInterval(recordingTimerRef.current);
@@ -418,6 +631,11 @@ export default function Chat() {
         typingStateRef.current = false;
         void sendTypingIndicator(conversationId, userId, false);
       }
+      if (callChannelRef.current) {
+        void callChannelRef.current.unsubscribe();
+        callChannelRef.current = null;
+      }
+      resetCallState();
     };
   }, [conversationId, userId]);
 

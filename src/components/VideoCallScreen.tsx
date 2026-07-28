@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, type RefObject } from 'react';
 import { Mic, MicOff, Phone, Volume2, Video, VideoOff, Loader } from 'lucide-react';
 import type { CallSession } from '../types/call';
 
 interface VideoCallScreenProps {
   session: CallSession;
-  localVideoRef: React.RefObject<HTMLVideoElement>;
-  remoteVideoRef: React.RefObject<HTMLVideoElement>;
+  localVideoRef: RefObject<HTMLVideoElement | null>;
+  remoteVideoRef: RefObject<HTMLVideoElement | null>;
   isRemoteVideoActive: boolean;
   isMuted: boolean;
   isCameraOff: boolean;
@@ -26,7 +26,7 @@ export default function VideoCallScreen({
   onEndCall,
 }: VideoCallScreenProps) {
   const [callDuration, setCallDuration] = useState(0);
-  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'poor' | 'disconnected'>('connected');
+  const [connectionStatus] = useState<'connecting' | 'connected' | 'poor' | 'disconnected'>('connected');
 
   // Call timer
   useEffect(() => {

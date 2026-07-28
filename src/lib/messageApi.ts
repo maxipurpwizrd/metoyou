@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { normalizeTimestamp } from "./time";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import type { Conversation, Message, MessageThread, PresenceState } from "../types/message";
 
@@ -387,6 +388,7 @@ export async function sendMessage({
       video_url: videoUrl ?? null,
       message_type: messageType ?? null,
       status: "sent",
+      created_at: normalizeTimestamp(new Date()) ?? new Date().toISOString(),
     };
 
     const payloads: Array<Record<string, unknown>> = [basePayload];
@@ -793,7 +795,7 @@ export async function editMessage(
       .from("messages")
       .update({
         text: newText.trim(),
-        edited_at: new Date().toISOString(),
+        edited_at: normalizeTimestamp(new Date()) ?? new Date().toISOString(),
       })
       .eq("id", messageId)
       .select()

@@ -7,25 +7,22 @@ import { getMessageThreads, type MessageThread } from "../lib/messageApi";
 import { getFollowStatus } from "../lib/followApi";
 import { useSession } from "../contexts/SessionContext";
 import { isVibesProEnabled } from "../lib/vibesPro";
+import { formatDisplayDate } from "../lib/time";
 
 export default function SpamMessages() {
-  const { appReady } = useAppInit();
-  const { profileReady } = useSession();
-  if (!appReady || !profileReady) return null;
-
   const { user } = useAuth();
   const { t } = useLanguage();
+  const { appReady } = useAppInit();
+  const { profileReady, profile } = useSession();
+  const isVibesPro = isVibesProEnabled(profile);
   const [threads, setThreads] = useState<MessageThread[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const { profile } = useSession();
-  const isVibesPro = isVibesProEnabled(profile);
-
   useEffect(() => {
-    const userId = (user as any)?.id as string | undefined;
+    const userId = user?.id;
     if (!userId) return;
 
     let mounted = true;
-    setIsLoading(true);
+    window.requestAnimationFrame(() => setIsLoading(true));
 
     void (async () => {
       try {
@@ -56,7 +53,9 @@ export default function SpamMessages() {
     return () => {
       mounted = false;
     };
-  }, [user]);
+  }, [user?.id]);
+
+  if (!appReady || !profileReady) return null;
 
   return (
     <div className={`app-screen ${isVibesPro ? 'bg-[#0B0B0B]' : 'bg-linear-to-br from-pink-100 via-purple-100 to-blue-100'} p-6 pb-32`}>
@@ -105,7 +104,7 @@ export default function SpamMessages() {
                     </div>
                     {thread.lastTime && (
                       <p className={`text-xs whitespace-nowrap ${isVibesPro ? 'text-white/40' : 'text-slate-500'}`}>
-                        {new Date(thread.lastTime).toLocaleDateString()}
+                        {formatDisplayDate(thread.lastTime)}
                       </p>
                     )}
                   </div>

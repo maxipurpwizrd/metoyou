@@ -1,5 +1,5 @@
 import Navbar from "../components/Navbar";
-import { useEffect, useState, useRef, useMemo } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Trash2 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
@@ -29,6 +29,7 @@ type NotificationItem = Notification & {
   notificationIds: string[];
   count: number;
   actors: string[];
+  actorIds: string[];
 };
 
 function groupNotifications(notifications: Notification[]): NotificationItem[] {
@@ -44,17 +45,20 @@ function groupNotifications(notifications: Notification[]): NotificationItem[] {
         notificationIds: [notification.id],
         count: 1,
         actors: [notification.user],
+        actorIds: notification.actorId ? [notification.actorId] : [],
       });
       continue;
     }
 
     const actors = Array.from(new Set([...existing.actors, notification.user]));
+    const actorIds = Array.from(new Set([...existing.actorIds, ...(notification.actorId ? [notification.actorId] : [])]));
 
     grouped.set(key, {
       ...existing,
       notificationIds: [...existing.notificationIds, notification.id],
       count: existing.count + 1,
       actors,
+      actorIds,
       user: joinActorNames(actors),
       avatar: existing.avatar ?? notification.avatar,
       read: existing.read && notification.read,
@@ -69,16 +73,20 @@ function groupNotifications(notifications: Notification[]): NotificationItem[] {
   });
 }
 
-export default function Notifications(_props: { embedded?: boolean } = {}) {
+type NotificationsProps = {
+  embedded?: boolean;
+};
+
+export default function Notifications({ embedded }: NotificationsProps) {
   // Prevent rendering until app initialization completes
   const { appReady } = useAppInit();
   const { profileReady } = useSession();
-  if (!appReady || !profileReady) return null;
   const navigate = useNavigate();
   const { user } = useAuth();
   const { t } = useLanguage();
   const { profile } = useSession();
   const isVibesPro = isVibesProEnabled(profile);
+  void embedded;
   const greetingName = (() => {
     const rawFirstName = profile?.firstName?.trim();
     if (rawFirstName) return rawFirstName;
@@ -92,6 +100,7 @@ export default function Notifications(_props: { embedded?: boolean } = {}) {
   
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
   const [confirmDialog, setConfirmDialog] = useState<{
     mode: "single" | "all";
     item?: NotificationItem;
@@ -118,7 +127,7 @@ export default function Notifications(_props: { embedded?: boolean } = {}) {
   };
 
   useEffect(() => {
-    const userId = (user as any)?.id;
+    const userId = user?.id;
     if (!userId) return;
     const scrollKey = `metoyou-notifications-scroll:${userId}`;
     const saved = Number(sessionStorage.getItem(scrollKey) || "0");
@@ -129,28 +138,33 @@ export default function Notifications(_props: { embedded?: boolean } = {}) {
     return () => {
       try {
         sessionStorage.setItem(scrollKey, String(window.scrollY || 0));
-      } catch (e) {
+      } catch {
         // ignore
       }
     };
   }, [user]);
 
   useEffect(() => {
+    const timer = window.setInterval(() => setCurrentTime(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
     mountedRef.current = true;
-    if (!user || typeof user !== "object" || !("id" in user)) return;
-    const userId = (user as any).id as string;
+    const userId = user?.id;
+    if (!userId) return;
     const cacheKey = `metoyou-notifs:${userId}`;
 
     try {
       const raw = sessionStorage.getItem(cacheKey);
       if (raw) {
         const cached = JSON.parse(raw) as Notification[];
-        updateNotifications(cached);
+        window.requestAnimationFrame(() => updateNotifications(cached));
       } else {
-        setNotificationsLoading(true);
+        window.requestAnimationFrame(() => setNotificationsLoading(true));
       }
-    } catch (e) {
-      setNotificationsLoading(true);
+    } catch {
+      window.requestAnimationFrame(() => setNotificationsLoading(true));
     }
 
     const performBackgroundRefresh = async () => {
@@ -194,23 +208,19 @@ export default function Notifications(_props: { embedded?: boolean } = {}) {
       mountedRef.current = false;
       try {
         channel?.unsubscribe();
-      } catch (e) {
+      } catch {
         // ignore
       }
     };
   }, [user]);
 
   const getTimeString = (timestamp: string | number) => {
-    const numericTimestamp =
-      typeof timestamp === "string"
-        ? Date.parse(timestamp)
-        : Number(timestamp);
-
-    if (!Number.isFinite(numericTimestamp) || numericTimestamp <= 0) {
+    const parsedTime = typeof timestamp === "number" ? timestamp : Date.parse(timestamp);
+    if (!Number.isFinite(parsedTime) || parsedTime <= 0) {
       return t("notifications.justNow");
     }
 
-    const diff = Date.now() - numericTimestamp;
+    const diff = currentTime - parsedTime;
     const minutes = Math.floor(diff / 60000);
     const hours = Math.floor(diff / 3600000);
     const days = Math.floor(diff / 86400000);
@@ -222,11 +232,6 @@ export default function Notifications(_props: { embedded?: boolean } = {}) {
     return t("notifications.daysAgo").replace("{count}", String(days));
   };
 
-  useMemo(
-    () => notifications.filter((notif) => !notif.read).length,
-    [notifications]
-  );
-
   const handleDeleteNotification = async (notif: NotificationItem) => {
     if (!user || typeof user !== "object" || !("id" in user)) return;
     setConfirmDialog({ mode: "single", item: notif });
@@ -237,9 +242,12 @@ export default function Notifications(_props: { embedded?: boolean } = {}) {
     setConfirmDialog({ mode: "all" });
   };
 
+  if (!appReady || !profileReady) return null;
+
   const confirmDelete = async () => {
     if (!user || typeof user !== "object" || !("id" in user) || !confirmDialog) return;
-    const userId = (user as any).id as string;
+    const userId = user?.id;
+    if (!userId) return;
 
     if (confirmDialog.mode === "all") {
       const success = await deleteAllNotifications(userId);
@@ -326,8 +334,21 @@ export default function Notifications(_props: { embedded?: boolean } = {}) {
               <div
                 key={notif.notificationIds.join("-")}
                 onClick={() => {
+                  if (notif.type === "follow" || notif.type === "follow_back") {
+                    const primaryActor = notif.actors?.[0] ?? notif.user ?? null;
+                    navigate("/profile", {
+                      state: {
+                        openHommiesList: true,
+                        highlightUserId: notif.actorId ?? null,
+                        highlightUsername: primaryActor,
+                        recentFollowerIds: notif.actorIds ?? [],
+                      },
+                    });
+                    return;
+                  }
+
                   if (notif.postId) {
-                    navigate(`/feed`);
+                    navigate(`/feed?postId=${encodeURIComponent(String(notif.postId))}`);
                   }
                 }}
                 className={`relative rounded-4xl shadow-2xl px-5 py-5 pb-12 transition-all duration-200 cursor-pointer ${

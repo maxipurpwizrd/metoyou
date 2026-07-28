@@ -5,6 +5,7 @@ import { hydratePostComments } from "../lib/commentApi";
 import { useAuth } from "../hooks/useAuth";
 import { hydratePostLikeState } from "../lib/likeApi";
 import { isVibesProEnabled } from "../lib/vibesPro";
+import { getRelativeTime } from "../lib/time";
 import type { PostRecord } from "../types/post";
 
 export type User = {
@@ -143,24 +144,7 @@ export function FeedProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const getRelativeTime = (dateString: string): string => {
-    try {
-      const date = new Date(dateString);
-      const now = new Date();
-      const diff = now.getTime() - date.getTime();
-      const minutes = Math.floor(diff / 60000);
-      const hours = Math.floor(diff / 3600000);
-      const days = Math.floor(diff / 86400000);
-
-      if (minutes < 1) return "just now";
-      if (minutes < 60) return `${minutes}m ago`;
-      if (hours < 24) return `${hours}h ago`;
-      if (days < 7) return `${days}d ago`;
-      return date.toLocaleDateString();
-    } catch {
-      return "just now";
-    }
-  };
+  const formatFeedRelativeTime = (dateString: string): string => getRelativeTime(dateString);
 
   const mapRecords = async (records: PostRecord[] | null | undefined, currentUserId?: string) => {
     const safeRecords = Array.isArray(records) ? records : [];
@@ -175,7 +159,7 @@ export function FeedProvider({ children }: { children: ReactNode }) {
       },
       authorId: r.author_id,
       author_id: r.author_id,
-      time: getRelativeTime(r.created_at),
+      time: formatFeedRelativeTime(r.created_at),
       created_at: r.created_at,
       text: r.text ?? "",
       image: r.image_url ?? undefined,

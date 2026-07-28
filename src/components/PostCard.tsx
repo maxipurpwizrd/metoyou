@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Mic, Square } from "lucide-react";
 import ImageViewer from "./ImageViewer";
+import EditPostModal from "./EditPostModal";
 import { useSession } from "../contexts/SessionContext";
 import { useAutoplayVideo } from "../hooks/useAutoplayVideo";
 import { useAutoplayAudio } from "../hooks/useAutoplayAudio";
@@ -26,7 +27,7 @@ type Props = {
 
   onDeletePost?: () => void;
   onRetryPost?: () => void;
-  onEditPost?: () => void;
+  onEditPost?: (nextText: string) => void;
   onDeleteImage?: () => void;
   onDeleteVideo?: () => void;
 
@@ -107,6 +108,8 @@ export default function PostCard({
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [isReadingModeOpen, setIsReadingModeOpen] = useState(false);
+  const [isEditingPost, setIsEditingPost] = useState(false);
+  const [draftPostText, setDraftPostText] = useState(text);
   const MAX_RECORDING_SECONDS = 60;
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -196,6 +199,10 @@ export default function PostCard({
     setDisplayLikes(likes);
     setDisplayLiked(Boolean(liked));
   }, [likes, liked]);
+
+  useEffect(() => {
+    setDraftPostText(text);
+  }, [text]);
 
   useEffect(() => {
     if (import.meta.env.DEV) {
@@ -592,7 +599,8 @@ export default function PostCard({
                   <button
                     type="button"
                     onClick={() => {
-                      onEditPost?.();
+                      setDraftPostText(text);
+                      setIsEditingPost(true);
                       setShowMenu(false);
                     }}
                     className="w-full text-left px-4 py-2.5 hover:bg-slate-50 transition-colors"
@@ -960,6 +968,18 @@ export default function PostCard({
           )}
         </div>
       ) : null}
+
+      <EditPostModal
+        isOpen={isEditingPost}
+        initialValue={draftPostText}
+        isPremiumTheme={isPremiumTheme}
+        onClose={() => setIsEditingPost(false)}
+        onSave={(nextText) => {
+          setDraftPostText(nextText);
+          onEditPost?.(nextText);
+          setIsEditingPost(false);
+        }}
+      />
 
       {isReadingModeOpen && (
         <div className="fixed inset-0 z-80 flex items-center justify-center px-3 py-4 sm:px-6">

@@ -3,6 +3,7 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { Heart, MessageCircle, Share2, MoreVertical } from 'lucide-react';
 import { PremiumCard } from './components/PremiumCard';
 import { PremiumIcon } from './components/PremiumIcon';
+import { formatDisplayDateTime } from '../../lib/time';
 
 interface VibesProPostCardProps {
   id: string;
@@ -45,12 +46,7 @@ export const VibesProPostCard: React.FC<VibesProPostCardProps> = ({
 
   const { t } = useLanguage();
 
-  const timeString = createdAt
-    ? new Date(createdAt).toLocaleDateString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    : '2m ago';
+  const timeString = createdAt ? formatDisplayDateTime(createdAt) : '2m ago';
 
   return (
     <div className="px-4 py-3">

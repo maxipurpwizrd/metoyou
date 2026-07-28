@@ -1,12 +1,13 @@
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import type { ChangeEvent } from "react";
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { useSession, setGlobalProfile } from "../contexts/SessionContext";
 import { fetchProfileFromSupabase, fetchProfileByUsername, upsertProfileToSupabase, uploadProfileImage } from "../lib/profileApi";
 import { fetchPostsFromSupabase } from "../lib/postApi";
 import { addComment, getComments, editComment, deleteComment } from "../lib/commentApi";
 import { likePost, unlikePost, getPostLikes, hydratePostLikeState } from "../lib/likeApi";
-import { followUser, unfollowUser, getFollowStatus, getMutualConnections, type MutualConnection } from "../lib/followApi";
+import { followUser, unfollowUser, getFollowStatus, getMutualConnections, getFollowers, type MutualConnection } from "../lib/followApi";
+import { updatePostInSupabase } from "../lib/postApi";
 import FollowButton from "../components/social/FollowButton";
 import { useAuth } from "../hooks/useAuth";
 import type { ProfileData } from "../types/profile";
@@ -19,6 +20,7 @@ import { ProfileSkeleton } from "../components/skeletons/Skeletons";
 import { Settings2 } from "lucide-react";
 import { useAppInit } from "../contexts/AppInitContext";
 import { isVibesProEnabled } from "../lib/vibesPro";
+import { formatDisplayDateTime } from "../lib/time";
 
 type ProfileComment = {
   id: string | number;
@@ -49,6 +51,7 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
   const { setLanguage, t } = useLanguage();
   const params = useParams<{ username?: string; userId?: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const routeUsername = params.username;
   const routeUserId = params.userId;
 
@@ -108,14 +111,20 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
   const [isFollowedBy, setIsFollowedBy] = useState(false);
   const [hommiesCount, setHommiesCount] = useState(profile.hommies_count ?? 0);
   const [mutualConnections, setMutualConnections] = useState<MutualConnection[]>([]);
+  const [followersList, setFollowersList] = useState<MutualConnection[]>([]);
   const [hommiesListOpen, setHommiesListOpen] = useState(false);
   const [hommiesListLoading, setHommiesListLoading] = useState(false);
   const [hommiesSearch, setHommiesSearch] = useState("");
+  const [highlightedHommieId, setHighlightedHommieId] = useState<string | null>(null);
+  const [highlightedHommieUsername, setHighlightedHommieUsername] = useState<string | null>(null);
+  const [recentFollowerIds, setRecentFollowerIds] = useState<string[]>([]);
+  const [hommiesListMode, setHommiesListMode] = useState<"mutual" | "followers">("mutual");
   const [followLoading, setFollowLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const { user: authUser } = useAuth();
   const viewerId = sessionProfile?.id ?? authUser?.id;
+  const profileId = profile?.id;
   const actorUsername = sessionProfile?.username ?? authUser?.user_metadata?.first_name ?? "";
   const followLabel = isFollowing && isFollowedBy
     ? t("profile.homie")
@@ -125,21 +134,40 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
         ? t("profile.followBack")
         : t("profile.follow");
 
-  const openHommiesList = async () => {
-    if (!profile?.id) return;
+  const openHommiesList = useCallback(async (mode: "mutual" | "followers" = "mutual") => {
+    if (!profileId) return;
 
     setHommiesListOpen(true);
     setHommiesListLoading(true);
+    setHighlightedHommieId(null);
+    setHighlightedHommieUsername(null);
+    setRecentFollowerIds([]);
+    setHommiesSearch("");
+    setHommiesListMode(mode);
 
     try {
-      const nextConnections = await getMutualConnections(profile.id);
-      setMutualConnections(nextConnections);
-      setHommiesCount(nextConnections.length);
+      if (mode === "followers") {
+        const nextFollowers = await getFollowers(profileId);
+        setFollowersList(nextFollowers);
+        setHommiesCount(nextFollowers.length);
+      } else {
+        const nextConnections = await getMutualConnections(profileId);
+        setMutualConnections(nextConnections);
+        setHommiesCount(nextConnections.length);
+      }
     } catch (error) {
-      console.error("Failed to load mutual connections", error);
+      console.error("Failed to load hommies list", error);
     } finally {
       setHommiesListLoading(false);
     }
+  }, [profileId]);
+
+  const closeHommiesList = () => {
+    setHommiesListOpen(false);
+    setHighlightedHommieId(null);
+    setHighlightedHommieUsername(null);
+    setRecentFollowerIds([]);
+    setHommiesSearch("");
   };
 
   const openProfilePictureViewer = () => {
@@ -581,12 +609,25 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
 
   const vibesCount = myPosts.length;
   const snapshotsCount = myPosts.filter((post) => Boolean(post.image)).length;
+  const activeConnections = hommiesListMode === "followers" ? followersList : mutualConnections;
   const filteredMutualConnections = useMemo(() => {
     const query = hommiesSearch.trim().toLowerCase();
-    if (!query) return mutualConnections;
+    if (!query) return activeConnections;
 
-    return mutualConnections.filter((connection) => connection.username.toLowerCase().includes(query));
-  }, [hommiesSearch, mutualConnections]);
+    return activeConnections.filter((connection) => connection.username.toLowerCase().includes(query));
+  }, [hommiesSearch, activeConnections]);
+
+  const isHighlightedHommie = (connection: { id: string; username: string; profilePic?: string | null }) => {
+    if (highlightedHommieId) {
+      return connection.id === highlightedHommieId;
+    }
+
+    if (highlightedHommieUsername) {
+      return connection.username.toLowerCase() === highlightedHommieUsername.toLowerCase();
+    }
+
+    return false;
+  };
 
   // Initialize language from profile when component mounts
   useEffect(() => {
@@ -599,6 +640,29 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
     () => (routeUsername ? `metoyou-profile-scroll:${routeUsername}` : "metoyou-profile-scroll:me"),
     [routeUsername]
   );
+
+  useEffect(() => {
+    const state = location.state as {
+      openHommiesList?: boolean;
+      highlightUserId?: string | null;
+      highlightUsername?: string | null;
+      recentFollowerIds?: string[] | null;
+    } | null;
+
+    if (!state?.openHommiesList) return;
+
+    const run = async () => {
+      setHommiesListOpen(true);
+      setHighlightedHommieId(state.highlightUserId ?? null);
+      setHighlightedHommieUsername(state.highlightUsername ?? null);
+      setRecentFollowerIds(state.recentFollowerIds ?? []);
+      setHommiesListMode("followers");
+
+      await openHommiesList("followers");
+    };
+
+    void run();
+  }, [location.state, openHommiesList]);
 
   useEffect(() => {
     if (!isUploading) return;
@@ -676,7 +740,9 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
               setViewedProfile(cached);
             } else {
               // viewing own profile: update global session so UI reads fresh values
-              try { setGlobalProfile(cached); } catch (e) {}
+              try { setGlobalProfile(cached); } catch {
+                // ignore cache sync failures
+              }
               setViewedProfile(null);
             }
             if (cached.language) setLanguage(normalizeLanguage(cached.language));
@@ -698,7 +764,11 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
           setViewedProfile(remote);
         } else {
           // viewing own profile: update global session so UI reads fresh values
-          try { setGlobalProfile(remote); } catch (e) {}
+          try {
+            setGlobalProfile(remote);
+          } catch {
+            // ignore cache sync failures
+          }
           setViewedProfile(null);
         }
         if (remote.language) setLanguage(normalizeLanguage(remote.language));
@@ -755,7 +825,7 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
           text: r.text ?? "",
           image: r.image_url ?? undefined,
           highlighted: Boolean(r.highlighted),
-          time: new Date(r.created_at ?? "").toLocaleString(),
+          time: formatDisplayDateTime(r.created_at),
           likes: Number(r.likes_count ?? 0),
           liked: false,
           comments: Number(r.comments_count ?? 0),
@@ -777,7 +847,7 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
     return () => {
       mounted = false;
     };
-  }, [profile.id, profileRefreshVersion]);
+  }, [profile.id, profileRefreshVersion, authUser?.id, sessionProfile?.id]);
 
   useEffect(() => {
     let mounted = true;
@@ -906,14 +976,15 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
               viewingOwn={viewingOwn}
               onFollow={handleFollowToggle}
               onMessage={handleMessage}
-              onOpenHommiesList={openHommiesList}
+              onOpenHommiesList={() => void openHommiesList("mutual")}
               hommiesListOpen={hommiesListOpen}
-              onCloseHommiesList={() => setHommiesListOpen(false)}
+              onCloseHommiesList={closeHommiesList}
               hommiesListLoading={hommiesListLoading}
               hommiesSearch={hommiesSearch}
               onHommiesSearchChange={setHommiesSearch}
               mutualConnections={mutualConnections}
               filteredMutualConnections={filteredMutualConnections}
+              recentFollowerIds={recentFollowerIds}
               onSelectHommie={(connection) => {
                 setHommiesListOpen(false);
                 navigate(`/profile/${encodeURIComponent(connection.username)}`);
@@ -1054,7 +1125,7 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
             <div className="grid grid-cols-3 gap-2 md:gap-4 mt-6 md:mt-8">
               <button
                 type="button"
-                onClick={openHommiesList}
+                onClick={() => void openHommiesList("mutual")}
                 className="bg-white/30 rounded-2xl p-3 md:p-4 text-center shadow-lg transition hover:scale-[1.01]"
               >
                 <h2 className="font-black text-2xl md:text-3xl text-slate-900">{hommiesCount}</h2>
@@ -1071,14 +1142,14 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
             </div>
 
             {hommiesListOpen && (
-              <div className="fixed inset-0 z-70 flex items-center justify-center bg-slate-900/70 px-4 py-6" onClick={() => setHommiesListOpen(false)}>
+              <div className="fixed inset-0 z-70 flex items-center justify-center bg-slate-900/70 px-4 py-6" onClick={closeHommiesList}>
                 <div className="w-full max-w-md rounded-3xl border border-white/70 bg-white/95 p-4 shadow-2xl backdrop-blur-xl" onClick={(event) => event.stopPropagation()}>
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="text-lg font-black text-slate-900">{t("profile.hommiesList.title")}</h3>
                       <p className="text-sm text-slate-600">{t("profile.hommies")}</p>
                     </div>
-                    <button type="button" onClick={() => setHommiesListOpen(false)} className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">
+                    <button type="button" onClick={closeHommiesList} className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">
                       ✕
                     </button>
                   </div>
@@ -1113,10 +1184,10 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
                             key={connection.id}
                             type="button"
                             onClick={() => {
-                              setHommiesListOpen(false);
+                              closeHommiesList();
                               navigate(`/profile/${encodeURIComponent(connection.username)}`);
                             }}
-                            className="flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-3 text-left shadow-sm transition hover:bg-slate-50"
+                            className={`relative flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left shadow-sm transition hover:bg-slate-50 ${isHighlightedHommie(connection) ? 'border-pink-400 bg-pink-50 shadow-[0_0_0_2px_rgba(236,72,153,0.16)]' : 'border-slate-200 bg-white'}`}
                           >
                             <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-linear-to-br from-pink-500 via-purple-500 to-blue-500 text-sm font-semibold text-white">
                               {connection.profilePic ? (
@@ -1129,6 +1200,9 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
                               <p className="font-semibold text-slate-900">{connection.username}</p>
                               <p className="text-xs text-slate-500">{t("profile.homie")}</p>
                             </div>
+                            {recentFollowerIds.includes(connection.id) ? (
+                              <span className="ml-auto h-2.5 w-2.5 rounded-full bg-red-500 shadow-[0_0_0_4px_rgba(239,68,68,0.16)]" aria-label="recent follower" />
+                            ) : null}
                           </button>
                           ))}
                         </div>
@@ -1232,10 +1306,16 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
                 authorId={viewerAuthorId}
                 authorUsername={viewerAuthorUsername}
                 variant={isVibesProEnabled(profile) ? "vibespro" : "default"}
-                onEditPost={() => {
-                  const newText = window.prompt("Edit post text:", viewerImages[viewerIndex] ? undefined : "");
-                  if (newText !== null) {
-                    setMyPosts((prev) => prev.map((p) => (p.id === viewerPostId ? { ...p, text: newText } : p)));
+                onEditPost={async (nextText) => {
+                  const trimmed = nextText.trim();
+                  setMyPosts((prev) => prev.map((p) => (p.id === viewerPostId ? { ...p, text: trimmed } : p)));
+
+                  if (viewerPostId) {
+                    try {
+                      await updatePostInSupabase(String(viewerPostId), { text: trimmed });
+                    } catch (err) {
+                      console.error("Failed to update profile post in Supabase", err);
+                    }
                   }
                 }}
                 onDeleteImage={() => {

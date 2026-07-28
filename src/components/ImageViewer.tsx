@@ -12,7 +12,7 @@ type Props = {
   postId?: string | number;
   authorId?: string;
   authorUsername?: string;
-  onEditPost?: () => void;
+  onEditPost?: (nextText: string) => void;
   onDeleteImage?: () => void;
   onDeletePost?: () => void;
   onRepost?: () => void;
@@ -308,7 +308,7 @@ export default function ImageViewer({ images, initialIndex = 0, onClose, postId,
                 <button
                   type="button"
                   onClick={() => {
-                    onEditPost?.();
+                    onEditPost?.("");
                     setShowMenu(false);
                   }}
                   className="w-full text-left px-4 py-3 hover:bg-slate-50"

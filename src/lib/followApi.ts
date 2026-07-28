@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { normalizeTimestamp } from "./time";
 
 export type FollowStatus = {
   isFollowing: boolean;
@@ -11,6 +12,43 @@ export type MutualConnection = {
   username: string;
   profilePic?: string | null;
 };
+
+export async function getFollowers(userId: string): Promise<MutualConnection[]> {
+  try {
+    const { data, error } = await supabase
+      .from("followers")
+      .select("follower_id")
+      .eq("following_id", userId);
+
+    if (error) throw error;
+
+    const followerIds = Array.from(
+      new Set(
+        (data ?? [])
+          .map((item) => (item as { follower_id?: string | null }).follower_id)
+          .filter((value): value is string => Boolean(value))
+      )
+    );
+
+    if (followerIds.length === 0) return [];
+
+    const { data: profiles, error: profilesError } = await supabase
+      .from("profiles")
+      .select("id, username, profile_pic")
+      .in("id", followerIds);
+
+    if (profilesError) throw profilesError;
+
+    return (profiles ?? []).map((profile) => ({
+      id: profile.id,
+      username: profile.username ?? profile.id,
+      profilePic: profile.profile_pic ?? null,
+    }));
+  } catch (e) {
+    console.error("getFollowers error", e);
+    return [];
+  }
+}
 
 export async function getFollowersCount(userId: string): Promise<number> {
   try {
@@ -115,7 +153,7 @@ export async function followUser(
     const { error: followError } = await supabase.from("followers").insert({
       follower_id: viewerId,
       following_id: targetId,
-      created_at: new Date().toISOString(),
+      created_at: normalizeTimestamp(new Date()) ?? new Date().toISOString(),
     });
     if (followError) throw followError;
 
@@ -130,7 +168,7 @@ export async function followUser(
 
       const notificationType = mutualFollowData ? "follow_back" : "follow";
       const message = mutualFollowData ? "followed you back" : "followed you";
-      const createdAt = new Date().toISOString();
+      const createdAt = normalizeTimestamp(new Date()) ?? new Date().toISOString();
       const { error: notificationError } = await supabase.from("notifications").insert({
         type: notificationType,
         message,

@@ -17,6 +17,7 @@ export type Notification = {
   avatar?: string | null;
   message: string;
   postId?: string | null;
+  actorId?: string | null;
   timestamp: string;
   read: boolean;
 };
@@ -201,6 +202,7 @@ export async function getNotifications(userId: string) {
         avatar: actor?.profile_pic ?? null,
         message: normalizeNotificationMessage(actor?.username ?? null, rawMessage),
         postId: item.target_id ?? null,
+        actorId: item.actor_id ?? null,
         timestamp: item.created_at ?? new Date().toISOString(),
         read: Boolean(item.is_read),
       };

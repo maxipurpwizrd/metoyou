@@ -5,6 +5,7 @@ import { useLanguage } from "../contexts/LanguageContext";
 import { useAppInit } from "../contexts/AppInitContext";
 import { getMessageThreads, type MessageThread } from "../lib/messageApi";
 import { useSession } from "../contexts/SessionContext";
+import { formatDisplayDate } from "../lib/time";
 import { isVibesProEnabled } from "../lib/vibesPro";
 
 export default function ArchivedMessages() {
@@ -101,7 +102,7 @@ export default function ArchivedMessages() {
                     </div>
                     {thread.lastTime && (
                       <p className={`text-xs whitespace-nowrap ${isVibesPro ? 'text-white/40' : 'text-slate-500'}`}>
-                        {new Date(thread.lastTime).toLocaleDateString()}
+                        {formatDisplayDate(thread.lastTime)}
                       </p>
                     )}
                   </div>

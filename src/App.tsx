@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, useLocation, useNavigate } from "react-router-dom";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import ScrollRestoration from "./lib/ScrollRestoration";
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { VideoProvider } from "./contexts/VideoContext";
@@ -29,6 +29,31 @@ import RequireAuth from "./components/RequireAuth";
 import { useAuth } from "./hooks/useAuth";
 
 const LAST_ROUTE_STORAGE_KEY = "metoyou:last-auth-route";
+const PUBLIC_ROUTES = new Set(["/", "/welcome", "/login", "/signup", "/about"]);
+const BACK_REDIRECT_ROUTES = new Set([
+  "/notifications",
+  "/search",
+  "/messages",
+  "/messages/spam",
+  "/messages/archived",
+  "/chat",
+  "/profile",
+  "/settings",
+  "/settings/vibes-pro",
+  "/vibes-pro/success",
+  "/admin-dashboard",
+  "/admin-users",
+  "/admin-posts",
+]);
+
+function shouldRedirectToFeed(pathname: string) {
+  if (pathname === "/feed") return false;
+  if (PUBLIC_ROUTES.has(pathname)) return false;
+  if (pathname.startsWith("/profile/")) return true;
+  if (pathname.startsWith("/messages/")) return true;
+  if (pathname.startsWith("/settings/")) return true;
+  return BACK_REDIRECT_ROUTES.has(pathname);
+}
 
 function PublicRoute({ children }: { children: ReactNode }) {
   const { user, isLoading } = useAuth();
@@ -52,6 +77,9 @@ function PublicRoute({ children }: { children: ReactNode }) {
 
 function AppRoutes() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const previousPathRef = useRef<string | null>(null);
+  const lastNonFeedPathRef = useRef<string | null>(null);
 
   useEffect(() => {
     const currentPath = `${location.pathname}${location.search}`;
@@ -59,6 +87,46 @@ function AppRoutes() {
       window.sessionStorage.setItem(LAST_ROUTE_STORAGE_KEY, currentPath);
     }
   }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    const currentPath = `${location.pathname}${location.search}`;
+    const isFeedRoute = location.pathname === "/feed";
+    const shouldTrack = !PUBLIC_ROUTES.has(location.pathname) && !isFeedRoute;
+
+    if (isFeedRoute) {
+      previousPathRef.current = currentPath;
+      return;
+    }
+
+    if (shouldTrack) {
+      lastNonFeedPathRef.current = currentPath;
+    }
+
+    previousPathRef.current = currentPath;
+  }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const currentPath = `${location.pathname}${location.search}`;
+      const shouldRedirect = shouldRedirectToFeed(location.pathname);
+
+      if (shouldRedirect) {
+        navigate("/feed", { replace: true });
+        return;
+      }
+
+      if (currentPath === "/feed") {
+        return;
+      }
+
+      if (previousPathRef.current && previousPathRef.current !== currentPath) {
+        navigate("/feed", { replace: true });
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [location.pathname, location.search, navigate]);
 
   return (
     <Routes>

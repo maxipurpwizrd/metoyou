@@ -11,6 +11,7 @@ import { VibesProFeed } from "../themes/vibespro";
 import { isVibesProEnabled } from "../lib/vibesPro";
 import { createStoryToSupabase, deleteStoryFromSupabase, fetchStoriesFromSupabase, type StoryRecord, type StoryType } from "../lib/storyApi";
 import { savePostToSupabase } from "../lib/postApi";
+import { formatDisplayDate } from "../lib/time";
 
 export default function Messages(_props: { embedded?: boolean } = {}) {
   // Prevent rendering until app initialization completes
@@ -30,14 +31,14 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
   const [storyProgress, setStoryProgress] = useState(0);
   const [storyChoiceOpen, setStoryChoiceOpen] = useState(false);
   const [storyEditorOpen, setStoryEditorOpen] = useState(false);
-  const [storyMode, setStoryMode] = useState<"text" | "photo" | null>(null);
+  const [, setStoryMode] = useState<"text" | "photo" | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [storyText, setStoryText] = useState<string>("");
   const [storyDuration, setStoryDuration] = useState<number>(24);
   const [storyCreating, setStoryCreating] = useState(false);
   const [storyCreateError, setStoryCreateError] = useState<string | null>(null);
-  const [storyCreateProgress, setStoryCreateProgress] = useState(0);
-  const [storyCreateStatus, setStoryCreateStatus] = useState<string | null>(null);
+  const [, setStoryCreateProgress] = useState(0);
+  const [, setStoryCreateStatus] = useState<string | null>(null);
   const [storyMenuOpen, setStoryMenuOpen] = useState(false);
   const storyMenuRef = useRef<HTMLDivElement | null>(null);
   const [savedStories, setSavedStories] = useState<string[]>(() => {
@@ -233,7 +234,7 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
     closeContextMenu();
   };
 
-  const handleReportThread = (threadId: string) => {
+  const handleReportThread = (_threadId: string) => {
     closeContextMenu();
     window.alert(t("messages.reportConfirmation") || "This conversation has been reported. Our moderation team will review it shortly.");
   };
@@ -722,7 +723,7 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
                       <p className={`text-xs whitespace-nowrap ${
                         isVibesPro ? 'text-white/40' : 'text-slate-500'
                       }`}>
-                        {new Date(thread.lastTime).toLocaleDateString()}
+                        {formatDisplayDate(thread.lastTime)}
                       </p>
                     )}
                   </div>

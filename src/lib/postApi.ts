@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import { mimeToExtension } from "./imageUtils";
+import { normalizeTimestamp } from "./time";
 import type { PostMediaType, PostRecord } from "../types/post";
 
 export const AUDIO_STORAGE_BUCKET = "post-audio";
@@ -66,18 +67,25 @@ export async function uploadImageToSupabase(image: string, authorId: string, onP
   return uploadBlobToSupabase(blob, IMAGE_STORAGE_BUCKET, authorId, extension, mimeType, onProgress);
 }
 
-export async function uploadAudioToSupabase(audio: string, authorId: string, onProgress?: (percent: number) => void) {
+export async function uploadAudioToSupabase(audio: string | Blob, authorId?: string, onProgress?: (percent: number) => void) {
   if (!audio) return undefined;
 
-  if (audio.startsWith("http://") || audio.startsWith("https://")) {
-    return audio;
+  if (typeof audio === "string") {
+    if (audio.startsWith("http://") || audio.startsWith("https://")) {
+      return audio;
+    }
+
+    const response = await fetch(audio);
+    const blob = await response.blob();
+    const mimeType = blob.type || inferAudioMimeType(audio);
+    const extension = inferAudioExtension(mimeType);
+    return uploadBlobToSupabase(blob, AUDIO_STORAGE_BUCKET, authorId ?? "anonymous", extension, mimeType, onProgress);
   }
 
-  const response = await fetch(audio);
-  const blob = await response.blob();
-  const mimeType = blob.type || inferAudioMimeType(audio);
+  const blob = audio instanceof Blob ? audio : new Blob([audio]);
+  const mimeType = blob.type || "audio/webm";
   const extension = inferAudioExtension(mimeType);
-  return uploadBlobToSupabase(blob, AUDIO_STORAGE_BUCKET, authorId, extension, mimeType, onProgress);
+  return uploadBlobToSupabase(blob, AUDIO_STORAGE_BUCKET, authorId ?? "anonymous", extension, mimeType, onProgress);
 }
 
 /**
@@ -102,7 +110,7 @@ export async function savePostToSupabase(payload: {
       audio_url: payload.audio_url ?? null,
       media_type: payload.media_type ?? null,
       highlighted: payload.highlighted ?? false,
-      created_at: new Date().toISOString(),
+      created_at: normalizeTimestamp(new Date()) ?? new Date().toISOString(),
     };
 
     const { data, error } = await supabase
@@ -175,6 +183,47 @@ export async function fetchPostsFromSupabase(options?: {
  * Delete a post by id from the `posts` table.
  * Returns true on success.
  */
+export async function updatePostInSupabase(postId: string, updates: { text?: string | null }): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from("posts")
+      .update({ text: updates.text ?? null })
+      .eq("id", postId);
+
+    if (error) throw error;
+    return true;
+  } catch (e) {
+    console.error("updatePostInSupabase error", e);
+    return false;
+  }
+}
+
+export async function fetchPostByIdFromSupabase(postId: string): Promise<PostRecord | null> {
+  try {
+    const { data, error } = await supabase
+      .from("posts")
+      .select(
+        `id, author_id, text, image_url, video_url, audio_url, media_type, likes_count, comments_count, highlighted, created_at, profiles(username, profile_pic, is_vibes_pro)`
+      )
+      .eq("id", postId)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    if (!data) return null;
+
+    return {
+      ...data,
+      profiles: Array.isArray(data.profiles)
+        ? data.profiles[0] ?? null
+        : data.profiles ?? null,
+    } as PostRecord;
+  } catch (e) {
+    console.error("fetchPostByIdFromSupabase error", e);
+    return null;
+  }
+}
+
 export async function deletePostFromSupabase(postId: string): Promise<boolean> {
   try {
     const { error } = await supabase.from("posts").delete().eq("id", postId);

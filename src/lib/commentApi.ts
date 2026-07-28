@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import { uploadAudioToSupabase } from "./postApi";
+import { normalizeTimestamp } from "./time";
 
 export type CommentRecord = {
   id: string;
@@ -101,7 +102,7 @@ async function createCommentNotification(postId: string, actorId: string) {
     if (!actorData?.username) return;
 
     const actorUsername = actorData.username;
-    const createdAt = new Date().toISOString();
+    const createdAt = normalizeTimestamp(new Date()) ?? new Date().toISOString();
     await supabase.from("notifications").insert({
       type: "comment",
       message: `${actorUsername} commented on your post`,
@@ -126,7 +127,7 @@ export async function addComment(
   const parentCommentId = options?.parentCommentId ? String(options.parentCommentId) : null;
   const replyToUsername = options?.replyToUsername ?? null;
   const replyToText = options?.replyToText ?? null;
-  const createdAt = new Date().toISOString();
+  const createdAt = normalizeTimestamp(new Date()) ?? new Date().toISOString();
 
   if (parentCommentId) {
     const localComment: CommentRecord = {

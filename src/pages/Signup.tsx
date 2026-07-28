@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { signUp } from "../lib/auth";
 import { useLanguage } from "../contexts/LanguageContext";
@@ -13,17 +13,12 @@ export default function Signup() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [dateOfBirth, setDateOfBirth] = useState("");
   const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedDay, setSelectedDay] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
   const [gender, setGender] = useState("");
   const [loading, setLoading] = useState(false);
-  const [selectedLanguage, setSelectedLanguage] = useState<Language>(language);
-
-  useEffect(() => {
-    setSelectedLanguage(language);
-  }, [language]);
+  const [selectedLanguage] = useState<Language>(language);
 
   const monthOptions = useMemo(() => [
     { value: "01", label: "January" },
@@ -51,10 +46,6 @@ export default function Signup() {
     if (!selectedYear || !selectedMonth || !selectedDay) return "";
     return `${selectedYear}-${selectedMonth}-${selectedDay}`;
   }, [selectedDay, selectedMonth, selectedYear]);
-
-  useMemo(() => {
-    setDateOfBirth(birthDateValue);
-  }, [birthDateValue]);
 
   async function handleSignup(e?: FormEvent) {
     e?.preventDefault();
@@ -136,7 +127,7 @@ export default function Signup() {
               ))}
             </select>
           </div>
-          <input type="hidden" name="dateOfBirth" value={dateOfBirth} />
+          <input type="hidden" name="dateOfBirth" value={birthDateValue} />
 
           <label className="block text-sm mb-2">{t("signup.gender")}</label>
           <select
