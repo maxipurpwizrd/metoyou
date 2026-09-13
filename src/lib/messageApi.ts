@@ -344,6 +344,7 @@ type SendMessageParams = {
   audioUrl?: string;
   videoUrl?: string;
   messageType?: string;
+  metadata?: Record<string, unknown> | null;
   replyToId?: string | null;
   replyToText?: string | null;
 };
@@ -356,6 +357,7 @@ export async function sendMessage({
   audioUrl,
   videoUrl,
   messageType,
+  metadata,
   replyToId,
   replyToText,
 }: SendMessageParams): Promise<Message | null> {
@@ -387,6 +389,7 @@ export async function sendMessage({
       audio_url: audioUrl ?? null,
       video_url: videoUrl ?? null,
       message_type: messageType ?? null,
+      metadata: metadata ?? null,
       status: "sent",
       created_at: normalizeTimestamp(new Date()) ?? new Date().toISOString(),
     };
@@ -397,6 +400,7 @@ export async function sendMessage({
       payloads.unshift({
         ...basePayload,
         metadata: {
+          ...(metadata ?? {}),
           reply_to_id: replyToId ?? null,
           reply_to_text: replyToText ?? null,
         },
@@ -437,7 +441,8 @@ export async function sendMessage({
 
 export function subscribeToMessages(
   conversationId: string,
-  callback: (message: Message) => void
+  callback: (message: Message, event?: "INSERT" | "UPDATE" | "DELETE") => void,
+  _role?: string
 ): RealtimeChannel {
   const channel = supabase.channel(`messages:${conversationId}`);
   
@@ -453,7 +458,7 @@ export function subscribeToMessages(
     (payload) => {
       const message = payload.new as Message;
       if (message && message.id) {
-        callback(message);
+        callback(message, "INSERT");
       }
     }
   );
@@ -469,7 +474,7 @@ export function subscribeToMessages(
     (payload) => {
       const message = payload.new as Message;
       if (message && message.id) {
-        callback(message);
+        callback(message, "UPDATE");
       }
     }
   );

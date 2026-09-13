@@ -1,6 +1,7 @@
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode, type SetStateAction } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
+import type { ReactNode, SetStateAction } from "react";
 import { useQueryClient } from '@tanstack/react-query';
-import { fetchPostsFromSupabase } from "../lib/postApi";
+import { fetchPostsFromSupabase, subscribeToNewPosts } from "../lib/postApi";
 import { hydratePostComments } from "../lib/commentApi";
 import { useAuth } from "../hooks/useAuth";
 import { hydratePostLikeState } from "../lib/likeApi";
@@ -32,6 +33,7 @@ export type Post = {
   created_at?: string;
   text: string;
   image?: string;
+  imageOriginal?: string;
   video?: string;
   audio?: string;
   comments?: Comment[];
@@ -122,6 +124,9 @@ export function FeedProvider({ children }: { children: ReactNode }) {
   const isMountedRef = useRef(true);
   const isFetchingRef = useRef(false);
   const currentRequestId = useRef(0);
+  const inFlightRequestKeyRef = useRef<string | null>(null);
+  const exhaustedCursorRef = useRef<string | null>(null);
+  const completedAppendCursorRef = useRef<string | null>(null);
   const isDev = import.meta.env.DEV;
   const skipCachedFeed = typeof window !== "undefined" && window.localStorage.getItem("metoyou.skipCachedFeed") === "1";
   if (isDev && typeof window !== "undefined") console.debug("[FeedContext] skipCachedFeed=", skipCachedFeed);
@@ -163,6 +168,7 @@ export function FeedProvider({ children }: { children: ReactNode }) {
       created_at: r.created_at,
       text: r.text ?? "",
       image: r.image_url ?? undefined,
+      imageOriginal: r.image_original_url ?? undefined,
       video: r.video_url ?? undefined,
       audio: r.audio_url ?? undefined,
       comments: [],
@@ -229,13 +235,18 @@ export function FeedProvider({ children }: { children: ReactNode }) {
 
   const loadPostsPage = async ({ append = false, refresh = false, background = false } = {}) => {
     if (!user || authLoading) return;
-    if (isFetchingRef.current) {
+    const cursor = append ? postsRef.current[postsRef.current.length - 1]?.created_at ?? null : null;
+    const requestKey = `${append ? "append" : refresh ? "refresh" : "initial"}:${cursor ?? "start"}`;
+
+    if (isFetchingRef.current || inFlightRequestKeyRef.current === requestKey) {
       devLog("loadPostsPage skipped due to active request", { append, refresh, background });
       return;
     }
 
     if (append) {
       if (!hasMore || postsRef.current.length === 0) return;
+      if (exhaustedCursorRef.current === cursor) return;
+      if (completedAppendCursorRef.current === cursor) return;
       if (!background) setIsLoadingMore(true);
     } else {
       if (!background) setLoading(true);
@@ -243,9 +254,10 @@ export function FeedProvider({ children }: { children: ReactNode }) {
 
     const requestId = ++currentRequestId.current;
     isFetchingRef.current = true;
+    inFlightRequestKeyRef.current = requestKey;
 
     try {
-      const oldestCursor = append ? postsRef.current[postsRef.current.length - 1]?.created_at : undefined;
+      const oldestCursor = cursor ?? undefined;
       const newestCursor = refresh && postsRef.current.length > 0 ? postsRef.current[0]?.created_at : undefined;
       const records = refresh
         ? await fetchPostsFromSupabase({ limit: PAGE_SIZE, after: newestCursor })
@@ -291,21 +303,30 @@ export function FeedProvider({ children }: { children: ReactNode }) {
       } else if (append) {
         const nextPosts = mergePostsById(withMeta, postsRef.current, false);
         syncPosts(nextPosts);
+        completedAppendCursorRef.current = cursor;
         devLog("loadPostsPage append applied", { appendCount: withMeta.length, totalCount: nextPosts.length });
       } else {
         syncPosts(withMeta);
+        completedAppendCursorRef.current = null;
+        exhaustedCursorRef.current = null;
         setLastFetchTime(Date.now());
         devLog("loadPostsPage replace applied", { count: withMeta.length });
       }
 
       if (append) {
         setHasMore(withMeta.length === PAGE_SIZE);
+        if (withMeta.length < PAGE_SIZE) {
+          exhaustedCursorRef.current = cursor;
+        }
       }
     } catch (err) {
       console.error("FeedProvider: failed to load posts", err);
     } finally {
       if (currentRequestId.current === requestId) {
         isFetchingRef.current = false;
+        if (inFlightRequestKeyRef.current === requestKey) {
+          inFlightRequestKeyRef.current = null;
+        }
       }
       if (!background) setLoading(false);
       if (!background) setIsLoadingMore(false);
@@ -463,6 +484,28 @@ export function FeedProvider({ children }: { children: ReactNode }) {
       return deduped;
     });
   };
+
+  useEffect(() => {
+    if (!user || authLoading) return;
+
+    const channel = subscribeToNewPosts(async (record) => {
+      if (!isMountedRef.current) return;
+
+      const mapped = await mapRecords([record], user.id);
+      if (!isMountedRef.current || mapped.length === 0) return;
+
+      const nextPosts = prependNewPosts(mapped);
+      if (nextPosts.length !== postsRef.current.length || nextPosts[0]?.id === mapped[0]?.id) {
+        syncPosts(nextPosts);
+      }
+    });
+
+    return () => {
+      void channel.unsubscribe();
+    };
+    // These helpers intentionally use the current provider closure; the subscription is per authenticated user.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, user?.id]);
 
   const value: FeedContextValue = {
     posts,

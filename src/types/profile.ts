@@ -4,6 +4,8 @@ export type ProfileData = {
   firstName?: string;
   bio: string;
   profilePic: string | null;
+  is_admin?: boolean;
+  profile_original_pic?: string | null;
   vibes_pro_portrait?: string | null;
   is_vibes_pro?: boolean;
   vibes_pro?: boolean;
@@ -22,6 +24,8 @@ export type ProfileData = {
 
 export type DbProfile = Omit<ProfileData, "profilePic" | "dateOfBirth" | "gender"> & {
   profile_pic: string | null;
+  is_admin?: boolean | null;
+  profile_original_pic?: string | null;
   date_of_birth?: string | null;
   gender?: string | null;
   vibes_pro?: boolean | null;

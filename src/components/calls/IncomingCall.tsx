@@ -1,0 +1,39 @@
+import { Phone, Video, X } from "lucide-react";
+
+interface IncomingCallProps {
+  senderName: string;
+  callType: "audio" | "video";
+  onAccept: () => void;
+  onReject: () => void;
+}
+
+export default function IncomingCall({ senderName, callType, onAccept, onReject }: IncomingCallProps) {
+  const isVideo = callType === "video";
+
+  return (
+    <div className="fixed inset-0 z-100 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-xl">
+      <div className="relative w-full max-w-sm overflow-hidden rounded-[2rem] border border-white/15 bg-slate-900/95 p-7 text-white shadow-2xl shadow-slate-950/50">
+        <div className="absolute inset-x-0 top-0 h-1 bg-linear-to-r from-cyan-400 via-violet-400 to-fuchsia-400" />
+        <div className="flex flex-col items-center text-center">
+          <div className="relative mb-5">
+            <div className="absolute -inset-3 animate-ping rounded-full bg-cyan-400/15" />
+            <div className="relative grid h-24 w-24 place-items-center rounded-full border-4 border-cyan-300/60 bg-linear-to-br from-cyan-400 to-violet-500 text-3xl font-bold shadow-xl shadow-cyan-500/20">
+              {senderName.charAt(0).toUpperCase() || "?"}
+            </div>
+          </div>
+          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-200/70">Incoming call</p>
+          <h2 className="mt-2 text-2xl font-bold">{senderName || "Someone"}</h2>
+          <p className="mt-2 text-sm text-white/60">{isVideo ? "Video call" : "Audio call"} is calling you</p>
+        </div>
+        <div className="mt-8 grid grid-cols-2 gap-3">
+          <button type="button" onClick={onReject} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-4 py-3 font-semibold text-white transition hover:bg-rose-500/20">
+            <X className="h-5 w-5" /> Decline
+          </button>
+          <button type="button" onClick={onAccept} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-400 px-4 py-3 font-semibold text-slate-950 transition hover:bg-emerald-300">
+            {isVideo ? <Video className="h-5 w-5" /> : <Phone className="h-5 w-5" />} Accept
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

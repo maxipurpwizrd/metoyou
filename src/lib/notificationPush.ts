@@ -76,3 +76,30 @@ export async function subscribeToPushNotifications(registration: ServiceWorkerRe
     return null;
   }
 }
+
+export async function sendPushSubscriptionToServer(
+  subscription: PushSubscriptionPayload | null,
+  userId?: string
+): Promise<boolean> {
+  if (!subscription || !subscription.endpoint) {
+    return false;
+  }
+
+  try {
+    const response = await fetch("/api/push-subscribe", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        subscription,
+        userId,
+      }),
+    });
+
+    return response.ok;
+  } catch (error) {
+    console.error("sendPushSubscriptionToServer error", error);
+    return false;
+  }
+}

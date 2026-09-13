@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { uploadAudioToSupabase, uploadImageToSupabase } from "./postApi";
+import { uploadAudioToSupabase, uploadImageFileVariantsToSupabase } from "./postApi";
 
 export type StoryType = "text" | "photo" | "voice";
 
@@ -10,6 +10,7 @@ export type StoryRecord = {
   author_profile_pic?: string | null;
   text?: string | null;
   image_url?: string | null;
+  image_original_url?: string | null;
   voice_url?: string | null;
   story_type: StoryType;
   duration_hours: number;
@@ -24,6 +25,7 @@ export async function createStoryToSupabase(input: {
   profilePic?: string | null;
   text?: string;
   image?: string;
+  originalImage?: string;
   voice?: string;
   storyType: StoryType;
   durationHours: number;
@@ -32,8 +34,15 @@ export async function createStoryToSupabase(input: {
     let imageUrl: string | null = null;
     let voiceUrl: string | null = null;
 
+    let imageOriginalUrl: string | null = null;
+
     if (input.image) {
-      imageUrl = (await uploadImageToSupabase(input.image, input.authorId)) ?? null;
+      const response = await fetch(input.image);
+      const blob = await response.blob();
+      const file = new File([blob], "story-image", { type: blob.type || "image/jpeg" });
+      const uploaded = await uploadImageFileVariantsToSupabase(file, input.authorId);
+      imageUrl = uploaded.optimizedUrl;
+      imageOriginalUrl = uploaded.originalUrl;
     }
 
     if (input.voice) {
@@ -48,6 +57,7 @@ export async function createStoryToSupabase(input: {
       author_profile_pic: input.profilePic ?? null,
       text: input.text?.trim() ? input.text.trim() : null,
       image_url: imageUrl ?? null,
+      image_original_url: imageOriginalUrl ?? imageUrl ?? null,
       voice_url: voiceUrl ?? null,
       story_type: input.storyType,
       duration_hours: input.durationHours,

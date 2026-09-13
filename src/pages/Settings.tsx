@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { type ProfileData, DEFAULT_PROFILE } from "../utils/profileStorage";
 import { useSession } from "../contexts/SessionContext";
-import { fetchProfileByUsername, upsertProfileToSupabase, uploadProfileImage } from "../lib/profileApi";
+import { fetchProfileByUsername, upsertProfileToSupabase, uploadFreeTierProfileImage, uploadProfileImage } from "../lib/profileApi";
 import { logout } from "../lib/auth";
 
 export default function Settings() {
@@ -220,12 +220,18 @@ export default function Settings() {
         setIsSaving(true);
 
         try {
-          const uploadedUrl = await uploadProfileImage(selectedProfilePictureFile);
+          const uploaded = profileFromContext?.is_vibes_pro
+            ? await uploadProfileImage(selectedProfilePictureFile)
+            : await uploadFreeTierProfileImage(selectedProfilePictureFile);
+          const uploadedUrl = typeof uploaded === "string" ? uploaded : uploaded?.optimizedUrl;
           if (!uploadedUrl) {
             throw new Error("Image upload failed");
           }
 
-          await saveProfileFields({ profilePic: uploadedUrl });
+          await saveProfileFields({
+            profilePic: uploadedUrl,
+            ...(!profileFromContext?.is_vibes_pro && uploaded && typeof uploaded !== "string" ? { profile_original_pic: uploaded.originalUrl } : {}),
+          });
           setProfilePictureUrl(uploadedUrl);
           setSelectedProfilePictureFile(null);
           setProfilePicturePreview(null);
@@ -638,19 +644,21 @@ export default function Settings() {
                 </div>
                 <ArrowRight className="w-5 h-5 text-slate-500" />
               </button>
-              <button
-                type="button"
-                onClick={() => navigate("/admin-dashboard")}
-                className="w-full flex items-center justify-between gap-4 rounded-3xl border border-white/40 bg-white/15 px-5 py-4 text-left shadow-lg transition hover:bg-white/30"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="grid place-items-center w-11 h-11 rounded-2xl bg-gradient-to-br from-purple-500 via-blue-500 to-pink-500 text-white">
-                    <LayoutDashboard className="w-5 h-5" />
+              {profileFromContext?.is_admin === true && (
+                <button
+                  type="button"
+                  onClick={() => navigate("/admin-dashboard")}
+                  className="w-full flex items-center justify-between gap-4 rounded-3xl border border-white/40 bg-white/15 px-5 py-4 text-left shadow-lg transition hover:bg-white/30"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="grid place-items-center w-11 h-11 rounded-2xl bg-gradient-to-br from-purple-500 via-blue-500 to-pink-500 text-white">
+                      <LayoutDashboard className="w-5 h-5" />
+                    </div>
+                    <span className="font-semibold text-slate-900">Developer/Admin Dashboard</span>
                   </div>
-                  <span className="font-semibold text-slate-900">Developer/Admin Dashboard</span>
-                </div>
-                <ArrowRight className="w-5 h-5 text-slate-500" />
-              </button>
+                  <ArrowRight className="w-5 h-5 text-slate-500" />
+                </button>
+              )}
 
               <div className="rounded-3xl border border-white/40 bg-white/15 px-5 py-4 shadow-inner">
                 <div className="flex items-center justify-between gap-4">

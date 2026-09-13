@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { playMessageNotificationSound } from "./notificationSound";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
 type NotificationChangeHandler = () => void;
@@ -109,12 +110,13 @@ export function subscribeToNotifications(userId: string, onChange: () => void): 
   channel.on(
     "postgres_changes",
     {
-      event: "*",
+      event: "INSERT",
       schema: "public",
       table: "notifications",
       filter: `user_id=eq.${userId}`,
     },
     () => {
+      playMessageNotificationSound();
       for (const handler of notificationChannels.get(userId)?.handlers ?? []) {
         handler();
       }

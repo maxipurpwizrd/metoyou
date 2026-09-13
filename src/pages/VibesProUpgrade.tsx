@@ -15,10 +15,11 @@ const FEATURES = [
 export default function VibesProUpgrade() {
   const navigate = useNavigate();
   const { profile: profileFromContext } = useSession();
-  if (!profileFromContext) return null;
-  const profile = profileFromContext;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  if (!profileFromContext) return null;
+  const profile = profileFromContext;
 
   async function handleSubscribe() {
     setLoading(true);

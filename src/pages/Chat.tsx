@@ -3,14 +3,17 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { Mic, Paperclip, Send, Smile, Square, X, Pause, Play } from "lucide-react";
 import ChatBubble from "../components/ChatBubble";
-import AudioCallScreen from "../components/AudioCallScreen";
-import VideoCallScreen from "../components/VideoCallScreen";
+import AudioCall from "../components/calls/AudioCall";
+import VideoCall from "../components/calls/VideoCall";
+import IncomingCall from "../components/calls/IncomingCall";
+import OutgoingCall from "../components/calls/OutgoingCall";
 import { useMediaStream } from "../hooks/useMediaStream";
 import { useAuth } from "../hooks/useAuth";
 import { useChat } from "../contexts/ChatContext";
 import { useSession } from "../contexts/SessionContext";
 import { supabase } from "../lib/supabase";
 import { isVibesProEnabled } from "../lib/vibesPro";
+import { playMessageNotificationSound } from "../lib/notificationSound";
 import { createPeerConnection, attachLocalStreamToPeerConnection } from "../lib/webrtc";
 import type { CallSession } from "../types/call";
 import {
@@ -53,6 +56,12 @@ export default function Chat() {
   
   // Call state
   const [activeCallSession, setActiveCallSession] = useState<CallSession | null>(null);
+  const [incomingCallOffer, setIncomingCallOffer] = useState<{
+    senderId: string;
+    senderName: string;
+    callType: "audio" | "video";
+    sdp: RTCSessionDescriptionInit;
+  } | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
   const [isRemoteAudioActive, setIsRemoteAudioActive] = useState(false);
@@ -199,6 +208,7 @@ export default function Chat() {
     await sendCallSignal("call-offer", {
       senderId: userId,
       recipientId,
+      senderName: profileFromContext?.username ?? user.email ?? "User",
       callType,
       sdp: offer,
     });
@@ -222,6 +232,95 @@ export default function Chat() {
     } catch (error) {
       console.warn("Video call failed", error);
     }
+  }
+
+  async function handleAcceptIncomingCall() {
+    if (!incomingCallOffer || !userId || !conversationId) return;
+
+    const { senderId, senderName, callType, sdp } = incomingCallOffer;
+    try {
+      const mediaStream = callType === "video"
+        ? await videoStream.startStream()
+        : await audioStream.startStream();
+      localStreamRef.current = mediaStream;
+
+      const peerConnection = createPeerConnection();
+      peerConnectionRef.current = peerConnection;
+      attachLocalStreamToPeerConnection(peerConnection, mediaStream);
+
+      peerConnection.onicecandidate = (event) => {
+        if (!event.candidate) return;
+        void sendCallSignal("call-ice-candidate", {
+          senderId: userId,
+          recipientId: senderId,
+          candidate: event.candidate.toJSON(),
+        });
+      };
+
+      peerConnection.ontrack = (event) => {
+        const [incomingStream] = event.streams;
+        if (!incomingStream) return;
+        remoteMediaStreamRef.current = incomingStream;
+        setRemoteStream(incomingStream);
+        if (callType === "video") setIsRemoteVideoActive(true);
+        else setIsRemoteAudioActive(true);
+      };
+
+      peerConnection.onconnectionstatechange = () => {
+        if (peerConnection.connectionState === "connected") {
+          setActiveCallSession((current) =>
+            current ? { ...current, status: "connected", startTime: current.startTime ?? new Date() } : current
+          );
+        }
+      };
+
+      activeCallTargetRef.current = senderId;
+      setActiveCallSession({
+        id: `call-${Date.now()}`,
+        conversationId,
+        callType,
+        status: "ringing",
+        startTime: undefined,
+        remoteUserId: senderId,
+        remoteUsername: senderName,
+        remoteAvatarUrl: undefined,
+      });
+      setIsMuted(false);
+      setIsCameraOff(callType === "video" ? false : isCameraOff);
+
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
+      for (const candidate of pendingIceCandidatesRef.current) {
+        await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      }
+      pendingIceCandidatesRef.current = [];
+
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
+      await sendCallSignal("call-answer", {
+        senderId: userId,
+        recipientId: senderId,
+        callType,
+        sdp: answer,
+      });
+      setIncomingCallOffer(null);
+    } catch (error) {
+      console.warn("Accept incoming call failed", error);
+      await sendCallSignal("call-hangup", { senderId: userId, recipientId: senderId });
+      setIncomingCallOffer(null);
+      audioStream.stopStream();
+      videoStream.stopStream();
+      resetCallState();
+    }
+  }
+
+  async function handleRejectIncomingCall() {
+    if (!incomingCallOffer || !userId) return;
+    await sendCallSignal("call-hangup", {
+      senderId: userId,
+      recipientId: incomingCallOffer.senderId,
+    });
+    setIncomingCallOffer(null);
+    pendingIceCandidatesRef.current = [];
   }
 
   function handleToggleMute() {
@@ -409,7 +508,11 @@ export default function Chat() {
       subscriptionRef.current = null;
     }
 
-    subscriptionRef.current = subscribeToMessages(conversationId, (newMessage) => {
+    subscriptionRef.current = subscribeToMessages(conversationId, (newMessage, event) => {
+      if (event === "INSERT" && newMessage.sender_id !== userId && !(newMessage.metadata as any)?.deleted) {
+        playMessageNotificationSound();
+      }
+
       // Handle delete markers
       if ((newMessage.metadata as any)?.deleted) {
         setMessages((current) => current.filter((msg) => msg.id !== newMessage.id));
@@ -502,76 +605,19 @@ export default function Chat() {
       const eventPayload = payload.payload as {
         senderId?: string;
         recipientId?: string;
+        senderName?: string;
         callType?: "audio" | "video";
         sdp?: RTCSessionDescriptionInit;
       };
 
       if (!eventPayload.senderId || !eventPayload.recipientId || eventPayload.recipientId !== userId) return;
       if (activeCallSession || !eventPayload.sdp) return;
-
-      const callType = eventPayload.callType ?? "audio";
-      const mediaStream = callType === "video" ? await videoStream.startStream() : await audioStream.startStream();
-      localStreamRef.current = mediaStream;
-
-      const peerConnection = createPeerConnection();
-      peerConnectionRef.current = peerConnection;
-      pendingIceCandidatesRef.current = [];
-      attachLocalStreamToPeerConnection(peerConnection, mediaStream);
-
-      peerConnection.onicecandidate = (event) => {
-        if (!event.candidate) return;
-        void sendCallSignal("call-ice-candidate", {
-          senderId: userId,
-          recipientId: eventPayload.senderId,
-          candidate: event.candidate.toJSON(),
-        });
-      };
-
-      peerConnection.ontrack = (event) => {
-        const [incomingStream] = event.streams;
-        if (!incomingStream) return;
-        remoteMediaStreamRef.current = incomingStream;
-        setRemoteStream(incomingStream);
-        if (callType === "video") {
-          setIsRemoteVideoActive(true);
-        } else {
-          setIsRemoteAudioActive(true);
-        }
-      };
-
-      peerConnection.onconnectionstatechange = () => {
-        if (peerConnection.connectionState === "connected") {
-          setActiveCallSession((current) =>
-            current ? { ...current, status: "connected" } : current
-          );
-        }
-      };
-
-      activeCallTargetRef.current = eventPayload.senderId ?? null;
-
-      await peerConnection.setRemoteDescription(new RTCSessionDescription(eventPayload.sdp));
-
-      const answer = await peerConnection.createAnswer();
-      await peerConnection.setLocalDescription(answer);
-      await sendCallSignal("call-answer", {
-        senderId: userId,
-        recipientId: eventPayload.senderId,
-        callType,
-        sdp: answer,
+      setIncomingCallOffer({
+        senderId: eventPayload.senderId,
+        senderName: eventPayload.senderName ?? recipientName,
+        callType: eventPayload.callType ?? "audio",
+        sdp: eventPayload.sdp,
       });
-
-      setActiveCallSession({
-        id: `call-${Date.now()}`,
-        conversationId,
-        callType,
-        status: "connected",
-        startTime: new Date(),
-        remoteUserId: eventPayload.senderId ?? recipientId,
-        remoteUsername: recipientName,
-        remoteAvatarUrl: undefined,
-      });
-      setIsMuted(false);
-      setIsCameraOff(false);
     });
 
     channel.on("broadcast", { event: "call-answer" }, async (payload) => {
@@ -599,7 +645,11 @@ export default function Chat() {
       };
 
       if (!eventPayload.senderId || !eventPayload.recipientId || eventPayload.recipientId !== userId) return;
-      if (!peerConnectionRef.current || !eventPayload.candidate) return;
+      if (!eventPayload.candidate) return;
+      if (!peerConnectionRef.current) {
+        pendingIceCandidatesRef.current.push(eventPayload.candidate);
+        return;
+      }
 
       try {
         await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(eventPayload.candidate));
@@ -612,6 +662,7 @@ export default function Chat() {
     channel.on("broadcast", { event: "call-hangup" }, () => {
       resetCallState();
       setActiveCallSession(null);
+      setIncomingCallOffer(null);
     });
 
     channel.subscribe();
@@ -1245,10 +1296,27 @@ export default function Chat() {
 
   return (
     <>
+      {incomingCallOffer && !activeCallSession && (
+        <IncomingCall
+          senderName={incomingCallOffer.senderName}
+          callType={incomingCallOffer.callType}
+          onAccept={() => void handleAcceptIncomingCall()}
+          onReject={() => void handleRejectIncomingCall()}
+        />
+      )}
+
       {/* Render call screens if active */}
-      {activeCallSession && activeCallSession.callType === 'audio' && (
-        <AudioCallScreen
+      {activeCallSession && activeCallSession.status === "ringing" && (
+        <OutgoingCall
           session={activeCallSession}
+          onEndCall={handleEndCall}
+        />
+      )}
+
+      {activeCallSession && activeCallSession.status !== "ringing" && activeCallSession.callType === 'audio' && (
+        <AudioCall
+          session={activeCallSession}
+          remoteStream={remoteStream}
           isRemoteAudioActive={isRemoteAudioActive}
           isMuted={isMuted}
           onToggleMute={handleToggleMute}
@@ -1256,8 +1324,8 @@ export default function Chat() {
         />
       )}
 
-      {activeCallSession && activeCallSession.callType === 'video' && (
-        <VideoCallScreen
+      {activeCallSession && activeCallSession.status !== "ringing" && activeCallSession.callType === 'video' && (
+        <VideoCall
           session={activeCallSession}
           localVideoRef={localVideoRef}
           remoteVideoRef={remoteVideoRef}

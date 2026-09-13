@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { login } from "../lib/auth";
 import { fetchProfileFromSupabase, upsertProfileToSupabase } from "../lib/profileApi";
@@ -16,11 +16,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [selectedLanguage, setSelectedLanguage] = useState<Language>(language);
-
-  useEffect(() => {
-    setSelectedLanguage(language);
-  }, [language]);
+  const selectedLanguage: Language = language;
 
   // Always return to the feed after login to avoid returning to previous protected pages
   const returnTo = "/feed";
@@ -57,7 +53,7 @@ export default function Login() {
           dateOfBirth: "",
           gender: "",
         };
-        const created = await upsertProfileToSupabase(newProfile as any);
+        const created = await upsertProfileToSupabase(newProfile);
         if (created) await refreshSession();
       }
 

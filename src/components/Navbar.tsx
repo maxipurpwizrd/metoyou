@@ -13,6 +13,24 @@ export default function Navbar() {
   const { user } = useAuth();
   const { t } = useLanguage();
   const [unreadCount, setUnreadCount] = useState(0);
+  const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
+  const [isStoryComposerOpen, setIsStoryComposerOpen] = useState(false);
+
+  useEffect(() => {
+    const handleCreatePostVisibility = (event: Event) => {
+      setIsCreatePostOpen((event as CustomEvent<boolean>).detail === true);
+    };
+
+    window.addEventListener("metoyou:create-post-visibility", handleCreatePostVisibility);
+    const handleStoryVisibility = (event: Event) => {
+      setIsStoryComposerOpen((event as CustomEvent<boolean>).detail === true);
+    };
+    window.addEventListener("metoyou:create-story-visibility", handleStoryVisibility);
+    return () => {
+      window.removeEventListener("metoyou:create-post-visibility", handleCreatePostVisibility);
+      window.removeEventListener("metoyou:create-story-visibility", handleStoryVisibility);
+    };
+  }, []);
 
   useEffect(() => {
     if (!user || typeof user !== "object" || !("id" in user)) return;
@@ -32,7 +50,7 @@ export default function Navbar() {
     };
   }, [user]);
   return (
-    <div className="fixed top-0 left-0 right-0 z-50 bg-linear-to-br from-blue-100 via-pink-100 to-purple-100 border-b border-white/30 h-20 px-2 sm:px-3 pt-[env(safe-area-inset-top)]">
+    <div className={`fixed top-0 left-0 right-0 z-50 bg-linear-to-br from-blue-100 via-pink-100 to-purple-100 border-b border-white/30 h-20 px-2 sm:px-3 pt-[env(safe-area-inset-top)] transition-transform duration-200 ${isCreatePostOpen || isStoryComposerOpen ? "-translate-y-full pointer-events-none" : "translate-y-0"}`}>
       <div className="max-w-3xl mx-auto h-full px-1 sm:px-2">
         <div className="bg-white/20 backdrop-blur-3xl border border-white/30 rounded-[36px] shadow-sm h-full flex items-center justify-between px-5 py-3">
 

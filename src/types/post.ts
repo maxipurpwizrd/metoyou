@@ -5,6 +5,7 @@ export type PostRecord = {
   author_id: string;
   text?: string | null;
   image_url?: string | null;
+  image_original_url?: string | null;
   video_url?: string | null;
   audio_url?: string | null;
   media_type?: PostMediaType;
@@ -30,6 +31,7 @@ export type FeedPost = {
   };
   text?: string;
   image?: string;
+  imageOriginal?: string;
   video?: string;
   audio?: string;
   mediaType?: PostMediaType;

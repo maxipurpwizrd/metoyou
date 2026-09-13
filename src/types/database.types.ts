@@ -10,6 +10,7 @@ export type Database = {
           bio: string | null;
           email: string | null;
           profile_pic: string | null;
+          profile_original_pic: string | null;
           date_of_birth: string | null;
           gender: string | null;
           vibes_pro: boolean | null;
@@ -29,6 +30,7 @@ export type Database = {
           bio?: string | null;
           email?: string | null;
           profile_pic?: string | null;
+          profile_original_pic?: string | null;
           date_of_birth?: string | null;
           gender?: string | null;
           vibes_pro?: boolean | null;
@@ -48,6 +50,7 @@ export type Database = {
           bio?: string | null;
           email?: string | null;
           profile_pic?: string | null;
+          profile_original_pic?: string | null;
           date_of_birth?: string | null;
           gender?: string | null;
           vibes_pro?: boolean | null;

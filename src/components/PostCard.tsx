@@ -8,6 +8,7 @@ import { useAutoplayVideo } from "../hooks/useAutoplayVideo";
 import { useAutoplayAudio } from "../hooks/useAutoplayAudio";
 import { useVideoContext } from "../contexts/VideoContext";
 import type { Comment, User } from "../contexts/FeedContext";
+const loadedImageUrls = new Set<string>();
 
 type Props = {
   author: User;
@@ -16,6 +17,7 @@ type Props = {
   time: string;
   text: string;
   image?: string;
+  imageOriginal?: string;
   video?: string;
   isVibesPro?: boolean;
   variant?: "default" | "gold";
@@ -58,6 +60,7 @@ export default function PostCard({
   time,
   text,
   image,
+  imageOriginal,
   video,
   isVibesPro = false,
   variant = "default",
@@ -123,11 +126,10 @@ export default function PostCard({
   const recordingTimeoutRef = useRef<number | null>(null);
   const activeVoiceUrlRef = useRef<string | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
-  const loadTimeoutRef = useRef<number | null>(null);
 
   // Video autoplay state
   const [isMuted, setIsMuted] = useState(true);
-  const [mediaReady, setMediaReady] = useState(false);
+  const [mediaReady, setMediaReady] = useState(() => !image || loadedImageUrls.has(image));
   const [mediaErrored, setMediaErrored] = useState(false);
   const { playingVideoId, setPlayingVideoId } = useVideoContext();
 
@@ -145,46 +147,6 @@ export default function PostCard({
     },
     threshold: 0.5,
   });
-
-  // Smart image loading: start loading when element is near-visible (300px threshold)
-  // and set timeout to handle slow/failed loads gracefully
-  useEffect(() => {
-    if (!image || !imgRef.current) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting && imgRef.current && !imgRef.current.src) {
-            imgRef.current.src = image;
-
-            // Set a 8 second timeout - if image hasn't loaded by then, mark as ready anyway
-            if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);
-            loadTimeoutRef.current = window.setTimeout(() => {
-              if (!mediaReady && imgRef.current) {
-                setMediaReady(true);
-              }
-              loadTimeoutRef.current = null;
-            }, 8000);
-
-            observer.unobserve(imgRef.current);
-          }
-        });
-      },
-      { rootMargin: "300px" } // Start loading 300px before element is visible
-    );
-
-    if (imgRef.current) {
-      observer.observe(imgRef.current);
-    }
-
-    return () => {
-      observer.disconnect();
-      if (loadTimeoutRef.current) {
-        clearTimeout(loadTimeoutRef.current);
-        loadTimeoutRef.current = null;
-      }
-    };
-  }, [image, mediaReady]);
 
   const audioRef = useAutoplayAudio({
     audioId: audioElementId,
@@ -267,7 +229,8 @@ export default function PostCard({
       return;
     }
 
-    setMediaReady(false);
+    setMediaReady(!image || loadedImageUrls.has(image));
+      setMediaReady(!image || loadedImageUrls.has(image));
     setMediaErrored(false);
   }, [image, video]);
 
@@ -538,6 +501,8 @@ export default function PostCard({
         <div className="flex items-center gap-3 min-w-0">
           {author.avatar ? (
             <img
+                                  decoding="async"
+                                  fetchPriority="low"
               src={author.avatar}
               alt={author.username}
               loading="lazy"
@@ -775,7 +740,7 @@ export default function PostCard({
           {hasVisualMedia ? (
             <div className="flex md:flex-col gap-3 md:gap-3.5">
               {/* LEFT: Media Container (45% on mobile, full width on desktop) */}
-              <div className={`w-[45%] md:w-full shrink-0 rounded-2xl flex items-center justify-center overflow-hidden relative shadow-inner border ${isPremiumTheme ? "border-amber-200/80 bg-[linear-gradient(135deg,rgba(255,250,205,0.95),rgba(253,230,138,0.9))]" : "bg-linear-to-br from-pink-100 via-purple-100 to-blue-100 border-white/20"}`}>
+              <div className={`w-[45%] md:w-full aspect-[4/3] shrink-0 rounded-2xl flex items-center justify-center overflow-hidden relative shadow-inner border ${isPremiumTheme ? "border-amber-200/80 bg-[linear-gradient(135deg,rgba(255,250,205,0.95),rgba(253,230,138,0.9))]" : "bg-linear-to-br from-pink-100 via-purple-100 to-blue-100 border-white/20"}`}>
                 {!mediaReady && !mediaErrored && (
                   <div className="absolute inset-0 flex items-center justify-center bg-white/60 backdrop-blur-sm">
                     <div className="h-8 w-8 animate-spin rounded-full border-2 border-pink-300 border-t-transparent" />
@@ -816,23 +781,18 @@ export default function PostCard({
                 ) : (
                   <img
                     ref={imgRef}
+                    src={image}
                     alt={`${author.username}'s post`}
+                    loading="lazy"
                     className="w-full h-full object-contain bg-black/5 cursor-pointer active:scale-98 transition-transform"
                     onLoad={() => {
+                                            if (image) loadedImageUrls.add(image);
                       setMediaReady(true);
-                      if (loadTimeoutRef.current) {
-                        clearTimeout(loadTimeoutRef.current);
-                        loadTimeoutRef.current = null;
-                      }
                       onMediaLoad?.();
                     }}
                     onError={() => {
                       setMediaReady(true);
                       setMediaErrored(true);
-                      if (loadTimeoutRef.current) {
-                        clearTimeout(loadTimeoutRef.current);
-                        loadTimeoutRef.current = null;
-                      }
                       onMediaLoad?.();
                     }}
                     onClick={(e) => {
@@ -1222,7 +1182,7 @@ export default function PostCard({
 
       {viewerOpen && image && (
         <ImageViewer
-          images={[image]}
+          images={[imageOriginal ?? image]}
           initialIndex={viewerIndex}
           onClose={() => setViewerOpen(false)}
           postId={postId}

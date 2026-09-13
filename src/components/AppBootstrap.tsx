@@ -6,8 +6,8 @@ import { useAppInit } from '../contexts/AppInitContext';
 import { useSession } from '../contexts/SessionContext';
 
 export default function AppBootstrap({ children }: { children: React.ReactNode }) {
-  const { appReady, progress, currentTask, setProgress, setCurrentTask, setAppReady } = useAppInit();
-  const { profileReady } = useSession();
+  const { setProgress, setCurrentTask, setAppReady } = useAppInit();
+  useSession();
 
   const { user } = useAuth();
 
@@ -101,21 +101,6 @@ export default function AppBootstrap({ children }: { children: React.ReactNode }
     return () => { mounted = false };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
-
-  if (!appReady || !profileReady) {
-    return (
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-white">
-        <div className="text-center max-w-md p-6">
-          <h2 className="text-2xl font-bold mb-4">Preparing your experience…</h2>
-          <p className="mb-3">{currentTask}</p>
-          <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-            <div style={{ width: `${progress}%` }} className="h-3 bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500"></div>
-          </div>
-          <p className="mt-2 text-sm text-slate-500">{progress}%</p>
-        </div>
-      </div>
-    );
-  }
 
   return <>{children}</>;
 }

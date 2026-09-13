@@ -17,9 +17,8 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
   // Prevent rendering until app initialization completes
   const { appReady } = useAppInit();
   const { profileReady } = useSession();
-  if (!appReady || !profileReady) return null;
   const { user } = useAuth();
-  const currentUserId = (user as any)?.id as string | undefined;
+  const currentUserId = typeof user?.id === "string" ? user.id : undefined;
   const { t } = useLanguage();
   const navigate = useNavigate();
   const [threads, setThreads] = useState<MessageThread[]>([]);
@@ -63,9 +62,11 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
   const { profile } = useSession();
   const isVibesPro = isVibesProEnabled(profile);
 
+  if (!appReady || !profileReady) return null;
+
   // Restore/save scroll position for messages list per user
   useEffect(() => {
-    const userId = (user as any)?.id;
+    const userId = typeof user?.id === "string" ? user.id : null;
     if (!userId) return;
     const scrollKey = `metoyou-messages-scroll:${userId}`;
     const saved = Number(sessionStorage.getItem(scrollKey) || "0");
@@ -85,7 +86,7 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
   // Cache-first load of message threads + silent background refresh
   useEffect(() => {
     mountedRef.current = true;
-    const userId = (user as any)?.id as string | undefined;
+    const userId = typeof user?.id === "string" ? user.id : undefined;
     if (!userId) return;
 
     const cacheKey = `metoyou-threads:${userId}`;
@@ -611,7 +612,7 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
                           className="shrink-0 w-24 h-24 rounded-3xl overflow-hidden border border-[#D4AF37]/20 bg-[#111111]"
                         >
                           {story.image_url ? (
-                            <img src={story.image_url} alt={story.author_username} className="h-full w-full object-cover" />
+                            <img src={story.image_url} alt={story.author_username} loading="lazy" className="h-full w-full object-cover" />
                           ) : (
                             <div className="h-full w-full bg-[#1a1a1a] flex items-center justify-center text-xs text-white/70 p-2 text-center">
                               {story.author_username}
@@ -987,7 +988,7 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
             </div>
 
             {selectedStory.image_url ? (
-              <img src={selectedStory.image_url} alt={selectedStory.author_username} className="h-full w-full object-cover" />
+              <img src={selectedStory.image_original_url ?? selectedStory.image_url} alt={selectedStory.author_username} className="h-full w-full object-cover" />
             ) : (
               <div className="flex h-full w-full items-center justify-center bg-linear-to-br from-pink-500 via-purple-500 to-blue-500 p-6 text-white text-center">
                 <p className="max-w-2xl text-2xl font-semibold leading-relaxed whitespace-pre-wrap">

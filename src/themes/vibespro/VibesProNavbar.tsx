@@ -1,12 +1,31 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Home, Search, MessageCircle, Bell, User } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useLanguage } from '../../contexts/LanguageContext';
 
 export const VibesProNavbar: React.FC = () => {
   const { t } = useLanguage();
+  const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
+  const [isStoryComposerOpen, setIsStoryComposerOpen] = useState(false);
+
+  useEffect(() => {
+    const handleCreatePostVisibility = (event: Event) => {
+      setIsCreatePostOpen((event as CustomEvent<boolean>).detail === true);
+    };
+
+    window.addEventListener('metoyou:create-post-visibility', handleCreatePostVisibility);
+    const handleStoryVisibility = (event: Event) => {
+      setIsStoryComposerOpen((event as CustomEvent<boolean>).detail === true);
+    };
+    window.addEventListener('metoyou:create-story-visibility', handleStoryVisibility);
+    return () => {
+      window.removeEventListener('metoyou:create-post-visibility', handleCreatePostVisibility);
+      window.removeEventListener('metoyou:create-story-visibility', handleStoryVisibility);
+    };
+  }, []);
+
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0B0B0B] border-b border-white/8 shadow-lg">
+    <nav className={`fixed top-0 left-0 right-0 z-50 bg-[#0B0B0B] border-b border-white/8 shadow-lg transition-transform duration-200 ${isCreatePostOpen || isStoryComposerOpen ? '-translate-y-full pointer-events-none' : 'translate-y-0'}`}>
       <div className="w-full px-2 sm:px-3 md:px-4 lg:px-6">
         <div className="flex items-center justify-between h-20 sm:h-24">
           {/* Logo */}

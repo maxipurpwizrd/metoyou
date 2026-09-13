@@ -12,7 +12,7 @@ import { supabase } from "../lib/supabase";
 import CreatePost from "../components/CreatePost";
 import PostCard from "../components/PostCard";
 import { FreeFeedSkeleton, VibesProFeedSkeleton } from "../components/skeletons/FeedSkeletons";
-import { savePostToSupabase, deletePostFromSupabase, updatePostInSupabase, uploadAudioToSupabase, uploadImageToSupabase, fetchPostByIdFromSupabase } from "../lib/postApi";
+import { savePostToSupabase, deletePostFromSupabase, updatePostInSupabase, uploadAudioToSupabase, uploadImageVariantsToSupabase, fetchPostByIdFromSupabase } from "../lib/postApi";
 import { addComment, editComment, deleteComment } from "../lib/commentApi";
 import { likePost, unlikePost, getPostLikes } from "../lib/likeApi";
 import {
@@ -31,6 +31,7 @@ type Story = {
   name: string;
   text?: string;
   image?: string;
+  imageOriginal?: string;
   music?: string;
   voice?: string;
   duration: string;
@@ -48,6 +49,7 @@ const mapStoryRecord = (story: StoryRecord): Story => ({
   name: story.author_username,
   text: story.text ?? undefined,
   image: story.image_url ?? undefined,
+  imageOriginal: story.image_original_url ?? undefined,
   music: undefined,
   voice: story.voice_url ?? undefined,
   duration: `${story.duration_hours}h`,
@@ -62,7 +64,7 @@ const mapStoryRecord = (story: StoryRecord): Story => ({
 export default function Feed(_props: { embedded?: boolean } = {}) {
   const { appReady } = useAppInit();
   const { profileReady } = useSession();
-  if (!appReady || !profileReady) return null;
+  const feedInitializing = !appReady || !profileReady;
   const location = useLocation();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -91,6 +93,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
   const [storyCreateStatus, setStoryCreateStatus] = useState<string | null>(null);
   const [storyCreateError, setStoryCreateError] = useState<string | null>(null);
   const [storyNotice, setStoryNotice] = useState<string | null>(null);
+  const [storiesLoading, setStoriesLoading] = useState(true);
   const [savedStories, setSavedStories] = useState<string[]>(() => {
     const saved = localStorage.getItem("metoyou-saved-stories");
     return saved ? (JSON.parse(saved) as string[]) : [];
@@ -173,6 +176,12 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
   const [storyDuration, setStoryDuration] = useState<number>(24);
   const [storyMusic, setStoryMusic] = useState<string | undefined>(undefined);
   const [storyVoice, setStoryVoice] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("metoyou:create-story-visibility", {
+      detail: storyChoiceOpen || storyEditorOpen,
+    }));
+  }, [storyChoiceOpen, storyEditorOpen]);
   const [currentTime, setCurrentTime] = useState<number>(() => Date.now());
   const { posts, setPosts, savedScrollY, setSavedScrollY, selectedPostId, setSelectedPostId, loading, loadMorePosts, hasMore } = useFeed();
   const filteredPosts = useMemo(() => {
@@ -230,6 +239,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
         created_at: record.created_at,
         text: record.text ?? "",
         image: record.image_url ?? undefined,
+        imageOriginal: record.image_original_url ?? undefined,
         video: record.video_url ?? undefined,
         audio: record.audio_url ?? undefined,
         comments: [],
@@ -334,9 +344,13 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
     let isActive = true;
 
     const hydrateStories = async () => {
-      const remoteStories = await fetchStoriesFromSupabase();
-      if (!isActive) return;
-      setStories(remoteStories.map(mapStoryRecord));
+      try {
+        const remoteStories = await fetchStoriesFromSupabase();
+        if (!isActive) return;
+        setStories(remoteStories.map(mapStoryRecord));
+      } finally {
+        if (isActive) setStoriesLoading(false);
+      }
     };
 
     void hydrateStories();
@@ -512,7 +526,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
 
   const persistPost = async (
     postId: string | number,
-    payload: { text?: string; image?: string; video?: string; audio?: string },
+    payload: { text?: string; image?: string; originalImage?: string; video?: string; audio?: string },
     onProgress?: (percent: number) => void
   ) => {
     const profile = currentUserProfile;
@@ -536,12 +550,15 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
 
     try {
       let imageUrl: string | undefined;
+      let imageOriginalUrl: string | undefined;
       let audioUrl: string | undefined;
 
       if (payload.image) {
-        imageUrl = await uploadImageToSupabase(payload.image, profile.id, (percent) => {
+        const uploadedImages = await uploadImageVariantsToSupabase(payload.image, payload.originalImage, profile.id, (percent) => {
           onProgress?.(Math.max(0, Math.min(100, percent)));
         });
+        imageUrl = uploadedImages.optimizedUrl ?? undefined;
+        imageOriginalUrl = uploadedImages.originalUrl ?? undefined;
       }
 
       if (payload.audio) {
@@ -554,6 +571,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
         author_id: profile.id,
         text: payload.text ?? null,
         image_url: imageUrl ?? payload.image ?? null,
+        image_original_url: imageOriginalUrl ?? payload.originalImage ?? imageUrl ?? payload.image ?? null,
         video_url: payload.video ?? null,
         audio_url: audioUrl ?? null,
         media_type: payload.video ? "video" : payload.image ? "image" : audioUrl ? "audio" : null,
@@ -574,6 +592,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
         created_at: saved.created_at ?? new Date().toISOString(),
         text: saved.text ?? payload.text ?? "",
         image: saved.image_url ?? imageUrl ?? payload.image ?? undefined,
+        imageOriginal: saved.image_original_url ?? imageOriginalUrl ?? payload.originalImage ?? imageUrl ?? payload.image ?? undefined,
         video: saved.video_url ?? payload.video ?? undefined,
         audio: saved.audio_url ?? audioUrl ?? payload.audio,
         comments: [],
@@ -623,7 +642,8 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
     image?: string,
     video?: string,
     audio?: string,
-    onProgress?: (percent: number) => void
+    onProgress?: (percent: number) => void,
+    originalImage?: string
   ): Promise<boolean> => {
     const profile = currentUserProfile;
     if (!profile) return false;
@@ -663,7 +683,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
       return true;
     }
 
-    void persistPost(optimisticId, { text, image, video, audio }, onProgress);
+    void persistPost(optimisticId, { text, image, originalImage, video, audio }, onProgress);
     return true;
   };
 
@@ -911,6 +931,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
         profilePic: profile.profilePic ?? null,
         text: storyText.trim() || undefined,
         image: selectedImage ?? undefined,
+        originalImage: selectedImage ?? undefined,
         voice: storyVoice || storyMusic,
         storyType,
         durationHours: storyDuration,
@@ -1070,7 +1091,11 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
           </button>
 
           {/* Render Active Stories */}
-          {stories.map((story, index) => (
+          {storiesLoading && stories.length === 0
+            ? Array.from({ length: 4 }).map((_, index) => (
+                <div key={`story-skeleton-${index}`} className="w-26.5 h-38 md:w-35 md:h-50 shrink-0 animate-pulse rounded-2xl bg-white/50" />
+              ))
+            : stories.map((story, index) => (
             <div
               key={story.id}
               onClick={() => openStoryAtIndex(index)}
@@ -1081,6 +1106,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                 <img
                   src={story.image}
                   alt="story"
+                  loading="lazy"
                   className="w-full h-full object-cover"
                 />
               ) : (
@@ -1118,7 +1144,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                 <p className="text-[8px] md:text-[10px] opacity-80 mt-0.5">⏳ {getTimeLeft(story.expiresAt)}</p>
               </div>
             </div>
-          ))}
+            ))}
           </div>
         )}
 
@@ -1133,7 +1159,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
             <div className="fixed inset-0 bg-black/5 z-0 pointer-events-none backdrop-blur-xs"></div>
           )}
 
-          {loading && filteredPosts.length === 0 ? (
+          {(feedInitializing || loading) && filteredPosts.length === 0 ? (
             isVibesPro ? (
               <VibesProFeedSkeleton count={5} />
             ) : (
@@ -1152,7 +1178,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                       rowHeight={cache.current.rowHeight}
                       deferredMeasurementCache={cache.current}
                       overscanRowCount={3}
-                      rowRenderer={({ index, key, parent, style }: any) => {
+                      rowRenderer={({ index, parent, style }: any) => {
                         const post = filteredPosts[index];
                         const isSelected = selectedPostId === post.id;
 
@@ -1160,7 +1186,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                           <CellMeasurer
                             cache={cache.current}
                             columnIndex={0}
-                            key={key}
+                            key={String(post.id)}
                             parent={parent}
                             rowIndex={index}
                           >
@@ -1194,6 +1220,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                                     time={post.time}
                                     text={post.text}
                                     image={post.image}
+                                    imageOriginal={post.imageOriginal}
                                     video={post.video}
                                     comments={post.comments}
                                     likes={post.likes ?? 0}
@@ -1315,16 +1342,6 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                                     highlighted={Boolean(post.highlighted)}
                                     uploadState={post.uploadState}
                                     uploadProgress={post.uploadProgress}
-                                    onMediaLoad={() => {
-                                      try {
-                                        // Clear cached measurement for this row and recompute height
-                                        cache.current.clear(index, 0);
-                                        listRef.current?.recomputeRowHeights(index);
-                                        console.debug("Feed: media loaded, recomputed row", index, post.id);
-                                      } catch (e) {
-                                        // ignore
-                                      }
-                                    }}
                                     onMuteUser={() => {
                                       setMutedUsers((prev) =>
                                         prev.includes(post.author.id) ? prev : [...prev, post.author.id]
@@ -1424,6 +1441,9 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                 </AutoSizer>
               )}
             </WindowScroller>
+          )}
+          {loading && filteredPosts.length > 0 && (
+            isVibesPro ? <VibesProFeedSkeleton count={1} /> : <FreeFeedSkeleton count={1} />
           )}
         </div>
       </div>
@@ -1552,7 +1572,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
             {selectedStory.image ? (
               <div className="flex items-center justify-center w-full h-full bg-slate-900 relative z-30">
                 <img
-                  src={selectedStory.image}
+                  src={selectedStory.imageOriginal ?? selectedStory.image}
                   alt="story content"
                   className="max-w-full max-h-full object-contain"
                 />
@@ -1592,7 +1612,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
       {/* Story Type Choice Overlay */}
       {storyChoiceOpen && (
         <div className="fixed inset-0 z-60 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-xs" onClick={() => setStoryChoiceOpen(false)}></div>
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-md" onClick={() => setStoryChoiceOpen(false)}></div>
 
           {isVibesPro ? (
             <div className="relative w-full max-w-xs rounded-3xl border border-white/10 bg-[#111111] p-5 text-white shadow-2xl">
@@ -1721,8 +1741,8 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
 
       {/* Story Builder/Editor Overlay */}
       {storyEditorOpen && (selectedImage || storyMode === "text" || storyVoice || storyMusic) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-xs" onClick={() => {setStoryEditorOpen(false); setStoryMode(null); setSelectedImage(null); setStoryText(""); setStoryDuration(24); setStoryMusic(undefined); setStoryVoice(undefined);}}></div>
+        <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-md" onClick={() => {setStoryEditorOpen(false); setStoryMode(null); setSelectedImage(null); setStoryText(""); setStoryDuration(24); setStoryMusic(undefined); setStoryVoice(undefined);}}></div>
 
           {isVibesPro ? (
             <div className="relative w-full max-w-md rounded-3xl border border-white/10 bg-[#111111] p-5 text-white shadow-2xl">

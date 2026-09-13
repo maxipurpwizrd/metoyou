@@ -1,8 +1,8 @@
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import type { ChangeEvent } from "react";
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
+import type { ChangeEvent } from "react";
 import { useSession, setGlobalProfile } from "../contexts/SessionContext";
-import { fetchProfileFromSupabase, fetchProfileByUsername, upsertProfileToSupabase, uploadProfileImage } from "../lib/profileApi";
+import { fetchProfileFromSupabase, fetchProfileByUsername, upsertProfileToSupabase, uploadFreeTierProfileImage, uploadProfileImage } from "../lib/profileApi";
 import { fetchPostsFromSupabase } from "../lib/postApi";
 import { addComment, getComments, editComment, deleteComment } from "../lib/commentApi";
 import { likePost, unlikePost, getPostLikes, hydratePostLikeState } from "../lib/likeApi";
@@ -35,6 +35,7 @@ type ProfilePost = {
   author: { id: string; username: string; is_vibes_pro?: boolean };
   text: string;
   image?: string;
+  imageOriginal?: string;
   highlighted?: boolean;
   time?: string;
   likes?: number;
@@ -109,7 +110,7 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
   const vibesProFileInputRef = useRef<HTMLInputElement | null>(null);
   const [isFollowing, setIsFollowing] = useState(false);
   const [isFollowedBy, setIsFollowedBy] = useState(false);
-  const [hommiesCount, setHommiesCount] = useState(profile.hommies_count ?? 0);
+  const [hommiesCount, setHommiesCount] = useState(profile?.hommies_count ?? 0);
   const [mutualConnections, setMutualConnections] = useState<MutualConnection[]>([]);
   const [followersList, setFollowersList] = useState<MutualConnection[]>([]);
   const [hommiesListOpen, setHommiesListOpen] = useState(false);
@@ -174,7 +175,7 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
     if (!profilePic) return;
 
     setProfilePictureMenuOpen(false);
-    setViewerImages([profilePic]);
+    setViewerImages([!profile.is_vibes_pro ? profile.profile_original_pic ?? profilePic : profilePic]);
     setViewerIndex(0);
     setViewerPostId(null);
     setViewerAuthorId(profile.id);
@@ -372,7 +373,10 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
     setShowUploadSuccess(false);
 
     try {
-      const uploadedUrl = await uploadProfileImage(file);
+      const uploaded = profile.is_vibes_pro
+        ? await uploadProfileImage(file)
+        : await uploadFreeTierProfileImage(file);
+      const uploadedUrl = typeof uploaded === "string" ? uploaded : uploaded?.optimizedUrl;
       if (!uploadedUrl) {
         alert("Unable to upload profile image. Try again.");
         return;
@@ -382,6 +386,7 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
       const updatedProfile = {
         ...profile,
         profilePic: uploadedUrl,
+        ...(!profile.is_vibes_pro && uploaded && typeof uploaded !== "string" ? { profile_original_pic: uploaded.originalUrl } : {}),
         ...(profile.is_vibes_pro ? { vibes_pro_portrait: uploadedUrl } : {}),
       };
       if (viewingOwn) {
@@ -810,6 +815,7 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
           profiles?: { username?: string };
           text?: string;
           image_url?: string;
+          image_original_url?: string;
           highlighted?: boolean;
           created_at?: string;
           likes_count?: number;
@@ -824,6 +830,7 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
           author: { id: r.author_id, username: r.profiles?.username ?? r.author_id },
           text: r.text ?? "",
           image: r.image_url ?? undefined,
+          imageOriginal: r.image_original_url ?? undefined,
           highlighted: Boolean(r.highlighted),
           time: formatDisplayDateTime(r.created_at),
           likes: Number(r.likes_count ?? 0),
@@ -1274,6 +1281,7 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
                     time={post.time ?? ""}
                     text={post.text}
                     image={post.image}
+                    imageOriginal={post.imageOriginal}
                     comments={((post.commentList ?? []) as Array<{ id: string | number; user: { id: string; username: string }; text?: string; voice?: string; likes?: number }>).map((comment) => ({
                       ...comment,
                       likes: comment.likes ?? 0,

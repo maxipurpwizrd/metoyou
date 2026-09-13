@@ -9,7 +9,7 @@ import { getSupportedAudioRecorderOptions, optimizeVoiceNote } from "../lib/medi
 
 type Props = {
 
-  onPost: (text: string, image?: string, video?: string, audio?: string, onProgress?: (percent: number) => void) => Promise<boolean>;
+  onPost: (text: string, image?: string, video?: string, audio?: string, onProgress?: (percent: number) => void, originalImage?: string) => Promise<boolean>;
 
 };
 
@@ -21,6 +21,7 @@ export default function CreatePost({ onPost }: Props) {
   const [text, setText] = useState("");
 
   const [image, setImage] = useState<string | undefined>();
+  const [originalImage, setOriginalImage] = useState<string | undefined>();
 
   const [video, setVideo] = useState<string | undefined>();
 
@@ -128,18 +129,19 @@ export default function CreatePost({ onPost }: Props) {
     void (async () => {
       try {
         const optimized = await optimizeImageFile(file, 1080, 0.8, 300 * 1024);
-        const reader = new FileReader();
-
-        reader.onloadend = () => {
-          setImage(reader.result as string);
-          setVideo(undefined);
-        };
-
-        reader.onerror = () => {
-          alert("Failed to read image file");
-        };
-
-        reader.readAsDataURL(optimized);
+        const readAsDataUrl = (source: Blob) => new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = () => reject(new Error("Failed to read image file"));
+          reader.readAsDataURL(source);
+        });
+        const [optimizedDataUrl, originalDataUrl] = await Promise.all([
+          readAsDataUrl(optimized),
+          readAsDataUrl(file),
+        ]);
+        setImage(optimizedDataUrl);
+        setOriginalImage(originalDataUrl);
+        setVideo(undefined);
       } catch (err) {
         console.warn("Image optimization failed", err);
         alert("Image could not be compressed to the allowed size. Please choose a smaller image.");
@@ -215,7 +217,8 @@ export default function CreatePost({ onPost }: Props) {
 
     const success = await onPost(text, image, video, undefined, (percent) => {
       setUploadProgress(Math.max(0, Math.min(100, percent)));
-    });
+    }, originalImage);
+  setOriginalImage(undefined);
 
     if (!success) {
       setPostStatus("");
@@ -553,6 +556,21 @@ export default function CreatePost({ onPost }: Props) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!isExpanded) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isExpanded]);
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("metoyou:create-post-visibility", { detail: isExpanded }));
+  }, [isExpanded]);
+
   const closeComposer = () => {
 
     setIsExpanded(false);
@@ -572,7 +590,8 @@ export default function CreatePost({ onPost }: Props) {
     // Call the onPost callback with audio
     const success = await onPost(text, image, video, audio, (percent) => {
       setUploadProgress(Math.max(0, Math.min(100, percent)));
-    });
+    }, originalImage);
+  setOriginalImage(undefined);
 
     if (!success) {
       setPostStatus("");
@@ -679,7 +698,7 @@ export default function CreatePost({ onPost }: Props) {
 
       <div
 
-        className="fixed inset-0 bg-black/40 z-40"
+        className="fixed inset-0 z-100 bg-black/40 backdrop-blur-md"
 
         onClick={closeComposer}
 
@@ -689,7 +708,7 @@ export default function CreatePost({ onPost }: Props) {
 
       {/* Expanded composer card */}
 
-      <div className="fixed inset-4 md:inset-12 lg:inset-24 bg-white/20 backdrop-blur-3xl border border-white/30 rounded-4xl shadow-2xl p-6 z-50 flex flex-col max-h-[90vh] overflow-y-auto">
+      <div className="fixed inset-4 md:inset-12 lg:inset-24 z-101 flex max-h-[90vh] flex-col overflow-y-auto rounded-4xl border border-white/30 bg-white/20 p-6 shadow-2xl backdrop-blur-3xl">
 
         {/* Header with close button */}
 

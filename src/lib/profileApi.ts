@@ -13,6 +13,8 @@ function normalizeProfileRecord(result: DbProfile): ProfileData {
   return {
     ...result,
     profilePic: typeof result.profile_pic === "string" ? result.profile_pic : null,
+    is_admin: result.is_admin === true,
+    profile_original_pic: typeof result.profile_original_pic === "string" ? result.profile_original_pic : null,
     vibes_pro_portrait: typeof result.vibes_pro_portrait === "string" ? result.vibes_pro_portrait : null,
     interests: Array.isArray(result.interests) ? result.interests : [],
     dateOfBirth: result.date_of_birth ?? undefined,
@@ -73,6 +75,7 @@ export async function upsertProfileToSupabase(profile: ProfileData): Promise<Pro
       bio: profile.bio ?? existingProfile?.bio ?? "",
       email: profile.email ?? existingProfile?.email ?? "",
       profile_pic: profilePic ?? profile.vibes_pro_portrait ?? existingProfile?.profile_pic ?? null,
+      profile_original_pic: profile.profile_original_pic ?? existingProfile?.profile_original_pic ?? null,
       date_of_birth: dateOfBirth ?? existingProfile?.date_of_birth ?? null,
       gender: gender ?? existingProfile?.gender ?? null,
       is_vibes_pro: vibesProValue,
@@ -150,6 +153,34 @@ export async function uploadProfileImage(file: File): Promise<string | null> {
     return urlData.publicUrl ?? null;
   } catch (e) {
     console.error("uploadProfileImage error", e);
+    return null;
+  }
+}
+
+export async function uploadFreeTierProfileImage(file: File): Promise<{ optimizedUrl: string; originalUrl: string } | null> {
+  try {
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError) throw authError;
+    const userId = authData?.user?.id;
+    if (!userId) return null;
+
+    const optimized = await optimizeImageFile(file, 1200, 0.8);
+    const upload = async (blob: Blob, sourceType: string) => {
+      const ext = mimeToExtension(blob.type || sourceType || "image/jpeg");
+      const filePath = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error } = await supabase.storage.from(PROFILE_PICTURE_BUCKET).upload(filePath, blob, {
+        contentType: blob.type || sourceType,
+        upsert: false,
+      });
+      if (error) throw error;
+      return supabase.storage.from(PROFILE_PICTURE_BUCKET).getPublicUrl(filePath).data.publicUrl;
+    };
+
+    const optimizedUrl = await upload(optimized, optimized.type || file.type);
+    const originalUrl = await upload(file, file.type);
+    return { optimizedUrl, originalUrl };
+  } catch (e) {
+    console.error("uploadFreeTierProfileImage error", e);
     return null;
   }
 }

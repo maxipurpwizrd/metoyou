@@ -34,7 +34,9 @@ export async function uploadVideo(
     // Upload to Supabase Storage with progress tracking
     const { data, error } = await supabase.storage
       .from("posts-videos")
-      .upload(filename, file, { contentType: file.type } as never);
+      .upload(filename, file, {
+        contentType: file.type,
+      });
 
     onProgress?.({
       loaded: file.size,

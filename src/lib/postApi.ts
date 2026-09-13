@@ -1,10 +1,16 @@
 import { supabase } from "./supabase";
-import { mimeToExtension } from "./imageUtils";
+import { mimeToExtension, optimizeImageFile } from "./imageUtils";
 import { normalizeTimestamp } from "./time";
 import type { PostMediaType, PostRecord } from "../types/post";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 
 export const AUDIO_STORAGE_BUCKET = "post-audio";
 export const IMAGE_STORAGE_BUCKET = "posts-images";
+
+export type ImageUploadVariants = {
+  optimizedUrl: string | null;
+  originalUrl: string | null;
+};
 
 function inferAudioMimeType(audio: string) {
   if (audio.startsWith("data:")) {
@@ -67,6 +73,55 @@ export async function uploadImageToSupabase(image: string, authorId: string, onP
   return uploadBlobToSupabase(blob, IMAGE_STORAGE_BUCKET, authorId, extension, mimeType, onProgress);
 }
 
+export async function uploadImageVariantsToSupabase(
+  optimizedImage: string,
+  originalImage: string | undefined,
+  authorId: string,
+  onProgress?: (percent: number) => void
+): Promise<ImageUploadVariants> {
+  const optimizedUrl = await uploadImageToSupabase(optimizedImage, authorId, (percent) => {
+    onProgress?.(Math.round(percent * (originalImage ? 0.5 : 1)));
+  });
+
+  if (!originalImage || originalImage === optimizedImage) {
+    onProgress?.(100);
+    return { optimizedUrl: optimizedUrl ?? null, originalUrl: optimizedUrl ?? null };
+  }
+
+  const response = await fetch(originalImage);
+  const blob = await response.blob();
+  const mimeType = blob.type || "image/jpeg";
+  const extension = mimeToExtension(mimeType);
+  const originalUrl = await uploadBlobToSupabase(blob, IMAGE_STORAGE_BUCKET, authorId, extension, mimeType, (percent) => {
+    onProgress?.(50 + Math.round(percent * 0.5));
+  });
+
+  return { optimizedUrl: optimizedUrl ?? null, originalUrl: originalUrl ?? null };
+}
+
+export async function uploadImageFileVariantsToSupabase(
+  file: File,
+  authorId: string
+): Promise<ImageUploadVariants> {
+  const optimized = await optimizeImageFile(file, 1080, 0.8, 300 * 1024);
+  const optimizedUrl = await uploadBlobToSupabase(
+    optimized,
+    IMAGE_STORAGE_BUCKET,
+    authorId,
+    mimeToExtension(optimized.type || "image/jpeg"),
+    optimized.type || "image/jpeg"
+  );
+  const originalUrl = await uploadBlobToSupabase(
+    file,
+    IMAGE_STORAGE_BUCKET,
+    authorId,
+    mimeToExtension(file.type || "image/jpeg"),
+    file.type || "image/jpeg"
+  );
+
+  return { optimizedUrl: optimizedUrl ?? null, originalUrl: originalUrl ?? null };
+}
+
 export async function uploadAudioToSupabase(audio: string | Blob, authorId?: string, onProgress?: (percent: number) => void) {
   if (!audio) return undefined;
 
@@ -96,6 +151,7 @@ export async function savePostToSupabase(payload: {
   author_id: string;
   text?: string | null;
   image_url?: string | null;
+  image_original_url?: string | null;
   video_url?: string | null;
   audio_url?: string | null;
   media_type?: PostMediaType;
@@ -106,6 +162,7 @@ export async function savePostToSupabase(payload: {
       author_id: payload.author_id,
       text: payload.text ?? null,
       image_url: payload.image_url ?? null,
+      image_original_url: payload.image_original_url ?? null,
       video_url: payload.video_url ?? null,
       audio_url: payload.audio_url ?? null,
       media_type: payload.media_type ?? null,
@@ -117,7 +174,7 @@ export async function savePostToSupabase(payload: {
       .from("posts")
       .insert(insert)
       .select(
-        `id, author_id, text, image_url, video_url, audio_url, media_type, likes_count, comments_count, highlighted, created_at`
+        `id, author_id, text, image_url, image_original_url, video_url, audio_url, media_type, likes_count, comments_count, highlighted, created_at`
       )
       .maybeSingle();
 
@@ -145,7 +202,7 @@ export async function fetchPostsFromSupabase(options?: {
     let builder = supabase
       .from("posts")
       .select(
-        `id, author_id, text, image_url, video_url, audio_url, media_type, likes_count, comments_count, highlighted, created_at, profiles(username, profile_pic, is_vibes_pro)`
+        `id, author_id, text, image_url, image_original_url, video_url, audio_url, media_type, likes_count, comments_count, highlighted, created_at, profiles(username, profile_pic, is_vibes_pro)`
       )
       .order("created_at", { ascending: false })
       .limit(limit);
@@ -203,7 +260,7 @@ export async function fetchPostByIdFromSupabase(postId: string): Promise<PostRec
     const { data, error } = await supabase
       .from("posts")
       .select(
-        `id, author_id, text, image_url, video_url, audio_url, media_type, likes_count, comments_count, highlighted, created_at, profiles(username, profile_pic, is_vibes_pro)`
+        `id, author_id, text, image_url, image_original_url, video_url, audio_url, media_type, likes_count, comments_count, highlighted, created_at, profiles(username, profile_pic, is_vibes_pro)`
       )
       .eq("id", postId)
       .maybeSingle();
@@ -222,6 +279,25 @@ export async function fetchPostByIdFromSupabase(postId: string): Promise<PostRec
     console.error("fetchPostByIdFromSupabase error", e);
     return null;
   }
+}
+
+export function subscribeToNewPosts(onPost: (post: PostRecord) => void): RealtimeChannel {
+  const channel = supabase.channel("feed-posts");
+
+  channel.on(
+    "postgres_changes",
+    { event: "INSERT", schema: "public", table: "posts" },
+    async (payload) => {
+      const postId = typeof payload.new?.id === "string" ? payload.new.id : null;
+      if (!postId) return;
+
+      const post = await fetchPostByIdFromSupabase(postId);
+      if (post) onPost(post);
+    }
+  );
+
+  channel.subscribe();
+  return channel;
 }
 
 export async function deletePostFromSupabase(postId: string): Promise<boolean> {
