@@ -664,7 +664,7 @@ export default function CreatePost({ onPost }: Props) {
 
         >
 
-          <div className="w-11 h-11 rounded-2xl bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 flex items-center justify-center text-white font-bold shrink-0">
+          <div className="w-11 h-11 rounded-2xl bg-linear-to-r from-sky-500 via-cyan-400 to-blue-500 flex items-center justify-center text-white font-bold shrink-0">
 
             M
 
@@ -738,7 +738,7 @@ export default function CreatePost({ onPost }: Props) {
 
         <div className="flex items-center gap-3 mb-6">
 
-          <div className="w-11 h-11 rounded-2xl bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 flex items-center justify-center text-white font-bold shrink-0">
+          <div className="w-11 h-11 rounded-2xl bg-linear-to-r from-sky-500 via-cyan-400 to-blue-500 flex items-center justify-center text-white font-bold shrink-0">
 
             {(profile?.username ?? "M")[0].toUpperCase()}
 
@@ -772,7 +772,7 @@ export default function CreatePost({ onPost }: Props) {
 
               onClick={retryRecording}
 
-              className="rounded-full border border-pink-300 bg-white/80 px-2.5 py-1 text-xs font-semibold text-pink-600 shadow-sm transition hover:bg-pink-50"
+              className="rounded-full border border-sky-300 bg-white/80 px-2.5 py-1 text-xs font-semibold text-sky-600 shadow-sm transition hover:bg-sky-50"
 
             >
 
@@ -888,7 +888,7 @@ export default function CreatePost({ onPost }: Props) {
 
               placeholder="Drop your vibe 💬"
 
-              className="flex-1 bg-white/50 border border-white/40 rounded-2xl outline-none text-base md:text-lg text-slate-700 p-3 md:p-4 resize-none min-h-32 max-h-40 overflow-y-auto focus:border-pink-400 focus:ring-1 focus:ring-pink-400"
+              className="flex-1 bg-white/50 border border-white/40 rounded-2xl outline-none text-base md:text-lg text-slate-700 p-3 md:p-4 resize-none min-h-32 max-h-40 overflow-y-auto focus:border-sky-400 focus:ring-1 focus:ring-sky-400"
 
             />
 
@@ -908,7 +908,7 @@ export default function CreatePost({ onPost }: Props) {
 
             placeholder="Drop your vibe 💬"
 
-            className="w-full bg-white/50 border border-white/40 rounded-2xl outline-none text-lg text-slate-700 p-4 resize-none min-h-32 max-h-80 overflow-y-auto mb-4 focus:border-pink-400 focus:ring-1 focus:ring-pink-400"
+            className="w-full bg-white/50 border border-white/40 rounded-2xl outline-none text-lg text-slate-700 p-4 resize-none min-h-32 max-h-80 overflow-y-auto mb-4 focus:border-sky-400 focus:ring-1 focus:ring-sky-400"
 
           />
 
@@ -1006,7 +1006,7 @@ export default function CreatePost({ onPost }: Props) {
 
               <div
 
-                className="bg-linear-to-r from-pink-500 to-purple-500 h-2 rounded-full transition-all duration-300"
+                className="bg-linear-to-r from-sky-500 to-cyan-500 h-2 rounded-full transition-all duration-300"
 
                 style={{ width: `${uploadProgress}%` }}
 
@@ -1191,7 +1191,7 @@ export default function CreatePost({ onPost }: Props) {
 
               disabled={(!text.trim() && !image && !video && !audio) || isUploading || isPosting || isRecording}
 
-              className="flex-1 md:flex-none bg-linear-to-r from-pink-500 to-pink-600 text-white px-6 py-3 rounded-2xl font-bold shadow-md hover:scale-105 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 md:flex-none bg-linear-to-r from-sky-500 to-cyan-500 text-white px-6 py-3 rounded-2xl font-bold shadow-md hover:scale-105 transition disabled:opacity-50 disabled:cursor-not-allowed"
 
             >
 

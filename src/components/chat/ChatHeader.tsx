@@ -40,7 +40,7 @@ export function ChatHeader({
   const headerSubtextClassName = isVibesPro ? "text-[#EBD39A]/70" : "text-slate-600";
   const panelClassName = isVibesPro
     ? "rounded-2xl border border-[#D4AF37]/20 bg-[#181818]/80 px-3 py-2 backdrop-blur-xl"
-    : "rounded-2xl border border-pink-100 bg-white/90 px-3 py-2 backdrop-blur-xl shadow-sm";
+    : "rounded-2xl border border-sky-100 bg-white/90 px-3 py-2 backdrop-blur-xl shadow-sm";
 
   return (
     <div className={headerClassName}>
@@ -54,13 +54,13 @@ export function ChatHeader({
               ←
             </Link>
 
-            <div className={`grid place-items-center w-10 h-10 rounded-[20px] ${isVibesPro ? "bg-linear-to-r from-[#D4AF37] to-[#F0C75E] text-[#111111]" : "bg-linear-to-r from-fuchsia-500 via-violet-500 to-cyan-400 text-white"} font-bold text-sm`}>
+            <div className={`grid place-items-center w-10 h-10 rounded-[20px] ${isVibesPro ? "bg-linear-to-r from-[#D4AF37] to-[#F0C75E] text-[#111111]" : "bg-linear-to-r from-sky-500 via-cyan-400 to-blue-500 text-white"} font-bold text-sm`}>
               {recipientName.charAt(0)}
             </div>
 
             <div>
               <h2
-                className={`font-semibold text-sm md:text-base cursor-pointer transition ${isVibesPro ? "text-[#F7E7B2] hover:text-[#FFD98A]" : "text-slate-800 hover:text-fuchsia-600"}`}
+                className={`font-semibold text-sm md:text-base cursor-pointer transition ${isVibesPro ? "text-[#F7E7B2] hover:text-[#FFD98A]" : "text-slate-800 hover:text-sky-600"}`}
                 onClick={() => onNavigateToProfile(recipientName)}
               >
                 {recipientName}

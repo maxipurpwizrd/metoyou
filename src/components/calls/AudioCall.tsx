@@ -55,11 +55,11 @@ export default function AudioCall({ session, remoteStream, isRemoteAudioActive, 
   const formattedDuration = `${Math.floor(duration / 60)}:${String(duration % 60).padStart(2, "0")}`;
 
   return (
-    <div className="fixed inset-0 z-90 flex items-center justify-center overflow-hidden bg-linear-to-br from-slate-950 via-cyan-950 to-violet-950 text-white">
+    <div className="fixed inset-0 z-90 flex items-center justify-center overflow-hidden bg-linear-to-br from-slate-950 via-sky-950 to-cyan-950 text-white">
       <audio ref={audioRef} autoPlay playsInline />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(34,211,238,.18),transparent_38%),radial-gradient(circle_at_bottom,rgba(139,92,246,.2),transparent_42%)]" />
       <div className="relative flex w-full max-w-md flex-col items-center px-6 text-center">
-        <div className={`relative grid h-32 w-32 place-items-center rounded-full border-4 border-cyan-300/70 bg-linear-to-br from-cyan-400 to-violet-500 text-5xl font-bold shadow-2xl shadow-cyan-500/25 ${isRemoteAudioActive ? "ring-8 ring-cyan-300/10" : ""}`}>
+        <div className={`relative grid h-32 w-32 place-items-center rounded-full border-4 border-cyan-300/70 bg-linear-to-br from-sky-400 to-cyan-500 text-5xl font-bold shadow-2xl shadow-cyan-500/25 ${isRemoteAudioActive ? "ring-8 ring-cyan-300/10" : ""}`}>
           {session.remoteUsername?.charAt(0).toUpperCase() || "?"}
         </div>
         <p className="mt-7 text-xs font-semibold uppercase tracking-[0.3em] text-cyan-200/70">{session.status === "ringing" ? "Connecting" : "Connected"}</p>

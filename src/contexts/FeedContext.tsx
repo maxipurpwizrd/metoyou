@@ -233,6 +233,19 @@ export function FeedProvider({ children }: { children: ReactNode }) {
     return nextPosts;
   };
 
+  useEffect(() => {
+    const clearOnLogout = () => {
+      setPostsState([]);
+      setHasMore(true);
+      setLastFetchTime(null);
+      setSelectedPostId(null);
+      setSavedScrollY(0);
+    };
+
+    window.addEventListener("metoyou:auth-signed-out", clearOnLogout);
+    return () => window.removeEventListener("metoyou:auth-signed-out", clearOnLogout);
+  }, []);
+
   const loadPostsPage = async ({ append = false, refresh = false, background = false } = {}) => {
     if (!user || authLoading) return;
     const cursor = append ? postsRef.current[postsRef.current.length - 1]?.created_at ?? null : null;

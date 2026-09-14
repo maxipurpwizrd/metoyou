@@ -46,7 +46,7 @@ export default function Home() {
   return (
     <>
 
-      <div className="app-screen relative bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 overflow-hidden">
+      <div className="app-screen relative bg-gradient-to-br from-sky-100 via-white to-cyan-100 overflow-hidden">
         <div className="absolute top-4 left-4 z-20" data-language-menu-root>
           <div className="relative">
             <button
@@ -66,7 +66,7 @@ export default function Home() {
                       setLanguage(option.value);
                       setShowLanguageMenu(false);
                     }}
-                    className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm font-medium transition ${language === option.value ? "bg-pink-100 text-pink-700" : "text-slate-700 hover:bg-slate-100"}`}
+                    className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm font-medium transition ${language === option.value ? "bg-sky-100 text-sky-700" : "text-slate-700 hover:bg-slate-100"}`}
                   >
                     <span>{option.label}</span>
                     <span className="text-xs font-semibold opacity-70">{option.short}</span>
@@ -112,7 +112,7 @@ export default function Home() {
 
               <Link
                 to="/welcome"
-                className="bg-linear-to-r from-pink-500 to-purple-500 text-white px-8 py-4 rounded-2xl font-bold shadow-xl hover:scale-105 transition"
+                className="bg-linear-to-r from-sky-500 to-cyan-400 text-white px-8 py-4 rounded-2xl font-bold shadow-xl hover:scale-105 transition"
               >
                 {t("home.enter")}
               </Link>

@@ -13,11 +13,11 @@ export default function IncomingCall({ senderName, callType, onAccept, onReject 
   return (
     <div className="fixed inset-0 z-100 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-xl">
       <div className="relative w-full max-w-sm overflow-hidden rounded-[2rem] border border-white/15 bg-slate-900/95 p-7 text-white shadow-2xl shadow-slate-950/50">
-        <div className="absolute inset-x-0 top-0 h-1 bg-linear-to-r from-cyan-400 via-violet-400 to-fuchsia-400" />
+        <div className="absolute inset-x-0 top-0 h-1 bg-linear-to-r from-sky-400 via-cyan-400 to-blue-500" />
         <div className="flex flex-col items-center text-center">
           <div className="relative mb-5">
             <div className="absolute -inset-3 animate-ping rounded-full bg-cyan-400/15" />
-            <div className="relative grid h-24 w-24 place-items-center rounded-full border-4 border-cyan-300/60 bg-linear-to-br from-cyan-400 to-violet-500 text-3xl font-bold shadow-xl shadow-cyan-500/20">
+            <div className="relative grid h-24 w-24 place-items-center rounded-full border-4 border-cyan-300/60 bg-linear-to-br from-sky-400 to-cyan-500 text-3xl font-bold shadow-xl shadow-cyan-500/20">
               {senderName.charAt(0).toUpperCase() || "?"}
             </div>
           </div>

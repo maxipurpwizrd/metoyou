@@ -1,3 +1,55 @@
+@keyframes call-history-phone-lift {
+  0%, 100% {
+    transform: translateY(2px) rotate(0deg);
+  }
+  12% {
+    transform: translateY(-2px) rotate(-9deg);
+  }
+  18% {
+    transform: translateY(-5px) rotate(10deg);
+  }
+  24% {
+    transform: translateY(-6px) rotate(-10deg);
+  }
+  30% {
+    transform: translateY(-4px) rotate(8deg);
+  }
+  38% {
+    transform: translateY(1px) rotate(-4deg);
+  }
+  46% {
+    transform: translateY(2px) rotate(0deg);
+  }
+}
+
+.call-history-phone {
+  animation: call-history-phone-lift 2.4s ease-in-out infinite;
+  transform-origin: bottom center;
+}
+
+@keyframes call-history-arrow-pulse {
+  0%, 100% {
+    opacity: 0;
+  }
+  35%, 55% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 0;
+  }
+}
+
+.call-history-arrow {
+  animation: call-history-arrow-pulse 1.8s ease-in-out infinite;
+  font-size: 0.7em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .call-history-phone,
+  .call-history-arrow {
+    animation: none;
+  }
+}
 .counter {
   font-size: 16px;
   padding: 5px 10px;

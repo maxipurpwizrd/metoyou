@@ -12,10 +12,10 @@ export default function MessageCard({
   unread = false,
 }: Props) {
   return (
-    <div className={`rounded-[28px] border px-4 py-3 shadow-sm transition cursor-pointer backdrop-blur-3xl ${unread ? "bg-white/35 border-white/50 shadow-lg shadow-fuchsia-200/20" : "bg-white/20 border-white/30 hover:bg-white/30"}`}>
+    <div className={`rounded-[28px] border px-4 py-3 shadow-sm transition cursor-pointer backdrop-blur-3xl ${unread ? "bg-white/35 border-white/50 shadow-lg shadow-sky-200/20" : "bg-white/20 border-white/30 hover:bg-white/30"}`}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="grid place-items-center w-11 h-11 rounded-[20px] bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 text-white font-bold text-sm shrink-0 shadow-md">
+          <div className="grid place-items-center w-11 h-11 rounded-[20px] bg-linear-to-r from-sky-500 via-cyan-400 to-blue-500 text-white font-bold text-sm shrink-0 shadow-md">
             {name.charAt(0)}
           </div>
 
@@ -25,7 +25,7 @@ export default function MessageCard({
                 {name}
               </h3>
               {unread ? (
-                <span className="rounded-full bg-fuchsia-500 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-white">
+                <span className="rounded-full bg-sky-500 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-white">
                   new
                 </span>
               ) : null}
@@ -42,7 +42,7 @@ export default function MessageCard({
             {time}
           </p>
 
-          <div className={`h-2.5 w-2.5 rounded-full ${unread ? "bg-fuchsia-500" : "bg-emerald-500"}`} />
+          <div className={`h-2.5 w-2.5 rounded-full ${unread ? "bg-sky-500" : "bg-emerald-500"}`} />
         </div>
       </div>
     </div>

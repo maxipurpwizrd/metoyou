@@ -67,7 +67,7 @@ export default function DesktopSplitLayout({ children }: Props) {
   }
 
   return (
-    <div className="app-screen bg-linear-to-br from-blue-100 via-pink-100 to-purple-100 p-3 lg:p-4 xl:p-6">
+    <div className="app-screen bg-linear-to-br from-sky-100 via-white to-cyan-100 p-3 lg:p-4 xl:p-6">
       <div className="mx-auto flex h-[calc(100dvh-1.5rem)] max-w-7xl gap-3 lg:gap-4 xl:gap-6">
         <div className="flex-1 min-w-0 overflow-hidden rounded-4xl border border-white/40 bg-white/20 shadow-[0_20px_70px_rgba(15,23,42,0.12)] backdrop-blur-2xl">
           <div className="h-full overflow-y-auto overflow-x-hidden">

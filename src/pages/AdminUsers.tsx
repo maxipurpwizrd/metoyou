@@ -159,7 +159,7 @@ export default function AdminUsers() {
 
   if (isCheckingAccess) {
     return (
-      <div className="app-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 p-4 pb-16 text-slate-900 sm:p-6">
+      <div className="app-screen bg-gradient-to-br from-sky-100 via-white to-cyan-100 p-4 pb-16 text-slate-900 sm:p-6">
         <div className="mx-auto flex max-w-4xl flex-col gap-4">
           <button
             type="button"
@@ -171,7 +171,7 @@ export default function AdminUsers() {
           </button>
 
           <div className="rounded-[32px] border border-white/60 bg-white/70 p-8 text-center shadow-2xl backdrop-blur-2xl">
-            <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-pink-200 border-t-pink-500" />
+            <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-sky-200 border-t-sky-500" />
             <p className="text-lg font-semibold text-slate-900">Checking access…</p>
           </div>
         </div>
@@ -181,7 +181,7 @@ export default function AdminUsers() {
 
   if (!hasAdminAccess) {
     return (
-      <div className="app-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 p-4 pb-16 text-slate-900 sm:p-6">
+      <div className="app-screen bg-gradient-to-br from-sky-100 via-white to-cyan-100 p-4 pb-16 text-slate-900 sm:p-6">
         <div className="mx-auto flex max-w-4xl flex-col gap-4">
           <button
             type="button"
@@ -201,7 +201,7 @@ export default function AdminUsers() {
   }
 
   return (
-    <div className="app-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 p-4 pb-16 text-slate-900 sm:p-6">
+    <div className="app-screen bg-gradient-to-br from-sky-100 via-white to-cyan-100 p-4 pb-16 text-slate-900 sm:p-6">
       <div className="mx-auto flex max-w-5xl flex-col gap-4">
         <button
           type="button"
@@ -222,7 +222,7 @@ export default function AdminUsers() {
             value={adminUserQuery}
             onChange={(event) => setAdminUserQuery(event.target.value)}
             placeholder="Search by username or email"
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-pink-500"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-sky-500"
           />
 
           <div className="mt-4 space-y-2">

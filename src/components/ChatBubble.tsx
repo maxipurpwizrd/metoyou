@@ -48,7 +48,7 @@ export default function ChatBubble({ message, mine = false, onEdit, onDelete, on
 
   const bubbleBase = `rounded-[28px] shadow-sm ${
     mine
-      ? "bg-linear-to-r from-pink-500 to-purple-500 text-white"
+      ? "bg-linear-to-r from-sky-500 to-cyan-500 text-white"
       : "bg-white/60 backdrop-blur-2xl border border-white/50 text-slate-800"
   }`;
 
@@ -326,7 +326,7 @@ export default function ChatBubble({ message, mine = false, onEdit, onDelete, on
                     setIsEditing(false);
                   }
                 }}
-                className="flex-1 px-3 py-1 rounded-full bg-pink-500 text-white text-sm font-medium hover:bg-pink-600 transition"
+                className="flex-1 px-3 py-1 rounded-full bg-sky-500 text-white text-sm font-medium hover:bg-sky-600 transition"
               >
                 Save
               </button>

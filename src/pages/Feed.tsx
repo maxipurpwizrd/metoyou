@@ -984,12 +984,12 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
   const storyCardBorderClasses = isVibesPro
     ? "border-2 border-amber-300/25 shadow-[0_0_0_2px_rgba(212,175,55,0.22),0_24px_50px_rgba(212,175,55,0.18)]"
     : "";
-  const storyPlaceholderGradient = isVibesPro ? "from-[#7C5CFF] via-[#00D4FF] to-[#D4AF37]" : "from-pink-400 via-purple-400 to-blue-400";
-  const storyCardBgClass = isVibesPro ? "bg-[#111111]/85 text-white" : "bg-white/80 text-pink-500";
+  const storyPlaceholderGradient = isVibesPro ? "from-[#7C5CFF] via-[#00D4FF] to-[#D4AF37]" : "from-sky-400 via-cyan-400 to-blue-500";
+  const storyCardBgClass = isVibesPro ? "bg-[#111111]/85 text-white" : "bg-white/80 text-sky-600";
   const storyCardStyle = { borderRadius: storyCardRadius };
 
   const focusedPostContent = shouldFocusOnPost ? (
-    <div className={`app-screen ${isVibesPro ? 'bg-[#0B0B0B]' : 'bg-linear-to-br from-blue-100 via-pink-100 to-purple-100'} px-4 sm:px-6`}>
+    <div className={`app-screen ${isVibesPro ? 'bg-[#0B0B0B]' : 'bg-linear-to-br from-sky-100 via-white to-cyan-100'} px-4 sm:px-6`}>
       <div className="mx-auto max-w-md pb-24 pt-4">
         {focusedPost ? (
           <div className={`rounded-[32px] border p-2 shadow-2xl backdrop-blur-md ${isVibesPro ? 'border-[#D4AF37]/20 bg-[#181818]' : 'border-white/40 bg-white/70'}`}>
@@ -1033,7 +1033,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
 
   // Normal feed content that can be wrapped by VibesProFeed theme
   const feedContent = (
-    <div className={`app-screen ${isVibesPro ? 'bg-[#0B0B0B]' : 'bg-linear-to-br from-blue-100 via-pink-100 to-purple-100'} px-4 sm:px-6`}>
+    <div className={`app-screen ${isVibesPro ? 'bg-[#0B0B0B]' : 'bg-linear-to-br from-sky-100 via-white to-cyan-100'} px-4 sm:px-6`}>
       {!shouldFocusOnPost && !isVibesPro && <Navbar />}
 
       <div className={`max-w-md mx-auto pb-24 space-y-5 ${shouldFocusOnPost ? 'pt-4' : isVibesPro ? 'pt-8' : 'pt-28'}`}>
@@ -1468,7 +1468,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
           <div className="relative w-[calc(100vw-1rem)] h-[calc(100vh-2rem)] sm:w-screen sm:h-screen overflow-hidden bg-slate-900 rounded-[1.25rem] sm:rounded-none">
             <div className="absolute inset-0 z-10 rounded-[1.25rem] sm:rounded-none border border-white/25 shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_0_0_1px_rgba(255,255,255,0.06)_inset,0_18px_45px_rgba(0,0,0,0.35)] pointer-events-none" />
             <div className="absolute inset-3 z-10 rounded-2xl sm:rounded-none border border-white/15 pointer-events-none" />
-            <div className="absolute inset-6 z-10 rounded-[0.9rem] sm:rounded-none border border-fuchsia-400/20 pointer-events-none" />
+            <div className="absolute inset-6 z-10 rounded-[0.9rem] sm:rounded-none border border-sky-400/20 pointer-events-none" />
             <div className="absolute inset-x-0 top-0 z-50 flex gap-1.5 p-2">
               {stories.map((_, index) => (
                 <div key={index} className="h-1 flex-1 overflow-hidden rounded-full bg-white/20">
@@ -1578,7 +1578,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                 />
               </div>
             ) : (
-              <div className="relative z-30 w-full h-full bg-linear-to-br from-pink-500 via-purple-500 to-blue-500 px-6 py-8 text-white flex items-center justify-center">
+              <div className="relative z-30 w-full h-full bg-linear-to-br from-sky-500 via-cyan-500 to-blue-500 px-6 py-8 text-white flex items-center justify-center">
                 <div
                   className="max-w-[85%] max-h-[70vh] overflow-y-auto whitespace-pre-wrap wrap-break-word text-center text-2xl md:text-3xl font-semibold leading-relaxed scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent"
                   style={{
@@ -1629,7 +1629,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                 <button
                   type="button"
                   onClick={() => openStoryEditor("photo")}
-                  className="rounded-2xl bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-pink-500/20"
+                  className="rounded-2xl bg-linear-to-r from-sky-500 via-cyan-500 to-blue-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-sky-500/20"
                 >
                   Photo
                 </button>
@@ -1651,7 +1651,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                 <button
                   type="button"
                   onClick={() => openStoryEditor("photo")}
-                  className="py-3 rounded-xl bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 text-white font-semibold shadow-md"
+                  className="py-3 rounded-xl bg-linear-to-r from-sky-500 via-cyan-500 to-blue-500 text-white font-semibold shadow-md"
                 >
                   Photo
                 </button>
@@ -1722,7 +1722,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                   setAudioChoiceOpen(false);
                   voiceInputRef.current?.click();
                 }}
-                className="rounded-2xl bg-linear-to-r from-fuchsia-500 via-cyan-500 to-amber-400 px-4 py-3 text-sm font-semibold text-black"
+                className="rounded-2xl bg-linear-to-r from-sky-500 via-cyan-500 to-blue-500 px-4 py-3 text-sm font-semibold text-white"
               >
                 Upload Audio
               </button>
@@ -1914,7 +1914,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                       type="button"
                       onClick={handleCreateStory}
                       disabled={storyCreating}
-                      className="min-w-36 rounded-2xl bg-linear-to-r from-fuchsia-500 via-cyan-500 to-amber-400 px-4 py-3 text-sm font-semibold text-black transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="min-w-36 rounded-2xl bg-linear-to-r from-sky-500 via-cyan-500 to-blue-500 px-4 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {storyCreating ? "Posting..." : "Share Story"}
                     </button>
@@ -1928,7 +1928,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                 {selectedImage ? (
                   <img src={selectedImage} alt="preview" className="w-full h-full object-cover" />
                 ) : (
-                  <div className="w-full h-full bg-linear-to-br from-pink-500 via-purple-500 to-blue-500 overflow-y-auto p-4 flex items-center justify-center text-white font-semibold text-center">
+                  <div className="w-full h-full bg-linear-to-br from-sky-500 via-cyan-500 to-blue-500 overflow-y-auto p-4 flex items-center justify-center text-white font-semibold text-center">
                     <div className="w-full whitespace-pre-wrap wrap-break-word text-xl leading-relaxed">
                       {storyText.trim() ? storyText.trim() : "Text Story"}
                     </div>
@@ -1942,7 +1942,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                 value={storyText}
                 onChange={(e) => setStoryText(e.target.value)}
                 placeholder="Drop a vibe text onto your story..."
-                className="w-full max-h-52 overflow-y-auto text-sm border border-slate-100 bg-slate-50/50 rounded-xl px-3 py-2.5 outline-none resize-none placeholder:text-slate-400 focus:border-pink-300 transition-colors"
+                className="w-full max-h-52 overflow-y-auto text-sm border border-slate-100 bg-slate-50/50 rounded-xl px-3 py-2.5 outline-none resize-none placeholder:text-slate-400 focus:border-sky-300 transition-colors"
                 rows={2}
               />
 
@@ -1952,7 +1952,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                   onClick={() => {
                     showStoryNotice("Coming Soon");
                   }}
-                  className="bg-purple-50 text-purple-600 py-2.5 rounded-xl hover:bg-purple-100 transition-colors"
+                  className="bg-sky-50 text-sky-600 py-2.5 rounded-xl hover:bg-sky-100 transition-colors"
                 >
                   🎵 {storyMusic ? "Change Audio" : "Add Music"}
                 </button>
@@ -1982,7 +1982,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                 </p>
               ) : null}
 
-              {storyMusic && <p className="text-[11px] text-purple-600 font-medium truncate px-1">Selected: {storyMusic}</p>}
+              {storyMusic && <p className="text-[11px] text-sky-600 font-medium truncate px-1">Selected: {storyMusic}</p>}
               {storyVoice && <audio controls src={storyVoice} className="w-full h-6 opacity-80" />}
 
               {/* Expiry Time Selectors */}
@@ -1995,7 +1995,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                       onClick={() => setStoryDuration(h)}
                       className={`flex-1 py-1.5 text-xs font-medium rounded-lg border transition-all ${
                         storyDuration === h
-                          ? "bg-pink-500 border-pink-500 text-white shadow-xs"
+                          ? "bg-sky-500 border-sky-500 text-white shadow-xs"
                           : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
                       }`}
                     >
@@ -2012,7 +2012,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                     <span>{storyCreateProgress}%</span>
                   </div>
                   <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
-                    <div className="h-full rounded-full bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 transition-all duration-200"
+                    <div className="h-full rounded-full bg-linear-to-r from-sky-500 via-cyan-500 to-blue-500 transition-all duration-200"
                       style={{ width: `${storyCreateProgress}%` }}
                     />
                   </div>
@@ -2040,7 +2040,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                 <button
                   type="button"
                   onClick={handleCreateStory}
-                  className="flex-1 py-2.5 rounded-xl bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 text-white shadow-md shadow-purple-200 active:scale-95 transition-transform"
+                  className="flex-1 py-2.5 rounded-xl bg-linear-to-r from-sky-500 via-cyan-500 to-blue-500 text-white shadow-md shadow-sky-200 active:scale-95 transition-transform"
                   disabled={storyCreating}
                 >
                   {storyCreating ? "Working..." : "Post Story 🚀"}

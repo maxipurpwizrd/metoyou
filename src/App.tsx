@@ -18,6 +18,7 @@ import Chat from "./pages/Chat";
 import Messages from "./pages/Messages";
 import SpamMessages from "./pages/SpamMessages";
 import ArchivedMessages from "./pages/ArchivedMessages";
+import CallHistory from "./pages/CallHistory";
 import Notifications from "./pages/Notifications";
 import Search from "./pages/Search";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -27,6 +28,7 @@ import VibesProUpgrade from "./pages/VibesProUpgrade";
 import VibesProSuccess from "./pages/VibesProSuccess";
 import RequireAuth from "./components/RequireAuth";
 import { useAuth } from "./hooks/useAuth";
+import { GlobalCallProvider } from "./contexts/GlobalCallContext";
 
 const LAST_ROUTE_STORAGE_KEY = "metoyou:last-auth-route";
 const PUBLIC_ROUTES = new Set(["/", "/welcome", "/login", "/signup", "/about"]);
@@ -144,6 +146,7 @@ function AppRoutes() {
       <Route path="/messages" element={<RequireAuth><Messages /></RequireAuth>} />
       <Route path="/messages/spam" element={<RequireAuth><SpamMessages /></RequireAuth>} />
       <Route path="/messages/archived" element={<RequireAuth><ArchivedMessages /></RequireAuth>} />
+      <Route path="/messages/calls" element={<RequireAuth><CallHistory /></RequireAuth>} />
       <Route path="/chat" element={<RequireAuth><Chat /></RequireAuth>} />
       <Route path="/notifications" element={<RequireAuth><Notifications /></RequireAuth>} />
       <Route path="/search" element={<RequireAuth><Search /></RequireAuth>} />
@@ -160,9 +163,11 @@ function App() {
       <VideoProvider>
         <ChatProvider>
           <BrowserRouter>
-            <ScrollRestoration />
-            <AppRoutes />
-            <PWAInstallPrompt />
+            <GlobalCallProvider>
+              <ScrollRestoration />
+              <AppRoutes />
+              <PWAInstallPrompt />
+            </GlobalCallProvider>
           </BrowserRouter>
         </ChatProvider>
       </VideoProvider>

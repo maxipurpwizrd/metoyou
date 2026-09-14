@@ -876,7 +876,7 @@ export default function AdminDashboard() {
 
   if (isCheckingAccess) {
     return (
-      <div className="app-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 p-4 pb-16 text-slate-900 sm:p-6">
+      <div className="app-screen bg-gradient-to-br from-sky-100 via-white to-cyan-100 p-4 pb-16 text-slate-900 sm:p-6">
         <div className="mx-auto flex max-w-3xl flex-col gap-4">
           <button
             type="button"
@@ -888,7 +888,7 @@ export default function AdminDashboard() {
           </button>
 
           <div className="rounded-[32px] border border-white/60 bg-white/70 p-8 text-center shadow-2xl backdrop-blur-2xl">
-            <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-pink-200 border-t-pink-500" />
+            <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-sky-200 border-t-sky-500" />
             <p className="text-lg font-semibold text-slate-900">Checking access…</p>
             <p className="mt-2 text-sm text-slate-600">Please wait while we confirm your admin permissions.</p>
           </div>
@@ -899,7 +899,7 @@ export default function AdminDashboard() {
 
   if (!hasAdminAccess) {
     return (
-      <div className="app-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 p-4 pb-16 text-slate-900 sm:p-6">
+      <div className="app-screen bg-gradient-to-br from-sky-100 via-white to-cyan-100 p-4 pb-16 text-slate-900 sm:p-6">
         <div className="mx-auto flex max-w-3xl flex-col gap-4">
           <button
             type="button"
@@ -920,7 +920,7 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="app-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 p-4 pb-16 text-slate-900 sm:p-6">
+    <div className="app-screen bg-gradient-to-br from-sky-100 via-white to-cyan-100 p-4 pb-16 text-slate-900 sm:p-6">
       <div className="mx-auto flex max-w-6xl flex-col gap-4">
         <button
           type="button"
@@ -944,9 +944,9 @@ export default function AdminDashboard() {
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {[
               { label: "Users", value: adminStats.users, icon: User, tone: "from-sky-500 to-blue-500", action: () => navigate("/admin-users") },
-              { label: "Posts", value: adminStats.posts, icon: Activity, tone: "from-violet-500 to-fuchsia-500", action: () => navigate("/admin-posts") },
+              { label: "Posts", value: adminStats.posts, icon: Activity, tone: "from-sky-500 to-cyan-500", action: () => navigate("/admin-posts") },
               { label: "Comments", value: adminStats.comments, icon: AlertTriangle, tone: "from-amber-500 to-orange-500" },
-              { label: "Likes", value: adminStats.likes, icon: Heart, tone: "from-rose-500 to-pink-500" },
+              { label: "Likes", value: adminStats.likes, icon: Heart, tone: "from-sky-500 to-blue-500" },
               { label: "Reports", value: adminStats.reports, icon: ShieldAlert, tone: "from-red-500 to-rose-500" },
               { label: "Online now", value: adminStats.onlineNow, icon: UserCheck, tone: "from-emerald-500 to-teal-500" },
             ].map((item) => {

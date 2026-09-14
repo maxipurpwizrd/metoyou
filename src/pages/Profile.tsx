@@ -949,11 +949,11 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
   };
 
   return appReady ? (profileLoading ? <ProfileSkeleton /> : (
-    <div className={`${isVibesPro ? 'fixed inset-0 z-0 overflow-hidden bg-[#0B0B0B]' : 'app-screen bg-linear-to-br from-pink-100 via-purple-100 to-blue-100 p-3 md:p-6 pt-24 md:pt-32 pb-20 md:pb-24'}`}>
+    <div className={`${isVibesPro ? 'fixed inset-0 z-0 overflow-hidden bg-[#0B0B0B]' : 'app-screen bg-linear-to-br from-sky-100 via-white to-cyan-100 p-3 md:p-6 pt-24 md:pt-32 pb-20 md:pb-24'}`}>
       <div className={`mx-auto ${isVibesPro ? 'w-full max-w-none' : 'max-w-2xl'}`}>
         {!isVibesPro && (
           <div className="flex items-center justify-center pt-4 md:pt-6 mb-6 md:mb-8">
-            <h1 className="text-2xl md:text-4xl font-black bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 bg-clip-text text-transparent">
+            <h1 className="text-2xl md:text-4xl font-black bg-linear-to-r from-sky-600 via-cyan-500 to-blue-600 bg-clip-text text-transparent">
               MeToYou 💜
             </h1>
           </div>
@@ -1040,7 +1040,7 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
                 <button
                   type="button"
                   onClick={handleProfilePicClick}
-                  className="w-32 h-32 md:w-40 md:h-40 rounded-full bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 p-1 shadow-2xl focus:outline-none"
+                  className="w-32 h-32 md:w-40 md:h-40 rounded-full bg-linear-to-r from-sky-500 via-cyan-400 to-blue-500 p-1 shadow-2xl focus:outline-none"
                 >
                   <div className="w-full h-full rounded-full bg-white flex items-center justify-center text-4xl md:text-6xl overflow-hidden">
                     {profilePic ? (
@@ -1090,7 +1090,7 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
                 </div>
                 <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-slate-200">
                   <div
-                    className="h-full rounded-full bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 transition-all duration-300"
+                    className="h-full rounded-full bg-linear-to-r from-sky-500 via-cyan-400 to-blue-500 transition-all duration-300"
                     style={{ width: `${Math.min(uploadProgress, 100)}%` }}
                   />
                 </div>
@@ -1194,9 +1194,9 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
                               closeHommiesList();
                               navigate(`/profile/${encodeURIComponent(connection.username)}`);
                             }}
-                            className={`relative flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left shadow-sm transition hover:bg-slate-50 ${isHighlightedHommie(connection) ? 'border-pink-400 bg-pink-50 shadow-[0_0_0_2px_rgba(236,72,153,0.16)]' : 'border-slate-200 bg-white'}`}
+                            className={`relative flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left shadow-sm transition hover:bg-slate-50 ${isHighlightedHommie(connection) ? 'border-sky-400 bg-sky-50 shadow-[0_0_0_2px_rgba(14,165,233,0.16)]' : 'border-slate-200 bg-white'}`}
                           >
-                            <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-linear-to-br from-pink-500 via-purple-500 to-blue-500 text-sm font-semibold text-white">
+                            <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-linear-to-br from-sky-500 via-cyan-400 to-blue-500 text-sm font-semibold text-white">
                               {connection.profilePic ? (
                                 <img src={connection.profilePic} alt={connection.username} className="h-full w-full object-cover" />
                               ) : (
@@ -1246,7 +1246,7 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
                         {post.image ? (
                           <img src={post.image} alt={post.text} className="w-full h-32 md:h-40 object-cover" />
                         ) : (
-                          <div className="h-32 md:h-40 flex items-center justify-center bg-pink-100 text-slate-700 px-3 md:px-4 text-xs md:text-sm text-center">
+                          <div className="h-32 md:h-40 flex items-center justify-center bg-sky-100 text-slate-700 px-3 md:px-4 text-xs md:text-sm text-center">
                             {post.text}
                           </div>
                         )}

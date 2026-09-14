@@ -1,23 +1,30 @@
 import { Phone, Video } from "lucide-react";
+import type { RefObject } from "react";
 import type { CallSession } from "../../types/call";
 
 interface OutgoingCallProps {
   session: CallSession;
+  localVideoRef: RefObject<HTMLVideoElement | null>;
   onEndCall: () => void;
 }
 
-export default function OutgoingCall({ session, onEndCall }: OutgoingCallProps) {
+export default function OutgoingCall({ session, localVideoRef, onEndCall }: OutgoingCallProps) {
   const isVideo = session.callType === "video";
 
   return (
-    <div className="fixed inset-0 z-90 flex items-center justify-center overflow-hidden bg-linear-to-br from-slate-950 via-violet-950 to-slate-950 text-white">
+    <div className="fixed inset-0 z-90 flex items-center justify-center overflow-hidden bg-linear-to-br from-slate-950 via-sky-950 to-slate-950 text-white">
       <div className="absolute -left-24 -top-24 h-72 w-72 rounded-full bg-cyan-400/15 blur-3xl" />
-      <div className="absolute -bottom-24 -right-24 h-72 w-72 rounded-full bg-violet-500/20 blur-3xl" />
+      <div className="absolute -bottom-24 -right-24 h-72 w-72 rounded-full bg-cyan-500/20 blur-3xl" />
       <div className="relative flex w-full max-w-sm flex-col items-center px-6 text-center">
+        {isVideo && (
+          <div className="mb-7 h-48 w-32 overflow-hidden rounded-2xl border-2 border-white/30 bg-slate-900 shadow-xl">
+            <video ref={localVideoRef} autoPlay playsInline muted className="h-full w-full scale-x-[-1] object-cover" />
+          </div>
+        )}
         <div className="relative mb-7">
           <div className="absolute -inset-5 animate-ping rounded-full border border-cyan-300/20" />
-          <div className="absolute -inset-2 rounded-full border border-violet-300/30" />
-          <div className="relative grid h-28 w-28 place-items-center rounded-full border-4 border-cyan-300/60 bg-linear-to-br from-cyan-400 to-violet-500 text-4xl font-bold shadow-2xl shadow-cyan-500/20">
+          <div className="absolute -inset-2 rounded-full border border-sky-300/30" />
+          <div className="relative grid h-28 w-28 place-items-center rounded-full border-4 border-cyan-300/60 bg-linear-to-br from-sky-400 to-cyan-500 text-4xl font-bold shadow-2xl shadow-cyan-500/20">
             {session.remoteUsername?.charAt(0).toUpperCase() || "?"}
           </div>
         </div>

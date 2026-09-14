@@ -10,7 +10,7 @@ export default function AboutMeToYou() {
         <div className="rounded-[32px] border border-white/70 bg-white/75 p-5 shadow-[0_20px_80px_rgba(15,23,42,0.12)] backdrop-blur-2xl sm:p-8 lg:p-10">
           <div className="mb-6 flex items-center justify-between gap-3 border-b border-slate-200/80 pb-4">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.35em] text-pink-600">{t("about.royalMessage")}</p>
+              <p className="text-sm font-semibold uppercase tracking-[0.35em] text-sky-600">{t("about.royalMessage")}</p>
               <h1 className="text-3xl font-black text-slate-900 sm:text-4xl">{t("app.title")}</h1>
             </div>
             <Link
@@ -26,7 +26,7 @@ export default function AboutMeToYou() {
               {t("about.intro")}
             </p>
 
-            <div className="rounded-[28px] border border-pink-100 bg-gradient-to-br from-pink-50/80 to-white p-6 shadow-inner">
+            <div className="rounded-[28px] border border-sky-100 bg-gradient-to-br from-sky-50/80 to-white p-6 shadow-inner">
               <h2 className="mb-3 text-2xl font-black text-slate-900">{t("home.card.conversations.title")}</h2>
               <ul className="space-y-3 text-base leading-7">
                 <li>• {t("about.feature1")}</li>

@@ -62,8 +62,6 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
   const { profile } = useSession();
   const isVibesPro = isVibesProEnabled(profile);
 
-  if (!appReady || !profileReady) return null;
-
   // Restore/save scroll position for messages list per user
   useEffect(() => {
     const userId = typeof user?.id === "string" ? user.id : null;
@@ -503,7 +501,7 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
       }
       hideBottomNavTimerRef.current = window.setTimeout(() => {
         setShowBottomNav(false);
-      }, 1800);
+      }, 10000);
     };
 
     const handleScroll = () => revealBottomNav();
@@ -547,8 +545,10 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
     };
   }, [isVibesPro]);
 
+  if (!appReady || !profileReady) return null;
+
   const messagesContent = (
-    <div className={`app-screen ${isVibesPro ? 'bg-[#0B0B0B]' : 'bg-linear-to-br from-pink-100 via-purple-100 to-blue-100'} p-6 pb-32`}>
+    <div className={`app-screen ${isVibesPro ? 'bg-[#0B0B0B]' : 'bg-linear-to-br from-sky-100 via-white to-cyan-100'} p-6 pb-32`}>
       {!isVibesPro && (
         <div className="max-w-xl mx-auto">
           {/* Header for free tier */}
@@ -561,7 +561,7 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
               >
                 ←
               </Link>
-              <h1 className="text-4xl sm:text-5xl font-black text-transparent bg-clip-text bg-linear-to-r from-fuchsia-500 via-cyan-300 to-amber-300 shadow-[0_0_30px_rgba(255,255,255,0.35)]">
+              <h1 className="text-4xl sm:text-5xl font-black text-transparent bg-clip-text bg-linear-to-r from-sky-600 via-cyan-500 to-blue-600 shadow-[0_0_30px_rgba(255,255,255,0.35)]">
                 MeToYou 💎✨
               </h1>
             </div>
@@ -571,7 +571,7 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
             </p>
 
             <div className="mt-3 inline-flex items-center gap-2 text-xs uppercase tracking-[0.25em] text-slate-700 justify-center">
-              <span className="inline-block px-3 py-1 rounded-full bg-linear-to-r from-fuchsia-500 via-cyan-300 to-amber-300 text-white shadow-lg shadow-fuchsia-200/40">
+              <span className="inline-block px-3 py-1 rounded-full bg-linear-to-r from-sky-500 via-cyan-400 to-blue-500 text-white shadow-lg shadow-sky-200/40">
                 {t("messages.badge")}
               </span>
               <span className="inline-block px-3 py-1 rounded-full bg-white/90 text-slate-900 border border-slate-200 backdrop-blur-sm shadow-sm">
@@ -704,7 +704,7 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
                     <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold ${
                       isVibesPro
                         ? 'bg-linear-to-r from-[#D4AF37] to-[#F0C75E]'
-                        : 'bg-linear-to-r from-pink-400 via-purple-400 to-blue-400'
+                        : 'bg-linear-to-r from-sky-400 via-cyan-400 to-blue-500'
                     }`}>
                       {thread.otherUsername[0]?.toUpperCase()}
                     </div>
@@ -757,6 +757,17 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
             >
               Spam
             </Link>
+            <button
+              type="button"
+              onClick={() => navigate("/messages/calls")}
+              aria-label="Call history"
+              title="Call history"
+              className={`group flex h-16 w-28 shrink-0 items-center justify-center gap-1 border-r px-3 py-4 text-xl transition-colors ${isVibesPro ? 'border-white/10 hover:bg-white/5' : 'border-white/50 hover:bg-white/50'}`}
+            >
+              <span aria-hidden="true">☎️</span>
+              <span className="call-history-arrow" aria-hidden="true">⟶</span>
+              <span className="call-history-phone" aria-hidden="true">📱</span>
+            </button>
             <button
               type="button"
               onClick={() => navigate("/messages/archived")}
@@ -824,7 +835,7 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
               <button
                 type="button"
                 onClick={() => openStoryEditor("photo")}
-                className="rounded-2xl bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-pink-500/20"
+                className="rounded-2xl bg-linear-to-r from-sky-500 via-cyan-500 to-blue-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-sky-500/20"
               >
                 Photo
               </button>
@@ -893,7 +904,7 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
                   type="button"
                   onClick={handleCreateStory}
                   disabled={storyCreating}
-                  className="min-w-36 rounded-2xl bg-linear-to-r from-fuchsia-500 via-cyan-500 to-amber-400 px-4 py-3 text-sm font-semibold text-black transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="min-w-36 rounded-2xl bg-linear-to-r from-sky-500 via-cyan-500 to-blue-500 px-4 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {storyCreating ? "Posting..." : "Share Story"}
                 </button>
@@ -990,7 +1001,7 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
             {selectedStory.image_url ? (
               <img src={selectedStory.image_original_url ?? selectedStory.image_url} alt={selectedStory.author_username} className="h-full w-full object-cover" />
             ) : (
-              <div className="flex h-full w-full items-center justify-center bg-linear-to-br from-pink-500 via-purple-500 to-blue-500 p-6 text-white text-center">
+              <div className="flex h-full w-full items-center justify-center bg-linear-to-br from-sky-500 via-cyan-500 to-blue-500 p-6 text-white text-center">
                 <p className="max-w-2xl text-2xl font-semibold leading-relaxed whitespace-pre-wrap">
                   {selectedStory.text || `${selectedStory.author_username} shared a story.`}
                 </p>

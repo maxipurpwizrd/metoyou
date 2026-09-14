@@ -21,7 +21,7 @@ export default function FollowButton({
       className={`inline-flex items-center justify-center rounded-2xl px-4 py-2 text-sm font-semibold transition shadow-lg ${
         isFollowing
           ? "bg-slate-900 text-white"
-          : "bg-linear-to-r from-pink-500 to-purple-500 text-white"
+          : "bg-linear-to-r from-sky-500 to-cyan-500 text-white"
       } ${loading || disabled ? "opacity-60 cursor-not-allowed" : "hover:scale-[1.02]"}`}
     >
       {loading ? "Working..." : label}

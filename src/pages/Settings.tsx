@@ -304,7 +304,7 @@ export default function Settings() {
   };
 
   return (
-    <div className="app-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 p-6 pb-24">
+    <div className="app-screen bg-gradient-to-br from-sky-100 via-white to-cyan-100 p-6 pb-24">
       <div className="max-w-6xl mx-auto">
         <div className="flex flex-col gap-4 mb-8">
           <div className="inline-flex items-center gap-3 rounded-full bg-white/30 backdrop-blur-2xl border border-white/50 px-4 py-2 shadow-xl text-sm font-semibold text-slate-700">
@@ -345,7 +345,7 @@ export default function Settings() {
           <section className="bg-white/20 backdrop-blur-3xl border border-white/30 rounded-[32px] shadow-2xl p-6">
             <div className="flex items-center justify-between gap-3 mb-6">
               <div className="flex items-center gap-3">
-                <div className="grid place-items-center w-12 h-12 rounded-3xl bg-pink-500/15 text-pink-600">
+                <div className="grid place-items-center w-12 h-12 rounded-3xl bg-sky-500/15 text-sky-600">
                   <User className="w-6 h-6" />
                 </div>
                 <div>
@@ -362,7 +362,7 @@ export default function Settings() {
                 className="w-full flex items-center justify-between gap-4 rounded-3xl border border-white/40 bg-white/15 px-5 py-4 text-left shadow-lg transition hover:bg-white/30"
               >
                 <div className="flex items-center gap-3">
-                  <div className="grid place-items-center w-11 h-11 rounded-2xl bg-gradient-to-br from-pink-500 via-purple-500 to-blue-500 text-white">
+                  <div className="grid place-items-center w-11 h-11 rounded-2xl bg-linear-to-br from-sky-500 via-cyan-400 to-blue-500 text-white">
                     <User className="w-5 h-5" />
                   </div>
                   <div>
@@ -379,7 +379,7 @@ export default function Settings() {
                 className="w-full flex items-center justify-between gap-4 rounded-3xl border border-white/40 bg-white/15 px-5 py-4 text-left shadow-lg transition hover:bg-white/30"
               >
                 <div className="flex items-center gap-3">
-                  <div className="grid place-items-center w-11 h-11 rounded-2xl bg-gradient-to-br from-purple-500 via-blue-500 to-pink-500 text-white">
+                  <div className="grid place-items-center w-11 h-11 rounded-2xl bg-linear-to-br from-cyan-500 via-sky-500 to-blue-500 text-white">
                     <AtSign className="w-5 h-5" />
                   </div>
                   <div>
@@ -396,7 +396,7 @@ export default function Settings() {
                 className="w-full flex items-center justify-between gap-4 rounded-3xl border border-white/40 bg-white/15 px-5 py-4 text-left shadow-lg transition hover:bg-white/30"
               >
                 <div className="flex items-center gap-3">
-                  <div className="grid place-items-center w-11 h-11 rounded-2xl bg-gradient-to-br from-blue-500 via-pink-500 to-purple-500 text-white">
+                  <div className="grid place-items-center w-11 h-11 rounded-2xl bg-linear-to-br from-blue-500 via-sky-400 to-cyan-500 text-white">
                     <Image className="w-5 h-5" />
                   </div>
                   <div>
@@ -425,7 +425,7 @@ export default function Settings() {
             <div className="grid gap-4">
               <button className="w-full flex items-center justify-between gap-4 rounded-3xl border border-white/40 bg-white/15 px-5 py-4 text-left shadow-lg transition hover:bg-white/30">
                 <div className="flex items-center gap-3">
-                  <div className="grid place-items-center w-11 h-11 rounded-2xl bg-gradient-to-br from-pink-500 via-purple-500 to-blue-500 text-white">
+                  <div className="grid place-items-center w-11 h-11 rounded-2xl bg-linear-to-br from-sky-500 via-cyan-400 to-blue-500 text-white">
                     <Lock className="w-5 h-5" />
                   </div>
                   <div>
@@ -438,7 +438,7 @@ export default function Settings() {
 
               <button className="w-full flex items-center justify-between gap-4 rounded-3xl border border-white/40 bg-white/15 px-5 py-4 text-left shadow-lg transition hover:bg-white/30">
                 <div className="flex items-center gap-3">
-                  <div className="grid place-items-center w-11 h-11 rounded-2xl bg-gradient-to-br from-purple-500 via-blue-500 to-pink-500 text-white">
+                  <div className="grid place-items-center w-11 h-11 rounded-2xl bg-linear-to-br from-cyan-500 via-sky-500 to-blue-500 text-white">
                     <ShieldCheck className="w-5 h-5" />
                   </div>
                   <div>
@@ -451,7 +451,7 @@ export default function Settings() {
 
               <button className="w-full flex items-center justify-between gap-4 rounded-3xl border border-white/40 bg-white/15 px-5 py-4 text-left shadow-lg transition hover:bg-white/30">
                 <div className="flex items-center gap-3">
-                  <div className="grid place-items-center w-11 h-11 rounded-2xl bg-gradient-to-br from-blue-500 via-pink-500 to-purple-500 text-white">
+                  <div className="grid place-items-center w-11 h-11 rounded-2xl bg-linear-to-br from-blue-500 via-sky-400 to-cyan-500 text-white">
                     <Phone className="w-5 h-5" />
                   </div>
                   <div>
@@ -464,7 +464,7 @@ export default function Settings() {
 
               <button className="w-full flex items-center justify-between gap-4 rounded-3xl border border-white/40 bg-white/15 px-5 py-4 text-left shadow-lg transition hover:bg-white/30">
                 <div className="flex items-center gap-3">
-                  <div className="grid place-items-center w-11 h-11 rounded-2xl bg-gradient-to-br from-pink-500 via-blue-500 to-purple-500 text-white">
+                  <div className="grid place-items-center w-11 h-11 rounded-2xl bg-linear-to-br from-sky-500 via-blue-500 to-cyan-500 text-white">
                     <Mail className="w-5 h-5" />
                   </div>
                   <div>
@@ -517,7 +517,7 @@ export default function Settings() {
               className="w-full flex items-center justify-between gap-4 rounded-3xl border border-white/40 bg-white/15 px-5 py-4 text-left shadow-lg transition hover:bg-white/30"
             >
               <div className="flex items-center gap-3">
-                <div className="grid place-items-center w-11 h-11 rounded-2xl bg-gradient-to-br from-pink-500 via-purple-500 to-blue-500 text-white">
+                  <div className="grid place-items-center w-11 h-11 rounded-2xl bg-linear-to-br from-sky-500 via-cyan-400 to-blue-500 text-white">
                   <Flag className="w-5 h-5" />
                 </div>
                 <div>
@@ -534,7 +534,7 @@ export default function Settings() {
           <section className="bg-white/20 backdrop-blur-3xl border border-white/30 rounded-[32px] shadow-2xl p-6">
             <div className="flex items-center justify-between gap-3 mb-6">
               <div className="flex items-center gap-3">
-                <div className="grid place-items-center w-12 h-12 rounded-3xl bg-pink-500/15 text-pink-700">
+                <div className="grid place-items-center w-12 h-12 rounded-3xl bg-sky-500/15 text-sky-700">
                   <Monitor className="w-6 h-6" />
                 </div>
                 <div>
@@ -551,7 +551,7 @@ export default function Settings() {
                   <p className="text-sm text-slate-500">Current selected appearance</p>
                 </div>
                 <span className="rounded-full bg-slate-950/10 px-4 py-2 text-sm font-semibold text-slate-900 uppercase tracking-[0.15em]">
-                  {selectedTheme === "black-ice" ? "Black Ice" : "Pink Liquid Glass Glow"}
+                  {selectedTheme === "black-ice" ? "Black Ice" : "Sky Liquid Glass Glow"}
                 </span>
               </div>
 
@@ -578,7 +578,7 @@ export default function Settings() {
                       : "border-white/40 bg-white/10 hover:bg-white/20"
                   }`}
                 >
-                  <p className="font-semibold text-slate-900">{t("settings.theme.pinkGlow")}</p>
+                  <p className="font-semibold text-slate-900">Sky Liquid Glass Glow</p>
                   <p className="text-sm text-slate-500 mt-1">Light theme preview</p>
                 </button>
               </div>
@@ -588,7 +588,7 @@ export default function Settings() {
           <section className="bg-white/20 backdrop-blur-3xl border border-white/30 rounded-[32px] shadow-2xl p-6">
             <div className="flex items-center justify-between gap-3 mb-6">
               <div className="flex items-center gap-3">
-                <div className="grid place-items-center w-12 h-12 rounded-3xl bg-purple-500/15 text-purple-700">
+                <div className="grid place-items-center w-12 h-12 rounded-3xl bg-sky-500/15 text-sky-700">
                   <HelpCircle className="w-6 h-6" />
                 </div>
                 <div>
@@ -610,7 +610,7 @@ export default function Settings() {
                   className="w-full flex items-center justify-between gap-4 rounded-3xl border border-white/40 bg-white/15 px-5 py-4 text-left shadow-lg transition hover:bg-white/30"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="grid place-items-center w-11 h-11 rounded-2xl bg-gradient-to-br from-purple-500 via-blue-500 to-pink-500 text-white">
+                    <div className="grid place-items-center w-11 h-11 rounded-2xl bg-linear-to-br from-cyan-500 via-sky-500 to-blue-500 text-white">
                       <item.icon className="w-5 h-5" />
                     </div>
                     <span className="font-semibold text-slate-900">{item.label}</span>
@@ -637,7 +637,7 @@ export default function Settings() {
             <div className="grid gap-4">
               <button className="w-full flex items-center justify-between gap-4 rounded-3xl border border-white/40 bg-white/15 px-5 py-4 text-left shadow-lg transition hover:bg-white/30">
                 <div className="flex items-center gap-3">
-                  <div className="grid place-items-center w-11 h-11 rounded-2xl bg-gradient-to-br from-pink-500 via-purple-500 to-blue-500 text-white">
+                  <div className="grid place-items-center w-11 h-11 rounded-2xl bg-linear-to-br from-sky-500 via-cyan-400 to-blue-500 text-white">
                     <Info className="w-5 h-5" />
                   </div>
                   <span className="font-semibold text-slate-900">About MeToYou</span>
@@ -651,7 +651,7 @@ export default function Settings() {
                   className="w-full flex items-center justify-between gap-4 rounded-3xl border border-white/40 bg-white/15 px-5 py-4 text-left shadow-lg transition hover:bg-white/30"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="grid place-items-center w-11 h-11 rounded-2xl bg-gradient-to-br from-purple-500 via-blue-500 to-pink-500 text-white">
+                    <div className="grid place-items-center w-11 h-11 rounded-2xl bg-linear-to-br from-cyan-500 via-sky-500 to-blue-500 text-white">
                       <LayoutDashboard className="w-5 h-5" />
                     </div>
                     <span className="font-semibold text-slate-900">Developer/Admin Dashboard</span>
@@ -663,7 +663,7 @@ export default function Settings() {
               <div className="rounded-3xl border border-white/40 bg-white/15 px-5 py-4 shadow-inner">
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
-                    <div className="grid place-items-center w-11 h-11 rounded-2xl bg-gradient-to-br from-blue-500 via-pink-500 to-purple-500 text-white">
+                    <div className="grid place-items-center w-11 h-11 rounded-2xl bg-linear-to-br from-blue-500 via-sky-400 to-cyan-500 text-white">
                       <Info className="w-5 h-5" />
                     </div>
                     <div>
@@ -734,7 +734,7 @@ export default function Settings() {
                       if (activeModal === "name") setName(event.target.value);
                       else setUsername(event.target.value);
                     }}
-                    className="w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-pink-500"
+                    className="w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-sky-500"
                   />
                 </label>
               )}
@@ -752,7 +752,7 @@ export default function Settings() {
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-full rounded-3xl border border-pink-200 bg-pink-50 px-4 py-3 text-sm font-semibold text-pink-600 transition hover:bg-pink-100"
+                    className="w-full rounded-3xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-semibold text-sky-600 transition hover:bg-sky-100"
                   >
                     📷 Choose from gallery
                   </button>
@@ -783,7 +783,7 @@ export default function Settings() {
                       value={profilePictureUrl}
                       onChange={(event) => setProfilePictureUrl(event.target.value)}
                       placeholder="https://..."
-                      className="mt-3 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-pink-500"
+                      className="mt-3 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-sky-500"
                     />
                   </div>
                 </div>
@@ -832,7 +832,7 @@ export default function Settings() {
                   type="button"
                   onClick={handleModalSave}
                   disabled={isSaving}
-                  className="rounded-3xl bg-gradient-to-r from-pink-500 to-purple-500 px-5 py-3 text-white font-semibold shadow-lg transition hover:scale-[1.01] disabled:opacity-50"
+                  className="rounded-3xl bg-linear-to-r from-sky-500 to-cyan-500 px-5 py-3 text-white font-semibold shadow-lg transition hover:scale-[1.01] disabled:opacity-50"
                 >
                   {t("common.saveChanges")}
                 </button>

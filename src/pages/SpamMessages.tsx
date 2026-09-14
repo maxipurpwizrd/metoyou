@@ -58,7 +58,7 @@ export default function SpamMessages() {
   if (!appReady || !profileReady) return null;
 
   return (
-    <div className={`app-screen ${isVibesPro ? 'bg-[#0B0B0B]' : 'bg-linear-to-br from-pink-100 via-purple-100 to-blue-100'} p-6 pb-32`}>
+    <div className={`app-screen ${isVibesPro ? 'bg-[#0B0B0B]' : 'bg-linear-to-br from-sky-100 via-white to-cyan-100'} p-6 pb-32`}>
       <div className={`max-w-xl mx-auto ${isVibesPro ? 'pt-8' : ''}`}>
         <div className={`mb-6 rounded-4xl p-5 shadow-2xl border ${isVibesPro ? 'border-white/10 bg-[#111111]/95 text-white' : 'border-white/40 bg-white/30 backdrop-blur-3xl text-slate-900'}`}>
           <div className="flex items-center justify-between gap-4">
@@ -95,7 +95,7 @@ export default function SpamMessages() {
               >
                 <div className="p-4">
                   <div className="flex items-center gap-3">
-                    <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-white ${isVibesPro ? 'bg-linear-to-r from-[#D4AF37] to-[#F0C75E]' : 'bg-linear-to-r from-pink-400 via-purple-400 to-blue-400'}`}>
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-white ${isVibesPro ? 'bg-linear-to-r from-[#D4AF37] to-[#F0C75E]' : 'bg-linear-to-r from-sky-400 via-cyan-400 to-blue-500'}`}>
                       {thread.otherUsername[0]?.toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">

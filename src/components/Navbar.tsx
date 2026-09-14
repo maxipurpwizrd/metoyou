@@ -9,7 +9,6 @@ import { useSession } from "../contexts/SessionContext";
 export default function Navbar() {
   const { appReady } = useAppInit();
   const { profileReady } = useSession();
-  if (!appReady || !profileReady) return null;
   const { user } = useAuth();
   const { t } = useLanguage();
   const [unreadCount, setUnreadCount] = useState(0);
@@ -49,13 +48,16 @@ export default function Navbar() {
       channel?.unsubscribe();
     };
   }, [user]);
+
+  if (!appReady || !profileReady) return null;
+
   return (
-    <div className={`fixed top-0 left-0 right-0 z-50 bg-linear-to-br from-blue-100 via-pink-100 to-purple-100 border-b border-white/30 h-20 px-2 sm:px-3 pt-[env(safe-area-inset-top)] transition-transform duration-200 ${isCreatePostOpen || isStoryComposerOpen ? "-translate-y-full pointer-events-none" : "translate-y-0"}`}>
+    <div className={`fixed top-0 left-0 right-0 z-50 bg-linear-to-br from-sky-100 via-white to-cyan-100 border-b border-sky-200/60 h-20 px-2 sm:px-3 pt-[env(safe-area-inset-top)] transition-transform duration-200 ${isCreatePostOpen || isStoryComposerOpen ? "-translate-y-full pointer-events-none" : "translate-y-0"}`}>
       <div className="max-w-3xl mx-auto h-full px-1 sm:px-2">
         <div className="bg-white/20 backdrop-blur-3xl border border-white/30 rounded-[36px] shadow-sm h-full flex items-center justify-between px-5 py-3">
 
           {/* Logo */}
-          <h1 className="text-[1.2rem] font-bold bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 bg-clip-text text-transparent">
+          <h1 className="text-[1.2rem] font-bold bg-linear-to-r from-sky-600 via-cyan-500 to-blue-600 bg-clip-text text-transparent">
             MeToYou
           </h1>
 
@@ -64,7 +66,7 @@ export default function Navbar() {
 
               <Link
                 to="/search"
-                className="inline-flex h-12 w-12 items-center justify-center rounded-[24px] text-lg text-slate-900 hover:bg-white/30 transition"
+                className="inline-flex h-12 w-12 items-center justify-center rounded-3xl text-lg text-slate-900 hover:bg-white/30 transition"
               >
                 <span aria-hidden>🔍</span>
                 <span className="sr-only">{t("nav.search")}</span>
@@ -94,7 +96,7 @@ export default function Navbar() {
                 <span aria-hidden>💬</span>
                 <span className="sr-only">{t("nav.messages")}</span>
 
-                <span className="absolute -top-1 -right-1 bg-pink-500 text-white text-[9px] h-4 w-4 rounded-full flex items-center justify-center font-bold">
+                <span className="absolute -top-1 -right-1 bg-sky-500 text-white text-[9px] h-4 w-4 rounded-full flex items-center justify-center font-bold">
                   3
                 </span>
               </Link>
@@ -107,7 +109,7 @@ export default function Navbar() {
                 <span className="sr-only">{t("nav.notifications")}</span>
 
                 {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-pink-500 text-white text-[9px] min-h-4 min-w-4 px-1 rounded-full flex items-center justify-center font-bold">
+                  <span className="absolute -top-1 -right-1 bg-sky-500 text-white text-[9px] min-h-4 min-w-4 px-1 rounded-full flex items-center justify-center font-bold">
                     {unreadCount > 9 ? "9+" : unreadCount}
                   </span>
                 )}

@@ -289,13 +289,13 @@ export default function Notifications({ embedded }: NotificationsProps) {
   };
 
   const notificationContent = (
-    <div className={`app-screen ${isVibesPro ? 'bg-[#0B0B0B]' : 'bg-linear-to-br from-blue-100 via-pink-100 to-purple-100'} p-6`}>
+    <div className={`app-screen ${isVibesPro ? 'bg-[#0B0B0B]' : 'bg-linear-to-br from-sky-100 via-white to-cyan-100'} p-6`}>
       {!isVibesPro && <Navbar />}
 
       <div className={`max-w-2xl mx-auto ${isVibesPro ? 'pt-8' : 'pt-20'} pb-24`}>
         <div className="flex items-center justify-between gap-3 mb-6">
           <div>
-            <p className={`text-sm font-semibold uppercase tracking-[0.3em] ${isVibesPro ? 'text-[#D4AF37]' : 'text-pink-600'}`}>
+              <p className={`text-sm font-semibold uppercase tracking-[0.3em] ${isVibesPro ? 'text-[#D4AF37]' : 'text-sky-600'}`}>
               {t("notifications.activity")}
             </p>
             <h1 className={`text-4xl sm:text-5xl font-black ${isVibesPro ? 'text-white' : 'text-slate-950'}`}>
@@ -359,7 +359,7 @@ export default function Notifications({ embedded }: NotificationsProps) {
                           : 'border-[#D4AF37]/20 hover:border-[#D4AF37]/40'
                       }`
                     : `bg-white/20 backdrop-blur-3xl border border-white/30 hover:bg-white/30 ${
-                        !notif.read ? 'border-pink-400/50 bg-pink-50/20' : ''
+                        !notif.read ? 'border-sky-400/50 bg-sky-50/20' : ''
                       }`
                 }`}>
                 <button
@@ -390,7 +390,7 @@ export default function Notifications({ embedded }: NotificationsProps) {
                     <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-white font-bold text-sm shrink-0 ${
                       isVibesPro
                         ? 'bg-linear-to-r from-[#D4AF37] to-[#F0C75E]'
-                        : 'bg-linear-to-r from-pink-400 via-purple-400 to-blue-400'
+                        : 'bg-linear-to-r from-sky-400 via-cyan-400 to-blue-500'
                     }`}>
                       {notif.user[0]}
                     </div>
@@ -411,7 +411,7 @@ export default function Notifications({ embedded }: NotificationsProps) {
                             className={`hover:opacity-80 cursor-pointer ${
                               isVibesPro
                                 ? 'text-[#D4AF37]'
-                                : 'text-pink-600 hover:text-pink-700'
+                                : 'text-sky-600 hover:text-sky-700'
                             }`}
                           >
                             {notif.user}
@@ -426,7 +426,7 @@ export default function Notifications({ embedded }: NotificationsProps) {
 
                   {!notif.read && (
                     <div className={`w-2 h-2 rounded-full shrink-0 ${
-                      isVibesPro ? 'bg-[#D4AF37]' : 'bg-pink-500'
+                      isVibesPro ? 'bg-[#D4AF37]' : 'bg-sky-500'
                     }`}></div>
                   )}
                 </div>

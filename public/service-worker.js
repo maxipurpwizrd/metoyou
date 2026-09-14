@@ -20,12 +20,18 @@ self.addEventListener('push', function (event) {
 
 self.addEventListener('notificationclick', function (event) {
   event.notification.close();
+  var targetUrl = event.notification.data && event.notification.data.url
+    ? event.notification.data.url
+    : '/';
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList) {
       for (const client of clientList) {
-        if (client.url && 'focus' in client) return client.focus();
+        if (client.url && 'focus' in client) {
+          if ('navigate' in client && client.url !== targetUrl) return client.navigate(targetUrl).then(function () { return client.focus(); });
+          return client.focus();
+        }
       }
-      if (clients.openWindow) return clients.openWindow('/');
+      if (clients.openWindow) return clients.openWindow(targetUrl);
     })
   );
 });

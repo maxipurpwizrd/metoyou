@@ -44,7 +44,7 @@ export default function Search() {
   }, [query]);
 
   const searchContent = (
-    <div className={`app-screen ${isVibesPro ? 'bg-[#0B0B0B]' : 'bg-linear-to-br from-blue-100 via-pink-100 to-purple-100'} p-6 pb-24`}>
+    <div className={`app-screen ${isVibesPro ? 'bg-[#0B0B0B]' : 'bg-linear-to-br from-sky-100 via-white to-cyan-100'} p-6 pb-24`}>
       {!isVibesPro && <Navbar />}
 
       <div className={`max-w-2xl mx-auto ${isVibesPro ? 'pt-8' : 'pt-20'}`}>
@@ -57,7 +57,7 @@ export default function Search() {
             className={`w-full px-4 py-3 rounded-[28px] outline-none text-sm ${
               isVibesPro
                 ? 'border-2 border-[#D4AF37]/40 bg-[#181818] placeholder-white/50 text-white focus:border-[#D4AF37]'
-                : 'border-2 border-pink-300 bg-white/40 placeholder-slate-500 text-slate-900 focus:border-pink-500'
+                : 'border-2 border-sky-300 bg-white/40 placeholder-slate-500 text-slate-900 focus:border-sky-500'
             } backdrop-blur-2xl`}
           />
         </div>
@@ -119,7 +119,7 @@ export default function Search() {
                         <div className={`w-10 h-10 rounded-[20px] flex items-center justify-center text-white font-bold text-sm ${
                           isVibesPro
                             ? 'bg-linear-to-r from-[#D4AF37] to-[#F0C75E]'
-                            : 'bg-linear-to-r from-pink-400 via-purple-400 to-blue-400'
+                            : 'bg-linear-to-r from-sky-400 via-cyan-400 to-blue-500'
                         }`}>
                           {user.username[0]}
                         </div>
@@ -139,7 +139,7 @@ export default function Search() {
                       <button className={`ml-auto px-3 py-2 rounded-full font-semibold text-xs hover:scale-105 transition ${
                         isVibesPro
                           ? 'bg-linear-to-r from-[#D4AF37] to-[#F0C75E] text-[#0B0B0B]'
-                          : 'bg-linear-to-r from-pink-500 to-purple-500 text-white'
+                          : 'bg-linear-to-r from-sky-500 to-cyan-500 text-white'
                       }`}>
                         {t("search.follow")}
                       </button>

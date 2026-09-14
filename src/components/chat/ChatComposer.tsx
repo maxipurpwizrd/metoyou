@@ -78,7 +78,7 @@ export function ChatComposer({
 }: ChatComposerProps) {
   const messageBoxClassName = isVibesPro
     ? "bg-[#181818]/90 backdrop-blur-3xl border border-[#D4AF37]/20 rounded-3xl md:rounded-4xl p-2 md:p-4 shadow-[0_0_30px_rgba(212,175,55,0.12)]"
-    : "bg-white/80 backdrop-blur-3xl border border-pink-100 rounded-3xl md:rounded-4xl p-2 md:p-4 shadow-[0_10px_35px_rgba(168,85,247,0.12)]";
+    : "bg-white/80 backdrop-blur-3xl border border-sky-100 rounded-3xl md:rounded-4xl p-2 md:p-4 shadow-[0_10px_35px_rgba(14,165,233,0.12)]";
 
   const inputClassName = isVibesPro
     ? "w-full bg-transparent outline-none text-[#F7E7B2] placeholder-[#E8C96F]/50 text-sm md:text-base px-2 font-serif"
@@ -86,7 +86,7 @@ export function ChatComposer({
 
   const sendButtonClassName = isVibesPro
     ? "bg-linear-to-r from-[#D4AF37] to-[#F0C75E] text-[#111111] h-10 w-10 md:w-auto md:px-4 rounded-full md:rounded-2xl font-bold shadow-lg hover:scale-105 transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex items-center justify-center shrink-0 text-sm md:text-base active:scale-95"
-    : "bg-linear-to-r from-fuchsia-500 via-violet-500 to-cyan-400 text-white h-10 w-10 md:w-auto md:px-4 rounded-full md:rounded-2xl font-bold shadow-lg hover:scale-105 transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex items-center justify-center shrink-0 text-sm md:text-base active:scale-95";
+    : "bg-linear-to-r from-sky-500 via-cyan-500 to-blue-500 text-white h-10 w-10 md:w-auto md:px-4 rounded-full md:rounded-2xl font-bold shadow-lg hover:scale-105 transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex items-center justify-center shrink-0 text-sm md:text-base active:scale-95";
 
   const audioButtonClassName = isVibesPro ? "bg-white/10 text-white hover:bg-white/20" : "bg-slate-900/10 text-slate-800 hover:bg-slate-900/20";
 
@@ -94,7 +94,7 @@ export function ChatComposer({
     <div className={`fixed bottom-0 left-0 right-0 z-50 p-3 md:p-6 ${isVibesPro ? "bg-[#111111]/95 border-t border-[#D4AF37]/20 shadow-[0_0_40px_rgba(212,175,55,0.10)]" : "bg-white/70 backdrop-blur-xl border-t border-white/70 shadow-[0_-10px_35px_rgba(236,72,153,0.08)]"}`}>
       <div className="max-w-xl mx-auto">
         {replyTo && (
-          <div className={`mb-3 rounded-2xl border px-3 py-2 text-sm flex items-center justify-between ${isVibesPro ? "border-white/10 bg-white/10 text-white/80" : "border-pink-100 bg-white/90 text-slate-700 shadow-sm"}`}>
+          <div className={`mb-3 rounded-2xl border px-3 py-2 text-sm flex items-center justify-between ${isVibesPro ? "border-white/10 bg-white/10 text-white/80" : "border-sky-100 bg-white/90 text-slate-700 shadow-sm"}`}>
             <div className="min-w-0">
               <div className={`text-[11px] uppercase tracking-[0.2em] ${isVibesPro ? "text-white/50" : "text-slate-500"}`}>Replying to</div>
               <div className="truncate">{replyTo.text ?? "message"}</div>
@@ -135,7 +135,7 @@ export function ChatComposer({
         ) : null}
 
         {previewUrl && selectedFile ? (
-          <div className={`mb-3 rounded-[28px] backdrop-blur-3xl border shadow-lg overflow-hidden transition-opacity duration-300 ease-out opacity-100 ${isVibesPro ? "bg-white/10 border-white/10" : "bg-white/90 border-pink-100"}`}>
+          <div className={`mb-3 rounded-[28px] backdrop-blur-3xl border shadow-lg overflow-hidden transition-opacity duration-300 ease-out opacity-100 ${isVibesPro ? "bg-white/10 border-white/10" : "bg-white/90 border-sky-100"}`}>
             <div className="relative">
               <img
                 src={previewUrl}

@@ -249,7 +249,7 @@ export const translations: Record<AppLanguage, Record<string, string>> = {
     "settings.profileLabel": "Profile & Personal Details",
     "settings.displayLabel": "Display Settings",
     "settings.theme.blackIce": "Black Ice",
-    "settings.theme.pinkGlow": "Pink Liquid Glass Glow",
+    "settings.theme.pinkGlow": "Sky Liquid Glass Glow",
     "settings.save": "Save",
     // Notifications
     "notifications.none": "No notifications yet",
@@ -532,7 +532,7 @@ export const translations: Record<AppLanguage, Record<string, string>> = {
     "settings.profileLabel": "Profile & Personal Details",
     "settings.displayLabel": "Display Settings",
     "settings.theme.blackIce": "Black Ice",
-    "settings.theme.pinkGlow": "Pink Liquid Glass Glow",
+    "settings.theme.pinkGlow": "Sky Liquid Glass Glow",
     "settings.save": "Save",
     // Notifications
     "notifications.none": "No notifications yet",
@@ -773,7 +773,7 @@ export const translations: Record<AppLanguage, Record<string, string>> = {
     "settings.profileLabel": "Profil & Détails Personnels",
     "settings.displayLabel": "Paramètres d'affichage",
     "settings.theme.blackIce": "Black Ice",
-    "settings.theme.pinkGlow": "Pink Liquid Glass Glow",
+    "settings.theme.pinkGlow": "Sky Liquid Glass Glow",
     "settings.save": "Enregistrer",
     // Notifications
     "notifications.none": "Pas encore de notifications",

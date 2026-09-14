@@ -480,7 +480,7 @@ export default function PostCard({
           isSelected
             ? isPremiumTheme
               ? "shadow-[0_0_0_1px_rgba(250,204,21,0.35),0_0_30px_rgba(250,204,21,0.2)]"
-              : "shadow-lg ring-1 ring-purple-200/50"
+              : "shadow-lg ring-1 ring-sky-200/50"
             : isPremiumTheme
               ? "hover:shadow-[0_0_0_1px_rgba(250,204,21,0.32),0_14px_40px_rgba(217,119,6,0.16)]"
               : "hover:bg-white/80"
@@ -509,7 +509,7 @@ export default function PostCard({
               className="w-10 h-10 rounded-xl object-cover shrink-0 shadow-xs"
             />
           ) : (
-            <div className="w-10 h-10 rounded-xl bg-linear-to-tr from-pink-400 via-purple-400 to-blue-400 shrink-0 shadow-xs"></div>
+            <div className="w-10 h-10 rounded-xl bg-linear-to-tr from-sky-400 via-cyan-400 to-blue-500 shrink-0 shadow-xs"></div>
           )}
 
           <div className="min-w-0">
@@ -517,7 +517,7 @@ export default function PostCard({
               <h3
                 onClick={() => navigate(`/profile/${author.username}`)}
                 className={`font-bold text-sm cursor-pointer transition-colors truncate ${
-                  isPremiumTheme ? "text-amber-950 hover:text-amber-700" : "text-slate-800 hover:text-pink-500"
+                  isPremiumTheme ? "text-amber-950 hover:text-amber-700" : "text-slate-800 hover:text-sky-500"
                 }`}
               >
                 {author.username}
@@ -705,10 +705,10 @@ export default function PostCard({
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-[11px] font-semibold text-slate-700">
                 <span>Uploading... {uploadProgress ?? 0}%</span>
-                <span className="text-[10px] uppercase tracking-wide text-pink-500">Live</span>
+                <span className="text-[10px] uppercase tracking-wide text-sky-500">Live</span>
               </div>
               <div className="h-1.5 rounded-full bg-slate-200 overflow-hidden">
-                <div className="h-full rounded-full bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 transition-all duration-300" style={{ width: `${Math.max(4, uploadProgress ?? 0)}%` }} />
+                <div className="h-full rounded-full bg-linear-to-r from-sky-500 via-cyan-400 to-blue-500 transition-all duration-300" style={{ width: `${Math.max(4, uploadProgress ?? 0)}%` }} />
               </div>
             </div>
           )}
@@ -727,7 +727,7 @@ export default function PostCard({
           {uploadState === "failed" && (
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-[11px] font-semibold text-red-600">Upload failed</span>
-              <button type="button" onClick={(e)=>{e.stopPropagation(); onRetryPost?.();}} className="rounded-full bg-pink-500 px-2.5 py-1 text-[10px] font-semibold text-white">Retry</button>
+              <button type="button" onClick={(e)=>{e.stopPropagation(); onRetryPost?.();}} className="rounded-full bg-sky-500 px-2.5 py-1 text-[10px] font-semibold text-white">Retry</button>
               <button type="button" onClick={(e)=>{e.stopPropagation(); onDeletePost?.();}} className="rounded-full bg-slate-200 px-2.5 py-1 text-[10px] font-semibold text-slate-700">Delete</button>
             </div>
           )}
@@ -740,10 +740,10 @@ export default function PostCard({
           {hasVisualMedia ? (
             <div className="flex md:flex-col gap-3 md:gap-3.5">
               {/* LEFT: Media Container (45% on mobile, full width on desktop) */}
-              <div className={`w-[45%] md:w-full aspect-[4/3] shrink-0 rounded-2xl flex items-center justify-center overflow-hidden relative shadow-inner border ${isPremiumTheme ? "border-amber-200/80 bg-[linear-gradient(135deg,rgba(255,250,205,0.95),rgba(253,230,138,0.9))]" : "bg-linear-to-br from-pink-100 via-purple-100 to-blue-100 border-white/20"}`}>
+              <div className={`w-[45%] md:w-full aspect-[4/3] shrink-0 rounded-2xl flex items-center justify-center overflow-hidden relative shadow-inner border ${isPremiumTheme ? "border-amber-200/80 bg-[linear-gradient(135deg,rgba(255,250,205,0.95),rgba(253,230,138,0.9))]" : "bg-linear-to-br from-sky-100 via-white to-cyan-100 border-white/20"}`}>
                 {!mediaReady && !mediaErrored && (
                   <div className="absolute inset-0 flex items-center justify-center bg-white/60 backdrop-blur-sm">
-                    <div className="h-8 w-8 animate-spin rounded-full border-2 border-pink-300 border-t-transparent" />
+                    <div className="h-8 w-8 animate-spin rounded-full border-2 border-sky-300 border-t-transparent" />
                   </div>
                 )}
 
@@ -862,7 +862,7 @@ export default function PostCard({
                       setDisplayLikes((prev) => prev + (displayLiked ? -1 : 1));
                       onToggleLike?.();
                     }}
-                    className={`py-1.5 md:py-2.5 text-xs font-bold text-center transition-colors rounded-lg border ${isPremiumTheme ? "text-amber-800 hover:bg-amber-100/70 border-amber-200/70" : "text-pink-600 hover:bg-pink-50/40 border-pink-200/50 md:border-slate-100"}`}
+                    className={`py-1.5 md:py-2.5 text-xs font-bold text-center transition-colors rounded-lg border ${isPremiumTheme ? "text-amber-800 hover:bg-amber-100/70 border-amber-200/70" : "text-sky-600 hover:bg-sky-50/40 border-sky-200/50 md:border-slate-100"}`}
                   >
                     {displayLiked ? "❤️" : "🤍"} {displayLikes}
                   </button>
@@ -908,7 +908,7 @@ export default function PostCard({
                     setDisplayLikes((prev) => prev + (displayLiked ? -1 : 1));
                     onToggleLike?.();
                   }}
-                  className={`flex-1 py-2.5 text-xs font-bold text-center transition-colors ${isPremiumTheme ? "text-amber-800 hover:bg-amber-100/70" : "text-pink-600 hover:bg-pink-50/40"}`}
+                      className={`flex-1 py-2.5 text-xs font-bold text-center transition-colors ${isPremiumTheme ? "text-amber-800 hover:bg-amber-100/70" : "text-sky-600 hover:bg-sky-50/40"}`}
                 >
                   {displayLiked ? "❤️" : "🤍"} {displayLikes} Likes
                 </button>
@@ -996,7 +996,7 @@ export default function PostCard({
                   <div className="flex items-center justify-between gap-2">
                     <p
                       onClick={() => navigate(`/profile/${comment.user.username}`)}
-                      className="font-bold text-xs text-slate-800 cursor-pointer hover:text-pink-500 transition-colors"
+                      className="font-bold text-xs text-slate-800 cursor-pointer hover:text-sky-500 transition-colors"
                     >
                       {comment.user.username}
                     </p>
@@ -1028,7 +1028,7 @@ export default function PostCard({
                         type="text"
                         value={editingText}
                         onChange={(e) => setEditingText(e.target.value)}
-                        className="w-full border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs bg-white outline-none focus:border-pink-300"
+                        className="w-full border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs bg-white outline-none focus:border-sky-300"
                       />
                       <button
                         type="button"
@@ -1036,7 +1036,7 @@ export default function PostCard({
                           onEditComment?.(Number(comment.id), editingText);
                           setEditingId(null);
                         }}
-                        className="bg-pink-500 hover:bg-pink-600 text-white font-bold px-3 py-1 rounded-lg text-[11px] transition-colors"
+                        className="bg-sky-500 hover:bg-sky-600 text-white font-bold px-3 py-1 rounded-lg text-[11px] transition-colors"
                       >
                         Save
                       </button>
@@ -1051,7 +1051,7 @@ export default function PostCard({
                     <button
                       type="button"
                       onClick={() => onLikeComment?.(Number(comment.id))}
-                      className="text-pink-500 font-bold text-[11px] flex items-center gap-1 hover:scale-105 transition-transform"
+                      className="text-sky-500 font-bold text-[11px] flex items-center gap-1 hover:scale-105 transition-transform"
                     >
                       <span>❤️</span> {comment.likes}
                     </button>
@@ -1079,7 +1079,7 @@ export default function PostCard({
                 onChange={(e) => setNewComment(e.target.value)}
                 placeholder="Write a comment..."
                 rows={3}
-                className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs outline-none focus:border-pink-300 transition-colors placeholder:text-slate-400 resize-none max-h-30 overflow-y-auto"
+                className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs outline-none focus:border-sky-300 transition-colors placeholder:text-slate-400 resize-none max-h-30 overflow-y-auto"
                 onFocus={() => onInteractionActivity?.(true)}
                 onBlur={() => onInteractionActivity?.(false)}
               />
@@ -1115,7 +1115,7 @@ export default function PostCard({
                   setNewComment("");
                   setVoiceComment(undefined);
                 }}
-                className="bg-pink-500 hover:bg-pink-600 text-white font-bold px-3.5 rounded-xl text-xs transition-colors shadow-2xs"
+                className="bg-sky-500 hover:bg-sky-600 text-white font-bold px-3.5 rounded-xl text-xs transition-colors shadow-2xs"
               >
                 Send
               </button>
@@ -1150,7 +1150,7 @@ export default function PostCard({
                   <button
                     type="button"
                     onClick={retryRecording}
-                    className="rounded-full border border-pink-300 bg-white px-2.5 py-1 text-[10px] font-semibold text-pink-600"
+                    className="rounded-full border border-sky-300 bg-white px-2.5 py-1 text-[10px] font-semibold text-sky-600"
                   >
                     Retry
                   </button>

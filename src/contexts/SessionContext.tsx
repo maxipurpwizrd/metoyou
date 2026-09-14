@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { User } from "@supabase/supabase-js";
 import { useAuth } from "../hooks/useAuth";
-import { fetchProfileFromSupabase } from "../lib/profileApi";
+import { fetchProfileFromSupabase, upsertProfileToSupabase } from "../lib/profileApi";
 import { normalizeLanguage, type AppLanguage, DEFAULT_LANGUAGE } from "../lib/i18n";
 import { isVibesProEnabled } from "../lib/vibesPro";
 import type { ProfileData } from "../types/profile";
@@ -200,7 +200,31 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const remoteProfile = await fetchProfileFromSupabase(currentUserId);
+      let remoteProfile = await fetchProfileFromSupabase(currentUserId);
+
+      if (!remoteProfile && userRef.current?.id === currentUserId) {
+        const metadata = userRef.current.user_metadata ?? {};
+        const firstName = typeof metadata.first_name === "string" ? metadata.first_name.trim() : "";
+        const lastName = typeof metadata.last_name === "string" ? metadata.last_name.trim() : "";
+        const fullName = typeof metadata.full_name === "string" ? metadata.full_name.trim() : "";
+        const username = `${firstName} ${lastName}`.trim() || fullName || userRef.current.email?.split("@")[0] || "User";
+
+        remoteProfile = await upsertProfileToSupabase({
+          id: currentUserId,
+          username,
+          email: userRef.current.email ?? "",
+          profilePic: null,
+          bio: "",
+          interests: [],
+          hommies_count: 0,
+          snapshots_count: 0,
+          vibes_count: 0,
+          language: normalizeLanguage(typeof metadata.language === "string" ? metadata.language : languageRef.current),
+          dateOfBirth: "",
+          gender: "",
+        } as ProfileData);
+      }
+
       const nextProfile = canonicalizeProfile(remoteProfile);
       const premiumChanged = Boolean(currentProfile?.is_vibes_pro) !== Boolean(nextProfile?.is_vibes_pro);
       setProfileState(nextProfile);

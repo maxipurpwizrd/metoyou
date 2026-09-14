@@ -11,10 +11,12 @@ import { useMediaStream } from "../hooks/useMediaStream";
 import { useAuth } from "../hooks/useAuth";
 import { useChat } from "../contexts/ChatContext";
 import { useSession } from "../contexts/SessionContext";
+import { useGlobalCall } from "../contexts/GlobalCallContext";
 import { supabase } from "../lib/supabase";
 import { isVibesProEnabled } from "../lib/vibesPro";
 import { playMessageNotificationSound } from "../lib/notificationSound";
 import { createPeerConnection, attachLocalStreamToPeerConnection } from "../lib/webrtc";
+import { createCallHistory, updateCallHistory } from "../lib/callHistoryApi";
 import type { CallSession } from "../types/call";
 import {
   sendMessage,
@@ -60,6 +62,7 @@ export default function Chat() {
     senderId: string;
     senderName: string;
     callType: "audio" | "video";
+    callId?: string;
     sdp: RTCSessionDescriptionInit;
   } | null>(null);
   const [isMuted, setIsMuted] = useState(false);
@@ -75,6 +78,9 @@ export default function Chat() {
   const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
   const localStreamRef = useRef<MediaStream | null>(null);
   const activeCallTargetRef = useRef<string | null>(null);
+  const callHistoryIdRef = useRef<string | null>(null);
+  const callStartedAtRef = useRef<Date | null>(null);
+  const ringtoneRef = useRef<HTMLAudioElement | null>(null);
 
   // Media streams
   const audioStream = useMediaStream({ audio: true, video: false });
@@ -139,6 +145,8 @@ export default function Chat() {
     setIsCameraOff(false);
     closePeerConnection();
     activeCallTargetRef.current = null;
+    callHistoryIdRef.current = null;
+    callStartedAtRef.current = null;
   }
 
   async function startCall(callType: "audio" | "video") {
@@ -178,6 +186,10 @@ export default function Chat() {
         setActiveCallSession((current) =>
           current ? { ...current, status: "connected" } : current
         );
+        void updateCallHistory(callHistoryIdRef.current, {
+          status: "connected",
+          answered_at: new Date().toISOString(),
+        });
         if (callType === "video") {
           setIsRemoteVideoActive(true);
         } else {
@@ -200,8 +212,17 @@ export default function Chat() {
     };
 
     setActiveCallSession(callSession);
+    callStartedAtRef.current = new Date();
     setIsMuted(false);
     setIsCameraOff(callType === "video" ? false : isCameraOff);
+
+    const callHistory = await createCallHistory({
+      conversationId,
+      callerId: userId,
+      recipientId,
+      callType,
+    });
+    callHistoryIdRef.current = callHistory?.id ?? null;
 
     const offer = await peerConnection.createOffer();
     await peerConnection.setLocalDescription(offer);
@@ -210,6 +231,7 @@ export default function Chat() {
       recipientId,
       senderName: profileFromContext?.username ?? user.email ?? "User",
       callType,
+      callId: callHistory?.id,
       sdp: offer,
     });
   }
@@ -237,7 +259,7 @@ export default function Chat() {
   async function handleAcceptIncomingCall() {
     if (!incomingCallOffer || !userId || !conversationId) return;
 
-    const { senderId, senderName, callType, sdp } = incomingCallOffer;
+    const { senderId, senderName, callType, callId, sdp } = incomingCallOffer;
     try {
       const mediaStream = callType === "video"
         ? await videoStream.startStream()
@@ -271,10 +293,16 @@ export default function Chat() {
           setActiveCallSession((current) =>
             current ? { ...current, status: "connected", startTime: current.startTime ?? new Date() } : current
           );
+          void updateCallHistory(callHistoryIdRef.current, {
+            status: "connected",
+            answered_at: new Date().toISOString(),
+          });
         }
       };
 
       activeCallTargetRef.current = senderId;
+      callHistoryIdRef.current = callId ?? null;
+      callStartedAtRef.current = new Date();
       setActiveCallSession({
         id: `call-${Date.now()}`,
         conversationId,
@@ -300,6 +328,7 @@ export default function Chat() {
         senderId: userId,
         recipientId: senderId,
         callType,
+        callId,
         sdp: answer,
       });
       setIncomingCallOffer(null);
@@ -318,6 +347,11 @@ export default function Chat() {
     await sendCallSignal("call-hangup", {
       senderId: userId,
       recipientId: incomingCallOffer.senderId,
+    });
+    void updateCallHistory(incomingCallOffer.callId ?? null, {
+      status: "declined",
+      ended_at: new Date().toISOString(),
+      duration_seconds: 0,
     });
     setIncomingCallOffer(null);
     pendingIceCandidatesRef.current = [];
@@ -348,6 +382,16 @@ export default function Chat() {
       });
     }
 
+    const endedAt = new Date();
+    const startedAt = callStartedAtRef.current;
+    void updateCallHistory(callHistoryIdRef.current, {
+      status: activeCallSession?.status === "connected" ? "completed" : "missed",
+      ended_at: endedAt.toISOString(),
+      duration_seconds: startedAt && activeCallSession?.status === "connected"
+        ? Math.max(0, Math.round((endedAt.getTime() - startedAt.getTime()) / 1000))
+        : 0,
+    });
+
     audioStream.stopStream();
     videoStream.stopStream();
     setActiveCallSession(null);
@@ -359,6 +403,31 @@ export default function Chat() {
       remoteVideoRef.current.srcObject = remoteStream;
     }
   }, [remoteStream]);
+
+  useEffect(() => {
+    const isCallRinging = Boolean(incomingCallOffer) || activeCallSession?.status === "ringing";
+
+    if (!isCallRinging) {
+      if (ringtoneRef.current) {
+        ringtoneRef.current.pause();
+        ringtoneRef.current.currentTime = 0;
+      }
+      return;
+    }
+
+    const ringtone = ringtoneRef.current ?? new Audio("/Ringtone.mp3");
+    ringtone.loop = true;
+    ringtone.volume = 0.8;
+    ringtoneRef.current = ringtone;
+    void ringtone.play().catch(() => {
+      // Browser autoplay policies may block incoming-call playback.
+    });
+
+    return () => {
+      ringtone.pause();
+      ringtone.currentTime = 0;
+    };
+  }, [activeCallSession?.status, incomingCallOffer]);
 
   // Connect local video stream to ref when available
   useEffect(() => {
@@ -419,6 +488,7 @@ export default function Chat() {
   const recipientName = searchParams.get("username") ?? "Friend";
   const userId = user?.id;
   const { profile: profileFromContext } = useSession();
+  const { pendingIncomingCall, clearPendingIncomingCall } = useGlobalCall();
   const profile = profileFromContext;
   const isVibesPro = isVibesProEnabled(profile);
 
@@ -607,6 +677,7 @@ export default function Chat() {
         recipientId?: string;
         senderName?: string;
         callType?: "audio" | "video";
+          callId?: string;
         sdp?: RTCSessionDescriptionInit;
       };
 
@@ -616,6 +687,7 @@ export default function Chat() {
         senderId: eventPayload.senderId,
         senderName: eventPayload.senderName ?? recipientName,
         callType: eventPayload.callType ?? "audio",
+        callId: eventPayload.callId,
         sdp: eventPayload.sdp,
       });
     });
@@ -625,6 +697,7 @@ export default function Chat() {
         senderId?: string;
         recipientId?: string;
         sdp?: RTCSessionDescriptionInit;
+        callId?: string;
       };
 
       if (!eventPayload.senderId || !eventPayload.recipientId || eventPayload.recipientId !== userId) return;
@@ -689,6 +762,19 @@ export default function Chat() {
       resetCallState();
     };
   }, [conversationId, userId]);
+
+  useEffect(() => {
+    if (!conversationId || !pendingIncomingCall || pendingIncomingCall.conversationId !== conversationId) return;
+
+    setIncomingCallOffer({
+      senderId: pendingIncomingCall.senderId,
+      senderName: pendingIncomingCall.senderName,
+      callType: pendingIncomingCall.callType,
+      callId: pendingIncomingCall.callId,
+      sdp: pendingIncomingCall.sdp,
+    });
+    clearPendingIncomingCall();
+  }, [conversationId, pendingIncomingCall, clearPendingIncomingCall]);
 
   async function handleSend() {
     if ((!inputText.trim() && !selectedFile && !audioBlob)) return;
@@ -1258,7 +1344,7 @@ export default function Chat() {
 
   const shellClassName = isVibesPro
     ? "app-screen min-h-screen bg-[radial-gradient(circle_at_top,rgba(212,175,55,0.18),transparent_35%),linear-gradient(135deg,#0B0B0B_0%,#141414_45%,#0F0F0F_100%)] flex flex-col relative overflow-hidden"
-    : "app-screen min-h-screen bg-[radial-gradient(circle_at_top,rgba(244,114,182,0.18),transparent_32%),radial-gradient(circle_at_bottom,rgba(129,140,248,0.16),transparent_40%),linear-gradient(135deg,#fdf2f8_0%,#f5e8ff_48%,#e0f2fe_100%)] flex flex-col relative overflow-hidden";
+    : "app-screen min-h-screen bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.2),transparent_32%),radial-gradient(circle_at_bottom,rgba(34,211,238,0.16),transparent_40%),linear-gradient(135deg,#e0f7ff_0%,#f0fbff_48%,#ffffff_100%)] flex flex-col relative overflow-hidden";
 
   const headerClassName = isVibesPro
     ? "fixed top-0 left-0 right-0 z-50 bg-[#111111]/95 p-3 md:p-6 border-b border-[#D4AF37]/20 shadow-[0_0_40px_rgba(212,175,55,0.12)]"
@@ -1271,15 +1357,15 @@ export default function Chat() {
   const headerSubtextClassName = isVibesPro ? "text-[#EBD39A]/70" : "text-slate-600";
   const panelClassName = isVibesPro
     ? "rounded-2xl border border-[#D4AF37]/20 bg-[#181818]/80 px-3 py-2 backdrop-blur-xl"
-    : "rounded-2xl border border-pink-100 bg-white/90 px-3 py-2 backdrop-blur-xl shadow-sm";
+    : "rounded-2xl border border-sky-100 bg-white/90 px-3 py-2 backdrop-blur-xl shadow-sm";
 
   const emptyStateClassName = isVibesPro
     ? "bg-[#181818]/80 backdrop-blur-3xl border border-[#D4AF37]/20 rounded-4xl p-8 text-center text-[#EBD39A]/70 shadow-[0_0_30px_rgba(212,175,55,0.08)]"
-    : "bg-white/80 backdrop-blur-3xl border border-pink-100 rounded-4xl p-8 text-center text-slate-700 shadow-[0_10px_35px_rgba(236,72,153,0.08)]";
+    : "bg-white/80 backdrop-blur-3xl border border-sky-100 rounded-4xl p-8 text-center text-slate-700 shadow-[0_10px_35px_rgba(14,165,233,0.08)]";
 
   const messageBoxClassName = isVibesPro
     ? "bg-[#181818]/90 backdrop-blur-3xl border border-[#D4AF37]/20 rounded-3xl md:rounded-4xl p-2 md:p-4 shadow-[0_0_30px_rgba(212,175,55,0.12)]"
-    : "bg-white/80 backdrop-blur-3xl border border-pink-100 rounded-3xl md:rounded-4xl p-2 md:p-4 shadow-[0_10px_35px_rgba(168,85,247,0.12)]";
+    : "bg-white/80 backdrop-blur-3xl border border-sky-100 rounded-3xl md:rounded-4xl p-2 md:p-4 shadow-[0_10px_35px_rgba(14,165,233,0.12)]";
 
   const messagesSurfaceClassName = "flex-1 overflow-y-auto overflow-x-hidden pt-28 md:pt-32 pb-28 md:pb-32 px-3 md:px-6 bg-transparent";
   const backgroundOverlayClassName = isVibesPro
@@ -1292,7 +1378,7 @@ export default function Chat() {
 
   const sendButtonClassName = isVibesPro
     ? "bg-linear-to-r from-[#D4AF37] to-[#F0C75E] text-[#111111] h-10 w-10 md:w-auto md:px-4 rounded-full md:rounded-2xl font-bold shadow-lg hover:scale-105 transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex items-center justify-center shrink-0 text-sm md:text-base active:scale-95"
-    : "bg-linear-to-r from-fuchsia-500 via-violet-500 to-cyan-400 text-white h-10 w-10 md:w-auto md:px-4 rounded-full md:rounded-2xl font-bold shadow-lg hover:scale-105 transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex items-center justify-center shrink-0 text-sm md:text-base active:scale-95";
+    : "bg-linear-to-r from-sky-500 via-cyan-500 to-blue-500 text-white h-10 w-10 md:w-auto md:px-4 rounded-full md:rounded-2xl font-bold shadow-lg hover:scale-105 transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex items-center justify-center shrink-0 text-sm md:text-base active:scale-95";
 
   return (
     <>
@@ -1309,6 +1395,7 @@ export default function Chat() {
       {activeCallSession && activeCallSession.status === "ringing" && (
         <OutgoingCall
           session={activeCallSession}
+          localVideoRef={localVideoRef}
           onEndCall={handleEndCall}
         />
       )}
@@ -1356,13 +1443,13 @@ export default function Chat() {
                 ←
               </Link>
 
-              <div className={`grid place-items-center w-10 h-10 rounded-[20px] ${isVibesPro ? 'bg-linear-to-r from-[#D4AF37] to-[#F0C75E] text-[#111111]' : 'bg-linear-to-r from-fuchsia-500 via-violet-500 to-cyan-400 text-white'} font-bold text-sm`}>
+              <div className={`grid place-items-center w-10 h-10 rounded-[20px] ${isVibesPro ? 'bg-linear-to-r from-[#D4AF37] to-[#F0C75E] text-[#111111]' : 'bg-linear-to-r from-sky-500 via-cyan-400 to-blue-500 text-white'} font-bold text-sm`}>
                 {recipientName.charAt(0)}
               </div>
 
               <div>
                 <h2 
-                  className={`font-semibold text-sm md:text-base cursor-pointer transition ${isVibesPro ? 'text-[#F7E7B2] hover:text-[#FFD98A]' : 'text-slate-800 hover:text-fuchsia-600'}`}
+                  className={`font-semibold text-sm md:text-base cursor-pointer transition ${isVibesPro ? 'text-[#F7E7B2] hover:text-[#FFD98A]' : 'text-slate-800 hover:text-sky-600'}`}
                   onClick={() => navigate(`/profile/${recipientName}`)}
                 >
                   {recipientName}
@@ -1478,7 +1565,7 @@ export default function Chat() {
       <div className={`fixed bottom-0 left-0 right-0 z-50 p-3 md:p-6 ${isVibesPro ? 'bg-[#111111]/95 border-t border-[#D4AF37]/20 shadow-[0_0_40px_rgba(212,175,55,0.10)]' : 'bg-white/70 backdrop-blur-xl border-t border-white/70 shadow-[0_-10px_35px_rgba(236,72,153,0.08)]'}`}>
         <div className="max-w-xl mx-auto">
           {replyingTo && (
-            <div className={`mb-3 rounded-2xl border px-3 py-2 text-sm flex items-center justify-between ${isVibesPro ? 'border-white/10 bg-white/10 text-white/80' : 'border-pink-100 bg-white/90 text-slate-700 shadow-sm'}`}>
+            <div className={`mb-3 rounded-2xl border px-3 py-2 text-sm flex items-center justify-between ${isVibesPro ? 'border-white/10 bg-white/10 text-white/80' : 'border-sky-100 bg-white/90 text-slate-700 shadow-sm'}`}>
               <div className="min-w-0">
                 <div className={`text-[11px] uppercase tracking-[0.2em] ${isVibesPro ? 'text-white/50' : 'text-slate-500'}`}>Replying to</div>
                 <div className="truncate">{replyingTo.text ?? "message"}</div>
@@ -1518,7 +1605,7 @@ export default function Chat() {
           ) : null}
 
           {previewUrl && selectedFile ? (
-            <div className={`mb-3 rounded-[28px] backdrop-blur-3xl border shadow-lg overflow-hidden transition-opacity duration-300 ease-out opacity-100 ${isVibesPro ? 'bg-white/10 border-white/10' : 'bg-white/90 border-pink-100'}`}>
+            <div className={`mb-3 rounded-[28px] backdrop-blur-3xl border shadow-lg overflow-hidden transition-opacity duration-300 ease-out opacity-100 ${isVibesPro ? 'bg-white/10 border-white/10' : 'bg-white/90 border-sky-100'}`}>
               <div className="relative">
                 <img
                   src={previewUrl}

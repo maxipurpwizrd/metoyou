@@ -12,6 +12,17 @@ export async function logout() {
   if (error) throw error;
 }
 
+export async function signUpWithOAuth(provider: "google" | "apple") {
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider,
+    options: {
+      redirectTo: `${window.location.origin}/feed`,
+    },
+  });
+
+  if (error) throw error;
+}
+
 export async function signUp(
   email: string,
   password: string,

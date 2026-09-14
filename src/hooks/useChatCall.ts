@@ -228,10 +228,6 @@ export function useChatCall({
 
   const startCall = useCallback(async (callType: "audio" | "video") => {
     if (!userId || !recipientId || !conversationId) return;
-    if (!isUserOnline(recipientId)) {
-      onSendError("The other user appears offline. They must be online to receive a call.");
-      return;
-    }
 
     const mediaStream = callType === "video" ? await videoStream.startStream() : await audioStream.startStream();
     localStreamRef.current = mediaStream;

@@ -30,7 +30,7 @@ export function ChatMessageList({
 }: ChatMessageListProps) {
   const emptyStateClassName = isVibesPro
     ? "bg-[#181818]/80 backdrop-blur-3xl border border-[#D4AF37]/20 rounded-4xl p-8 text-center text-[#EBD39A]/70 shadow-[0_0_30px_rgba(212,175,55,0.08)]"
-    : "bg-white/80 backdrop-blur-3xl border border-pink-100 rounded-4xl p-8 text-center text-slate-700 shadow-[0_10px_35px_rgba(236,72,153,0.08)]";
+    : "bg-white/80 backdrop-blur-3xl border border-sky-100 rounded-4xl p-8 text-center text-slate-700 shadow-[0_10px_35px_rgba(14,165,233,0.08)]";
 
   return (
     <div className="relative z-10 flex-1 overflow-y-auto overflow-x-hidden pt-28 md:pt-32 pb-28 md:pb-32 px-3 md:px-6 bg-transparent">

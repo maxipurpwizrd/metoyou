@@ -132,7 +132,7 @@ export function ProfileSkeleton({ isVibesPro }: { isVibesPro?: boolean }) {
   }
 
   return (
-    <div className="app-screen bg-linear-to-br from-pink-100 via-purple-100 to-blue-100 p-3 md:p-6 pt-24 md:pt-32 pb-20 md:pb-24">
+    <div className="app-screen bg-linear-to-br from-sky-100 via-white to-cyan-100 p-3 md:p-6 pt-24 md:pt-32 pb-20 md:pb-24">
       <div className="mx-auto max-w-2xl space-y-6">
         <div className={`rounded-[28px] border border-white/30 bg-white/80 p-6 md:p-8 shadow-lg ${shimmer}`}>
           <div className="flex flex-col items-center gap-5 text-center">
@@ -163,7 +163,7 @@ export function MessagesSkeleton({ isVibesPro, variant = "list" }: { isVibesPro?
   const commonCard = "rounded-[28px] p-4 shadow-sm border transition-opacity duration-300";
   if (variant === "chat") {
     return (
-      <div className={`space-y-4 ${isVibesPro ? "bg-[#0B0B0B] p-6" : "bg-linear-to-br from-blue-100 via-pink-100 to-purple-100 p-6"}`}>
+      <div className={`space-y-4 ${isVibesPro ? "bg-[#0B0B0B] p-6" : "bg-linear-to-br from-sky-100 via-white to-cyan-100 p-6"}`}>
         <div className="space-y-3">
           {Array.from({ length: 5 }).map((_, index) => (
             <div key={index} className="flex items-start gap-3 animate-pulse" aria-hidden>
@@ -183,7 +183,7 @@ export function MessagesSkeleton({ isVibesPro, variant = "list" }: { isVibesPro?
   }
 
   return (
-    <div className={`space-y-3 ${isVibesPro ? "bg-[#0B0B0B] p-6" : "bg-linear-to-br from-blue-100 via-pink-100 to-purple-100 p-6"}`}>
+    <div className={`space-y-3 ${isVibesPro ? "bg-[#0B0B0B] p-6" : "bg-linear-to-br from-sky-100 via-white to-cyan-100 p-6"}`}>
       {Array.from({ length: 4 }).map((_, index) => (
         <div
           key={index}
@@ -204,7 +204,7 @@ export function MessagesSkeleton({ isVibesPro, variant = "list" }: { isVibesPro?
 
 export function NotificationsSkeleton({ isVibesPro }: { isVibesPro?: boolean }) {
   return (
-    <div className={`space-y-4 ${isVibesPro ? "bg-[#0B0B0B] p-6" : "bg-linear-to-br from-blue-100 via-pink-100 to-purple-100 p-6"}`}>
+    <div className={`space-y-4 ${isVibesPro ? "bg-[#0B0B0B] p-6" : "bg-linear-to-br from-sky-100 via-white to-cyan-100 p-6"}`}>
       {Array.from({ length: 5 }).map((_, index) => (
         <div
           key={index}
@@ -231,7 +231,7 @@ export function SearchSkeleton({ isVibesPro }: { isVibesPro?: boolean }) {
   const panelClass = isVibesPro ? "border border-[#D4AF37]/20 bg-[#181818]" : "border border-white/30 bg-white/20";
 
   return (
-    <div className={`space-y-6 ${isVibesPro ? "bg-[#0B0B0B] p-6" : "bg-linear-to-br from-blue-100 via-pink-100 to-purple-100 p-6"}`}>
+    <div className={`space-y-6 ${isVibesPro ? "bg-[#0B0B0B] p-6" : "bg-linear-to-br from-sky-100 via-white to-cyan-100 p-6"}`}>
       <div className={`rounded-[28px] p-4 ${panelClass} ${shimmer}`}>
         <div className={`h-12 rounded-full ${isVibesPro ? "bg-white/10" : "bg-slate-200"}`} />
       </div>

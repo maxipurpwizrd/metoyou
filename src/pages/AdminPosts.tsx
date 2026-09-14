@@ -287,7 +287,7 @@ export default function AdminPosts() {
 
   if (isCheckingAccess) {
     return (
-      <div className="app-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 p-4 pb-16 text-slate-900 sm:p-6">
+      <div className="app-screen bg-gradient-to-br from-sky-100 via-white to-cyan-100 p-4 pb-16 text-slate-900 sm:p-6">
         <div className="mx-auto flex max-w-5xl flex-col gap-4">
           <button type="button" onClick={() => navigate(-1)} className="inline-flex w-fit items-center gap-2 rounded-full border border-white/60 bg-white/80 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm backdrop-blur">
             <ArrowLeft className="h-4 w-4" />
@@ -295,7 +295,7 @@ export default function AdminPosts() {
           </button>
 
           <div className="rounded-[32px] border border-white/60 bg-white/70 p-8 text-center shadow-2xl backdrop-blur-2xl">
-            <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-pink-200 border-t-pink-500" />
+            <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-sky-200 border-t-sky-500" />
             <p className="text-lg font-semibold text-slate-900">Checking access…</p>
           </div>
         </div>
@@ -305,7 +305,7 @@ export default function AdminPosts() {
 
   if (!hasAdminAccess) {
     return (
-      <div className="app-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 p-4 pb-16 text-slate-900 sm:p-6">
+      <div className="app-screen bg-gradient-to-br from-sky-100 via-white to-cyan-100 p-4 pb-16 text-slate-900 sm:p-6">
         <div className="mx-auto flex max-w-5xl flex-col gap-4">
           <button type="button" onClick={() => navigate(-1)} className="inline-flex w-fit items-center gap-2 rounded-full border border-white/60 bg-white/80 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm backdrop-blur">
             <ArrowLeft className="h-4 w-4" />
@@ -321,7 +321,7 @@ export default function AdminPosts() {
   }
 
   return (
-    <div className="app-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100 p-4 pb-16 text-slate-900 sm:p-6">
+    <div className="app-screen bg-gradient-to-br from-sky-100 via-white to-cyan-100 p-4 pb-16 text-slate-900 sm:p-6">
       <div className="mx-auto flex max-w-5xl flex-col gap-4">
         <button type="button" onClick={() => navigate(-1)} className="inline-flex w-fit items-center gap-2 rounded-full border border-white/60 bg-white/80 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm backdrop-blur">
           <ArrowLeft className="h-4 w-4" />
@@ -364,7 +364,7 @@ export default function AdminPosts() {
                           <button
                             type="button"
                             onClick={() => navigate(`/profile/${encodeURIComponent(post.username)}`)}
-                            className="font-semibold text-slate-900 transition hover:text-pink-600"
+                            className="font-semibold text-slate-900 transition hover:text-sky-600"
                           >
                             {post.username}
                           </button>
@@ -373,7 +373,7 @@ export default function AdminPosts() {
                               type="checkbox"
                               checked={markedPostIds.includes(post.id)}
                               onChange={() => toggleMarkedPost(post.id)}
-                              className="h-4 w-4 rounded border-slate-300 text-pink-600 focus:ring-pink-500"
+                              className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
                             />
                             Mark to delete
                           </label>
@@ -449,8 +449,8 @@ export default function AdminPosts() {
 
       {deleteSuccessMessage ? (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/20 p-4">
-          <div className="flex items-center gap-3 rounded-full border border-pink-200 bg-white/95 px-4 py-3 shadow-xl">
-            <div className="grid h-9 w-9 place-items-center rounded-full bg-pink-100 text-pink-600">
+          <div className="flex items-center gap-3 rounded-full border border-sky-200 bg-white/95 px-4 py-3 shadow-xl">
+            <div className="grid h-9 w-9 place-items-center rounded-full bg-sky-100 text-sky-600">
               <CheckCircle2 className="h-5 w-5" />
             </div>
             <div>

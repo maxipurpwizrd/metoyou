@@ -12,10 +12,10 @@ html, body {
   overflow-x: hidden;
   -webkit-text-size-adjust: 100%;
   background: linear-gradient(
-    135deg,
-    #ffe4f1,
-    #efe2ff,
-    #dff2ff
+    160deg,
+    #d9f3ff,
+    #eefaff,
+    #ffffff
   );
 }
 

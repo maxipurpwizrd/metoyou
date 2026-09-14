@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useRef } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import type { Message } from "../types/message";
 
@@ -20,6 +20,17 @@ const ChatContext = createContext<ChatContextType | undefined>(undefined);
 export function ChatProvider({ children }: { children: ReactNode }) {
   const [messageCache, setMessageCache] = useState<Map<string, ConversationCache>>(new Map());
   const messageCacheRef = useRef<Map<string, ConversationCache>>(new Map());
+
+  useEffect(() => {
+    const clearOnLogout = () => {
+      const cleared = new Map<string, ConversationCache>();
+      messageCacheRef.current = cleared;
+      setMessageCache(cleared);
+    };
+
+    window.addEventListener("metoyou:auth-signed-out", clearOnLogout);
+    return () => window.removeEventListener("metoyou:auth-signed-out", clearOnLogout);
+  }, []);
 
   const getCachedMessages = useCallback((conversationId: string) => {
     const cached = messageCacheRef.current.get(conversationId);

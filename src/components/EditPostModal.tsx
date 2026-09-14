@@ -113,7 +113,7 @@ export default function EditPostModal({
           placeholder="Write something beautiful..."
           className={`w-full resize-none rounded-2xl border px-3 py-3 text-sm leading-6 outline-none transition ${isPremiumTheme
             ? "border-amber-200/80 bg-white/80 text-amber-950 placeholder:text-amber-700/60 focus:border-amber-400"
-            : "border-slate-200 bg-slate-50/80 text-slate-700 placeholder:text-slate-400 focus:border-pink-300"
+            : "border-slate-200 bg-slate-50/80 text-slate-700 placeholder:text-slate-400 focus:border-sky-300"
           }`}
         />
 
@@ -133,7 +133,7 @@ export default function EditPostModal({
             <button
               type="button"
               onClick={() => onSave(value)}
-              className={`rounded-full px-3.5 py-2 text-sm font-semibold text-white transition ${isPremiumTheme ? "bg-linear-to-r from-amber-500 via-yellow-500 to-orange-500 hover:opacity-90" : "bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 hover:opacity-90"}`}
+              className={`rounded-full px-3.5 py-2 text-sm font-semibold text-white transition ${isPremiumTheme ? "bg-linear-to-r from-amber-500 via-yellow-500 to-orange-500 hover:opacity-90" : "bg-linear-to-r from-sky-500 via-cyan-400 to-blue-500 hover:opacity-90"}`}
             >
               Save changes
             </button>
