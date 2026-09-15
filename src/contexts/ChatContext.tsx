@@ -22,14 +22,18 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const messageCacheRef = useRef<Map<string, ConversationCache>>(new Map());
 
   useEffect(() => {
-    const clearOnLogout = () => {
+    const clearOnAuthBoundary = () => {
       const cleared = new Map<string, ConversationCache>();
       messageCacheRef.current = cleared;
       setMessageCache(cleared);
     };
 
-    window.addEventListener("metoyou:auth-signed-out", clearOnLogout);
-    return () => window.removeEventListener("metoyou:auth-signed-out", clearOnLogout);
+    window.addEventListener("metoyou:auth-signed-out", clearOnAuthBoundary);
+    window.addEventListener("metoyou:auth-user-changed", clearOnAuthBoundary);
+    return () => {
+      window.removeEventListener("metoyou:auth-signed-out", clearOnAuthBoundary);
+      window.removeEventListener("metoyou:auth-user-changed", clearOnAuthBoundary);
+    };
   }, []);
 
   const getCachedMessages = useCallback((conversationId: string) => {

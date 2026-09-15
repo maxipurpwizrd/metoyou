@@ -4,6 +4,8 @@ export type ProfileData = {
   firstName?: string;
   bio: string;
   profilePic: string | null;
+  dateOfBirth?: string;
+  gender?: string;
   is_admin?: boolean;
   profile_original_pic?: string | null;
   vibes_pro_portrait?: string | null;
@@ -15,8 +17,6 @@ export type ProfileData = {
   interests: string[];
   email: string;
   language?: string;
-  dateOfBirth?: string;
-  gender?: string;
   hommies_count: number;
   snapshots_count: number;
   vibes_count: number;
@@ -24,10 +24,10 @@ export type ProfileData = {
 
 export type DbProfile = Omit<ProfileData, "profilePic" | "dateOfBirth" | "gender"> & {
   profile_pic: string | null;
-  is_admin?: boolean | null;
-  profile_original_pic?: string | null;
   date_of_birth?: string | null;
   gender?: string | null;
+  is_admin?: boolean | null;
+  profile_original_pic?: string | null;
   vibes_pro?: boolean | null;
   vibes_pro_portrait?: string | null;
   vibes_pro_until?: string | null;

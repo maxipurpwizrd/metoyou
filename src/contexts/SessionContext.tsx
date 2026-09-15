@@ -4,6 +4,8 @@ import { useAuth } from "../hooks/useAuth";
 import { fetchProfileFromSupabase, upsertProfileToSupabase } from "../lib/profileApi";
 import { normalizeLanguage, type AppLanguage, DEFAULT_LANGUAGE } from "../lib/i18n";
 import { isVibesProEnabled } from "../lib/vibesPro";
+import { clearUserScopedClientState } from "../lib/authStateIsolation";
+import { getAuthBoundaryVersion, isCurrentAuthUser } from "../lib/authBoundary";
 import type { ProfileData } from "../types/profile";
 
 const SESSION_CACHE_KEY = "metoyou-session-cache";
@@ -161,6 +163,25 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  useEffect(() => {
+    if (!user?.id) {
+      setProfileState(null);
+      setProfileReady(false);
+      setIsLoadingSession(false);
+      writeSessionCache(null, languageRef.current);
+      return;
+    }
+
+    const previousUserId = prevUserIdRef.current;
+    if (previousUserId && previousUserId !== user.id) {
+      clearUserScopedClientState({ previousUserId, nextUserId: user.id, routeKey: 'metoyou:last-auth-route' });
+      setProfileState(null);
+      setProfileReady(false);
+      setIsLoadingSession(true);
+      writeSessionCache(null, languageRef.current);
+    }
+  }, [user?.id]);
+
   const setLanguage = useCallback((nextLanguage: AppLanguage) => {
     const normalized = normalizeLanguage(nextLanguage);
     setLanguageState(normalized);
@@ -194,6 +215,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
 
     refreshInFlightRef.current = true;
+    const boundaryVersion = getAuthBoundaryVersion();
     setIsLoadingSession(true);
     if (!hasLoadedProfileRef.current) {
       setProfileReady(false);
@@ -220,10 +242,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           snapshots_count: 0,
           vibes_count: 0,
           language: normalizeLanguage(typeof metadata.language === "string" ? metadata.language : languageRef.current),
-          dateOfBirth: "",
-          gender: "",
         } as ProfileData);
       }
+
+      if (!isCurrentAuthUser(currentUserId, boundaryVersion)) return;
 
       const nextProfile = canonicalizeProfile(remoteProfile);
       const premiumChanged = Boolean(currentProfile?.is_vibes_pro) !== Boolean(nextProfile?.is_vibes_pro);
@@ -251,6 +273,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setProfileReady(true);
       hasLoadedProfileRef.current = true;
     } catch {
+      if (!isCurrentAuthUser(currentUserId, boundaryVersion)) return;
       const cached = readSessionCache();
       const fallbackProfile = canonicalizeProfile(cached?.profile ?? null);
       setProfileState(fallbackProfile);
@@ -263,7 +286,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       hasLoadedProfileRef.current = true;
     } finally {
       refreshInFlightRef.current = false;
-      setIsLoadingSession(false);
+      if (isCurrentAuthUser(currentUserId, boundaryVersion)) {
+        setIsLoadingSession(false);
+      }
     }
   }, []);
 
@@ -290,6 +315,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     if (authLoading) {
       setIsLoadingSession(true);
       setProfileReady(false);
+      return;
+    }
+
+    if (!currentUserId) {
+      setProfileState(null);
+      setProfileReady(false);
+      setIsLoadingSession(false);
+      writeSessionCache(null, languageRef.current);
       return;
     }
 

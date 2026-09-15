@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import { Link, useSearchParams, useNavigate } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { Mic, Paperclip, Send, Smile, Square, X, Pause, Play } from "lucide-react";
 import ChatBubble from "../components/ChatBubble";
 import AudioCall from "../components/calls/AudioCall";
@@ -80,7 +80,6 @@ export default function Chat() {
   const activeCallTargetRef = useRef<string | null>(null);
   const callHistoryIdRef = useRef<string | null>(null);
   const callStartedAtRef = useRef<Date | null>(null);
-  const ringtoneRef = useRef<HTMLAudioElement | null>(null);
 
   // Media streams
   const audioStream = useMediaStream({ audio: true, video: false });
@@ -403,31 +402,6 @@ export default function Chat() {
       remoteVideoRef.current.srcObject = remoteStream;
     }
   }, [remoteStream]);
-
-  useEffect(() => {
-    const isCallRinging = Boolean(incomingCallOffer) || activeCallSession?.status === "ringing";
-
-    if (!isCallRinging) {
-      if (ringtoneRef.current) {
-        ringtoneRef.current.pause();
-        ringtoneRef.current.currentTime = 0;
-      }
-      return;
-    }
-
-    const ringtone = ringtoneRef.current ?? new Audio("/Ringtone.mp3");
-    ringtone.loop = true;
-    ringtone.volume = 0.8;
-    ringtoneRef.current = ringtone;
-    void ringtone.play().catch(() => {
-      // Browser autoplay policies may block incoming-call playback.
-    });
-
-    return () => {
-      ringtone.pause();
-      ringtone.currentTime = 0;
-    };
-  }, [activeCallSession?.status, incomingCallOffer]);
 
   // Connect local video stream to ref when available
   useEffect(() => {
@@ -1436,12 +1410,14 @@ export default function Chat() {
         <div className="max-w-xl mx-auto">
           <div className={headerCardClassName}>
             <div className="flex items-center gap-3">
-              <Link
-                to="/messages"
+              <button
+                type="button"
+                onClick={() => navigate("/messages", { replace: true })}
                 className={`text-lg font-bold hover:scale-[1.05] transition ${isVibesPro ? 'text-white' : 'text-slate-800'}`}
+                aria-label="Back to messages"
               >
                 ←
-              </Link>
+              </button>
 
               <div className={`grid place-items-center w-10 h-10 rounded-[20px] ${isVibesPro ? 'bg-linear-to-r from-[#D4AF37] to-[#F0C75E] text-[#111111]' : 'bg-linear-to-r from-sky-500 via-cyan-400 to-blue-500 text-white'} font-bold text-sm`}>
                 {recipientName.charAt(0)}

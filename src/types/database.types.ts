@@ -11,8 +11,6 @@ export type Database = {
           email: string | null;
           profile_pic: string | null;
           profile_original_pic: string | null;
-          date_of_birth: string | null;
-          gender: string | null;
           vibes_pro: boolean | null;
           vibes_pro_portrait: string | null;
           vibes_pro_until: string | null;
@@ -31,8 +29,6 @@ export type Database = {
           email?: string | null;
           profile_pic?: string | null;
           profile_original_pic?: string | null;
-          date_of_birth?: string | null;
-          gender?: string | null;
           vibes_pro?: boolean | null;
           vibes_pro_portrait?: string | null;
           vibes_pro_until?: string | null;
@@ -51,8 +47,6 @@ export type Database = {
           email?: string | null;
           profile_pic?: string | null;
           profile_original_pic?: string | null;
-          date_of_birth?: string | null;
-          gender?: string | null;
           vibes_pro?: boolean | null;
           vibes_pro_portrait?: string | null;
           vibes_pro_until?: string | null;

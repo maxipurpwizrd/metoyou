@@ -28,9 +28,7 @@ export async function signUp(
   password: string,
   firstName?: string,
   lastName?: string,
-  language?: string,
-  dateOfBirth?: string,
-  gender?: string
+  language?: string
 ) {
   const username = `${firstName || ""} ${lastName || ""}`.trim();
   const normalizedLanguage = normalizeLanguage(language);
@@ -62,8 +60,6 @@ export async function signUp(
         vibes_count: 0,
         snapshots_count: 0,
         language: normalizedLanguage,
-        date_of_birth: dateOfBirth ?? null,
-        gender: gender ?? null,
       });
 
     if (profileError) throw profileError;

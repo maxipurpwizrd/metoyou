@@ -77,6 +77,7 @@ export async function likePost(postId: string, userId: string) {
         const notificationData = {
           type: "like",
           message: "liked your post",
+          actor_id: userId,
           user_id: authorId,
           created_at: createdAt,
           is_read: false,

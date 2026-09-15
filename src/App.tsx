@@ -29,6 +29,7 @@ import VibesProSuccess from "./pages/VibesProSuccess";
 import RequireAuth from "./components/RequireAuth";
 import { useAuth } from "./hooks/useAuth";
 import { GlobalCallProvider } from "./contexts/GlobalCallContext";
+import { shouldRedirectAuthenticatedPublicRoute } from "./lib/authStateIsolation";
 
 const LAST_ROUTE_STORAGE_KEY = "metoyou:last-auth-route";
 const PUBLIC_ROUTES = new Set(["/", "/welcome", "/login", "/signup", "/about"]);
@@ -68,6 +69,12 @@ function PublicRoute({ children }: { children: ReactNode }) {
     const publicPaths = ["/", "/welcome", "/login", "/signup"];
     if (!publicPaths.includes(location.pathname)) return;
 
+    if (shouldRedirectAuthenticatedPublicRoute(location.pathname, user.id)) {
+      window.sessionStorage.removeItem(LAST_ROUTE_STORAGE_KEY);
+      navigate("/feed", { replace: true });
+      return;
+    }
+
     const savedRoute = window.sessionStorage.getItem(LAST_ROUTE_STORAGE_KEY);
     const target = savedRoute && savedRoute.startsWith("/") ? savedRoute : "/feed";
     navigate(target, { replace: true });
@@ -89,6 +96,12 @@ function AppRoutes() {
       window.sessionStorage.setItem(LAST_ROUTE_STORAGE_KEY, currentPath);
     }
   }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    if (location.pathname === "/login" || location.pathname === "/signup") {
+      window.sessionStorage.removeItem(LAST_ROUTE_STORAGE_KEY);
+    }
+  }, [location.pathname]);
 
   useEffect(() => {
     const currentPath = `${location.pathname}${location.search}`;

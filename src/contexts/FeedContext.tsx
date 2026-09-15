@@ -7,6 +7,7 @@ import { useAuth } from "../hooks/useAuth";
 import { hydratePostLikeState } from "../lib/likeApi";
 import { isVibesProEnabled } from "../lib/vibesPro";
 import { getRelativeTime } from "../lib/time";
+import { getAuthBoundaryVersion, isCurrentAuthUser } from "../lib/authBoundary";
 import type { PostRecord } from "../types/post";
 
 export type User = {
@@ -127,6 +128,7 @@ export function FeedProvider({ children }: { children: ReactNode }) {
   const inFlightRequestKeyRef = useRef<string | null>(null);
   const exhaustedCursorRef = useRef<string | null>(null);
   const completedAppendCursorRef = useRef<string | null>(null);
+  const currentUserIdRef = useRef(user?.id);
   const isDev = import.meta.env.DEV;
   const skipCachedFeed = typeof window !== "undefined" && window.localStorage.getItem("metoyou.skipCachedFeed") === "1";
   if (isDev && typeof window !== "undefined") console.debug("[FeedContext] skipCachedFeed=", skipCachedFeed);
@@ -135,6 +137,10 @@ export function FeedProvider({ children }: { children: ReactNode }) {
     postsRef.current = posts;
     writeCachedFeed(posts);
   }, [posts]);
+
+  useEffect(() => {
+    currentUserIdRef.current = user?.id;
+  }, [user?.id]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -243,7 +249,11 @@ export function FeedProvider({ children }: { children: ReactNode }) {
     };
 
     window.addEventListener("metoyou:auth-signed-out", clearOnLogout);
-    return () => window.removeEventListener("metoyou:auth-signed-out", clearOnLogout);
+    window.addEventListener("metoyou:auth-user-changed", clearOnLogout);
+    return () => {
+      window.removeEventListener("metoyou:auth-signed-out", clearOnLogout);
+      window.removeEventListener("metoyou:auth-user-changed", clearOnLogout);
+    };
   }, []);
 
   const loadPostsPage = async ({ append = false, refresh = false, background = false } = {}) => {
@@ -266,6 +276,7 @@ export function FeedProvider({ children }: { children: ReactNode }) {
     }
 
     const requestId = ++currentRequestId.current;
+    const boundaryVersion = getAuthBoundaryVersion();
     isFetchingRef.current = true;
     inFlightRequestKeyRef.current = requestKey;
 
@@ -275,6 +286,7 @@ export function FeedProvider({ children }: { children: ReactNode }) {
       const records = refresh
         ? await fetchPostsFromSupabase({ limit: PAGE_SIZE, after: newestCursor })
         : await fetchPostsFromSupabase({ limit: PAGE_SIZE, before: oldestCursor });
+      if (!isCurrentAuthUser(currentUserIdRef.current, boundaryVersion)) return;
       let withMeta = await mapRecords(Array.isArray(records) ? (records as PostRecord[]) : [], user?.id);
 
       // Attach comments for posts so persisted comments show after refresh/load.
@@ -303,7 +315,7 @@ export function FeedProvider({ children }: { children: ReactNode }) {
         devLog("hydratePostComments failed", e);
       }
 
-      if (!isMountedRef.current || currentRequestId.current !== requestId) {
+      if (!isMountedRef.current || currentRequestId.current !== requestId || !isCurrentAuthUser(currentUserIdRef.current, boundaryVersion)) {
         devLog("loadPostsPage ignored stale response", requestId);
         return;
       }
@@ -341,8 +353,10 @@ export function FeedProvider({ children }: { children: ReactNode }) {
           inFlightRequestKeyRef.current = null;
         }
       }
-      if (!background) setLoading(false);
-      if (!background) setIsLoadingMore(false);
+      if (isCurrentAuthUser(currentUserIdRef.current, boundaryVersion)) {
+        if (!background) setLoading(false);
+        if (!background) setIsLoadingMore(false);
+      }
     }
   }; 
 

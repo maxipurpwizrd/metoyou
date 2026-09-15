@@ -11,6 +11,10 @@ type NotificationChannelEntry = {
 
 const notificationChannels = new Map<string, NotificationChannelEntry>();
 
+export function resetNotificationSubscriptions() {
+  notificationChannels.clear();
+}
+
 export type Notification = {
   id: string;
   type: "like" | "comment" | "view" | "follow" | "follow_back" | string;

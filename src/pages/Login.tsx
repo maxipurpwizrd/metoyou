@@ -52,8 +52,6 @@ export default function Login() {
           snapshots_count: 0,
           vibes_count: 0,
           language: selectedLanguage,
-          dateOfBirth: "",
-          gender: "",
         };
         const created = await upsertProfileToSupabase(newProfile);
         if (created) await refreshSession();

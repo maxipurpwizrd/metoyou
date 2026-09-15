@@ -17,8 +17,6 @@ function normalizeProfileRecord(result: DbProfile): ProfileData {
     profile_original_pic: typeof result.profile_original_pic === "string" ? result.profile_original_pic : null,
     vibes_pro_portrait: typeof result.vibes_pro_portrait === "string" ? result.vibes_pro_portrait : null,
     interests: Array.isArray(result.interests) ? result.interests : [],
-    dateOfBirth: result.date_of_birth ?? undefined,
-    gender: result.gender ?? undefined,
     is_vibes_pro: isVibesPro,
     vibes_pro: isVibesPro,
     vibes_pro_until: result.vibes_pro_until ?? null,
@@ -63,7 +61,7 @@ export async function upsertProfileToSupabase(profile: ProfileData): Promise<Pro
 
     const existingProfile = (existingProfileRow as DbProfile | null) ?? null;
     const normalizedLanguage = normalizeLanguage(profile.language ?? existingProfile?.language ?? undefined);
-    const { profilePic, dateOfBirth, gender } = profile;
+    const { profilePic } = profile;
     const vibesProValue = typeof profile.is_vibes_pro === "boolean"
       ? profile.is_vibes_pro
       : typeof profile.vibes_pro === "boolean"
@@ -76,8 +74,6 @@ export async function upsertProfileToSupabase(profile: ProfileData): Promise<Pro
       email: profile.email ?? existingProfile?.email ?? "",
       profile_pic: profilePic ?? profile.vibes_pro_portrait ?? existingProfile?.profile_pic ?? null,
       profile_original_pic: profile.profile_original_pic ?? existingProfile?.profile_original_pic ?? null,
-      date_of_birth: dateOfBirth ?? existingProfile?.date_of_birth ?? null,
-      gender: gender ?? existingProfile?.gender ?? null,
       is_vibes_pro: vibesProValue,
       vibes_pro_portrait: profile.vibes_pro_portrait ?? existingProfile?.vibes_pro_portrait ?? null,
       vibes_pro_until: profile.vibes_pro_until ?? existingProfile?.vibes_pro_until ?? null,

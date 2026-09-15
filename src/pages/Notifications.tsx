@@ -11,6 +11,7 @@ import {
   deleteAllNotifications,
   type Notification,
 } from "../lib/notificationApi";
+import { getAuthBoundaryVersion, isCurrentAuthUser } from "../lib/authBoundary";
 import { useSession } from "../contexts/SessionContext";
 import { VibesProFeed } from "../themes/vibespro";
 import { NotificationsSkeleton } from "../components/skeletons/Skeletons";
@@ -107,6 +108,27 @@ export default function Notifications({ embedded }: NotificationsProps) {
   } | null>(null);
   const mountedRef = useRef(true);
   const notificationsRef = useRef<Notification[]>([]);
+  const currentUserIdRef = useRef(user?.id);
+
+  useEffect(() => {
+    currentUserIdRef.current = user?.id;
+  }, [user?.id]);
+
+  useEffect(() => {
+    const resetOnAuthBoundary = () => {
+      notificationsRef.current = [];
+      setNotifications([]);
+      setNotificationsLoading(false);
+      setConfirmDialog(null);
+    };
+
+    window.addEventListener("metoyou:auth-user-changed", resetOnAuthBoundary);
+    window.addEventListener("metoyou:auth-signed-out", resetOnAuthBoundary);
+    return () => {
+      window.removeEventListener("metoyou:auth-user-changed", resetOnAuthBoundary);
+      window.removeEventListener("metoyou:auth-signed-out", resetOnAuthBoundary);
+    };
+  }, []);
 
   const saveNotificationsCache = (nextNotifications: Notification[], userId: string) => {
     if (typeof window === "undefined") return;
@@ -153,6 +175,7 @@ export default function Notifications({ embedded }: NotificationsProps) {
     mountedRef.current = true;
     const userId = user?.id;
     if (!userId) return;
+    const boundaryVersion = getAuthBoundaryVersion();
     const cacheKey = `metoyou-notifs:${userId}`;
 
     try {
@@ -174,7 +197,7 @@ export default function Notifications({ embedded }: NotificationsProps) {
         if (last && now - last < 30_000) return; // throttle
 
         const remote = await getNotifications(userId);
-        if (!mountedRef.current || !remote) return;
+        if (!mountedRef.current || !remote || !isCurrentAuthUser(currentUserIdRef.current, boundaryVersion)) return;
 
         const currentJson = JSON.stringify(notificationsRef.current);
         const remoteJson = JSON.stringify(remote);
@@ -185,7 +208,9 @@ export default function Notifications({ embedded }: NotificationsProps) {
       } catch (err) {
         console.warn("Failed to refresh notifications", err);
       } finally {
-        setNotificationsLoading(false);
+        if (isCurrentAuthUser(currentUserIdRef.current, boundaryVersion)) {
+          setNotificationsLoading(false);
+        }
       }
     };
 
@@ -197,7 +222,7 @@ export default function Notifications({ embedded }: NotificationsProps) {
 
     void markNotificationsRead(userId)
       .then((success) => {
-        if (success) {
+        if (success && isCurrentAuthUser(currentUserIdRef.current, boundaryVersion)) {
           updateNotifications(notificationsRef.current.map((item) => ({ ...item, read: true })));
           saveNotificationsCache(notificationsRef.current, userId);
         }

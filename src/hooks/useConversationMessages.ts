@@ -11,6 +11,7 @@ import {
 } from "../lib/chatApi";
 import { mergeMessages } from "../lib/messageApi";
 import type { Message } from "../lib/messageApi";
+import { getAuthBoundaryVersion, isCurrentAuthUser } from "../lib/authBoundary";
 
 interface UseConversationMessagesOptions {
   recipientId: string;
@@ -61,6 +62,11 @@ export function useConversationMessages({ recipientId, initialConversationId, on
   const subscriptionRef = useRef<any>(null);
   const activeConversationIdRef = useRef<string | null>(null);
   const isMountedRef = useRef(true);
+  const currentUserIdRef = useRef(userId);
+
+  useEffect(() => {
+    currentUserIdRef.current = userId;
+  }, [userId]);
 
   const resolveConversation = useCallback(async () => {
     if (!userId || !recipientId) {
@@ -68,7 +74,9 @@ export function useConversationMessages({ recipientId, initialConversationId, on
       return null;
     }
 
+    const boundaryVersion = getAuthBoundaryVersion();
     const conversation = await findOrCreateConversation(userId, recipientId);
+    if (!isCurrentAuthUser(currentUserIdRef.current, boundaryVersion)) return null;
     if (!conversation) {
       setSendError("Unable to open this chat. Please try again.");
       setConversationIdState(null);
@@ -82,6 +90,7 @@ export function useConversationMessages({ recipientId, initialConversationId, on
   const loadMessages = useCallback(async (conversationIdToLoad: string) => {
     setLoading(true);
     const currentLoadVersion = ++messagesLoadVersionRef.current;
+    const boundaryVersion = getAuthBoundaryVersion();
 
     const cached = getCachedMessages(conversationIdToLoad);
     if (cached && cached.length > 0) {
@@ -92,7 +101,7 @@ export function useConversationMessages({ recipientId, initialConversationId, on
 
     try {
       const page = await fetchMessagesPage(conversationIdToLoad, undefined, 31);
-      if (!isMountedRef.current || currentLoadVersion !== messagesLoadVersionRef.current) {
+      if (!isMountedRef.current || currentLoadVersion !== messagesLoadVersionRef.current || !isCurrentAuthUser(currentUserIdRef.current, boundaryVersion)) {
         return;
       }
 
@@ -106,7 +115,7 @@ export function useConversationMessages({ recipientId, initialConversationId, on
     } catch (error) {
       console.error("useConversationMessages loadMessages error", error);
     } finally {
-      if (isMountedRef.current) {
+      if (isMountedRef.current && isCurrentAuthUser(currentUserIdRef.current, boundaryVersion)) {
         setLoading(false);
       }
     }
@@ -133,7 +142,9 @@ export function useConversationMessages({ recipientId, initialConversationId, on
     }
 
     activeConversationIdRef.current = conversationIdToSubscribe;
+    const boundaryVersion = getAuthBoundaryVersion();
     subscriptionRef.current = subscribeToMessages(conversationIdToSubscribe, (newMessage) => {
+      if (!isCurrentAuthUser(currentUserIdRef.current, boundaryVersion)) return;
       try {
         console.debug("useConversationMessages - received message callback", { conversationId: conversationIdToSubscribe, id: newMessage?.id, sender_id: newMessage?.sender_id });
       } catch (_) {}
@@ -166,8 +177,10 @@ export function useConversationMessages({ recipientId, initialConversationId, on
     if (!oldest?.created_at) return;
 
     setLoadingMore(true);
+    const boundaryVersion = getAuthBoundaryVersion();
     try {
       const older = await fetchMessagesPage(conversationId, oldest.created_at, 30);
+      if (!isCurrentAuthUser(currentUserIdRef.current, boundaryVersion)) return;
       setMessages((current) => mergeMessages([...older, ...current]));
       if (older.length < 30) {
         setHasMore(false);
@@ -176,7 +189,7 @@ export function useConversationMessages({ recipientId, initialConversationId, on
     } catch (error) {
       console.error("useConversationMessages loadMore error", error);
     } finally {
-      if (isMountedRef.current) {
+      if (isMountedRef.current && isCurrentAuthUser(currentUserIdRef.current, boundaryVersion)) {
         setLoadingMore(false);
       }
     }
@@ -205,6 +218,7 @@ export function useConversationMessages({ recipientId, initialConversationId, on
 
     setSending(true);
     setSendError(null);
+    const boundaryVersion = getAuthBoundaryVersion();
 
     const optimisticId = `optimistic-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const optimisticMessage: Message = {
@@ -238,6 +252,8 @@ export function useConversationMessages({ recipientId, initialConversationId, on
         replyToText: options.replyToText,
       });
 
+      if (!isCurrentAuthUser(currentUserIdRef.current, boundaryVersion)) return null;
+
       if (saved) {
         setMessages((current) => {
           const filtered = current.filter((msg) => msg.id !== optimisticId);
@@ -257,7 +273,7 @@ export function useConversationMessages({ recipientId, initialConversationId, on
       setSendError("Unable to send message. Please try again.");
       return null;
     } finally {
-      if (isMountedRef.current) {
+      if (isMountedRef.current && isCurrentAuthUser(currentUserIdRef.current, boundaryVersion)) {
         setSending(false);
       }
     }

@@ -78,6 +78,10 @@ export default function AppBootstrap({ children }: { children: React.ReactNode }
 
     const currentUserId = user?.id ?? null;
 
+    if (initializedUserId && currentUserId && initializedUserId !== currentUserId) {
+      try { sessionStorage.removeItem('metoyou:appInitializedUserId'); } catch (e) {}
+    }
+
     // If we've already initialized this session for this user, skip initialization
     if (initializedUserId && currentUserId && initializedUserId === currentUserId) {
       setProgress?.(100);
