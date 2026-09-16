@@ -172,8 +172,17 @@ export async function savePostToSupabase(payload: {
   highlighted?: boolean;
 }): Promise<PostRecord | null> {
   try {
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError || !authData.user) {
+      throw new Error("Authentication is required to create a post.");
+    }
+
+    if (payload.author_id !== authData.user.id) {
+      throw new Error("Post author does not match the active authenticated user.");
+    }
+
     const insert = {
-      author_id: payload.author_id,
+      author_id: authData.user.id,
       text: payload.text ?? null,
       image_url: payload.image_url ?? null,
       image_original_url: payload.image_original_url ?? null,
@@ -209,13 +218,14 @@ export async function fetchPostsFromSupabase(options?: {
   before?: string;
   after?: string;
   author_id?: string;
+  feedOnly?: boolean;
 }): Promise<PostRecord[]> {
   try {
     const limit = options?.limit ?? 50;
 
     let builder = supabase
       .from("posts")
-      .select("id, author_id, text, image_url, image_original_url, video_url, audio_url, media_type, likes_count, comments_count, highlighted, created_at")
+      .select("id, author_id, text, image_url, image_original_url, video_url, audio_url, media_type, content_kind, likes_count, comments_count, highlighted, created_at")
       .order("created_at", { ascending: false })
       .limit(limit);
 
@@ -231,6 +241,10 @@ export async function fetchPostsFromSupabase(options?: {
       builder = builder.eq("author_id", options.author_id);
     }
 
+    if (options?.feedOnly) {
+      builder = builder.in("content_kind", ["text", "image"]);
+    }
+
     const { data, error } = await builder;
     if (error) throw error;
 
@@ -242,7 +256,7 @@ export async function fetchPostsFromSupabase(options?: {
     return normalizedRows as PostRecord[];
   } catch (e) {
     console.error("fetchPostsFromSupabase error", e);
-    return [] as PostRecord[];
+    throw e;
   }
 }
 

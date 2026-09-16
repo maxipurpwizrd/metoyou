@@ -96,6 +96,7 @@ type FeedContextValue = {
   refreshPosts: (force?: boolean) => Promise<void>;
   loadMorePosts: () => Promise<void>;
   hasMore: boolean;
+  feedError: string | null;
   lastFetchTime: number | null;
   savedScrollY: number;
   setSavedScrollY: (y: number) => void;
@@ -117,6 +118,7 @@ export function FeedProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  const [feedError, setFeedError] = useState<string | null>(null);
   const [lastFetchTime, setLastFetchTime] = useState<number | null>(null);
   const [savedScrollY, setSavedScrollY] = useState<number>(0);
   const [selectedPostId, setSelectedPostId] = useState<string | number | null>(null);
@@ -274,6 +276,7 @@ export function FeedProvider({ children }: { children: ReactNode }) {
     } else {
       if (!background) setLoading(true);
     }
+    setFeedError(null);
 
     const requestId = ++currentRequestId.current;
     const boundaryVersion = getAuthBoundaryVersion();
@@ -284,8 +287,8 @@ export function FeedProvider({ children }: { children: ReactNode }) {
       const oldestCursor = cursor ?? undefined;
       const newestCursor = refresh && postsRef.current.length > 0 ? postsRef.current[0]?.created_at : undefined;
       const records = refresh
-        ? await fetchPostsFromSupabase({ limit: PAGE_SIZE, after: newestCursor })
-        : await fetchPostsFromSupabase({ limit: PAGE_SIZE, before: oldestCursor });
+        ? await fetchPostsFromSupabase({ limit: PAGE_SIZE, after: newestCursor, feedOnly: true })
+        : await fetchPostsFromSupabase({ limit: PAGE_SIZE, before: oldestCursor, feedOnly: true });
       if (!isCurrentAuthUser(currentUserIdRef.current, boundaryVersion)) return;
       let withMeta = await mapRecords(Array.isArray(records) ? (records as PostRecord[]) : [], user?.id);
 
@@ -346,6 +349,9 @@ export function FeedProvider({ children }: { children: ReactNode }) {
       }
     } catch (err) {
       console.error("FeedProvider: failed to load posts", err);
+      if (isMountedRef.current && isCurrentAuthUser(currentUserIdRef.current, boundaryVersion)) {
+        setFeedError("Unable to load more posts. Please try again.");
+      }
     } finally {
       if (currentRequestId.current === requestId) {
         isFetchingRef.current = false;
@@ -517,6 +523,7 @@ export function FeedProvider({ children }: { children: ReactNode }) {
 
     const channel = subscribeToNewPosts(async (record) => {
       if (!isMountedRef.current) return;
+      if (record.content_kind !== "text" && record.content_kind !== "image") return;
 
       const mapped = await mapRecords([record], user.id);
       if (!isMountedRef.current || mapped.length === 0) return;
@@ -541,6 +548,7 @@ export function FeedProvider({ children }: { children: ReactNode }) {
     refreshPosts: fetchIfNeeded,
     loadMorePosts,
     hasMore,
+    feedError,
     lastFetchTime,
     savedScrollY,
     setSavedScrollY: (y: number) => setSavedScrollY(y),

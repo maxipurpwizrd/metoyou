@@ -1,4 +1,5 @@
 export type PostMediaType = "image" | "video" | "audio" | "text" | "mixed" | null;
+export type ContentKind = "text" | "image" | "video" | "track";
 
 export type PostRecord = {
   id: string;
@@ -9,6 +10,7 @@ export type PostRecord = {
   video_url?: string | null;
   audio_url?: string | null;
   media_type?: PostMediaType;
+  content_kind?: ContentKind | null;
   likes_count?: number;
   comments_count?: number;
   highlighted?: boolean;

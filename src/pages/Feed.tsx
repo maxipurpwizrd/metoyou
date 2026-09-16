@@ -129,6 +129,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
   const [audioSelectionError, setAudioSelectionError] = useState<string | null>(null);
   const [activeTrimHandle, setActiveTrimHandle] = useState<"start" | "end" | null>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
+  const feedTouchStartRef = useRef<{ x: number; y: number } | null>(null);
   const maxTrimDuration = Math.min(audioDuration ?? 35, 35);
 
   const updateTrimSelection = useCallback((clientX: number) => {
@@ -184,7 +185,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
     }));
   }, [storyChoiceOpen, storyEditorOpen]);
   const [currentTime, setCurrentTime] = useState<number>(() => Date.now());
-  const { posts, setPosts, savedScrollY, setSavedScrollY, selectedPostId, setSelectedPostId, loading, loadMorePosts, hasMore } = useFeed();
+  const { posts, setPosts, savedScrollY, setSavedScrollY, selectedPostId, setSelectedPostId, loading, loadMorePosts, hasMore, feedError } = useFeed();
   const filteredPosts = useMemo(() => {
     const basePosts = posts.filter((post) => !mutedUsers.includes(post.author.id));
 
@@ -541,6 +542,11 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
   ) => {
     const profile = currentUserProfile;
     if (!profile) return false;
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError || !authData.user) {
+      throw authError ?? new Error("Authentication is required to create a post.");
+    }
+    const authorId = authData.user.id;
 
     const startProgress = () => {
       let progress = 0;
@@ -564,7 +570,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
       let audioUrl: string | undefined;
 
       if (payload.image) {
-        const uploadedImages = await uploadImageVariantsToSupabase(payload.image, payload.originalImage, profile.id, (percent) => {
+        const uploadedImages = await uploadImageVariantsToSupabase(payload.image, payload.originalImage, authorId, (percent) => {
           onProgress?.(Math.max(0, Math.min(100, percent)));
         });
         imageUrl = uploadedImages.optimizedUrl ?? undefined;
@@ -572,13 +578,13 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
       }
 
       if (payload.audio) {
-        audioUrl = await uploadAudioToSupabase(payload.audio, profile.id, (percent) => {
+        audioUrl = await uploadAudioToSupabase(payload.audio, authorId, (percent) => {
           onProgress?.(Math.max(0, Math.min(100, percent)));
         });
       }
 
       const saved = await savePostToSupabase({
-        author_id: profile.id,
+        author_id: authorId,
         text: payload.text ?? null,
         image_url: imageUrl ?? payload.image ?? null,
         image_original_url: imageOriginalUrl ?? payload.originalImage ?? imageUrl ?? payload.image ?? null,
@@ -998,8 +1004,31 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
   const storyCardBgClass = isVibesPro ? "bg-[#111111]/85 text-white" : "bg-white/80 text-sky-600";
   const storyCardStyle = { borderRadius: storyCardRadius };
 
+  const handleFeedTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    if (target.closest("button, a, input, textarea, select, video")) {
+      feedTouchStartRef.current = null;
+      return;
+    }
+    const touch = event.changedTouches[0];
+    feedTouchStartRef.current = { x: touch.clientX, y: touch.clientY };
+  };
+
+  const handleFeedTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+    const start = feedTouchStartRef.current;
+    feedTouchStartRef.current = null;
+    if (!start) return;
+
+    const touch = event.changedTouches[0];
+    const deltaX = touch.clientX - start.x;
+    const deltaY = touch.clientY - start.y;
+    if (deltaX <= -80 && Math.abs(deltaX) > Math.abs(deltaY) * 1.35) {
+      navigate("/clips", { replace: true });
+    }
+  };
+
   const focusedPostContent = shouldFocusOnPost ? (
-    <div className={`app-screen ${isVibesPro ? 'bg-[#0B0B0B]' : 'bg-linear-to-br from-sky-100 via-white to-cyan-100'} px-4 sm:px-6`}>
+    <div onTouchStart={handleFeedTouchStart} onTouchEnd={handleFeedTouchEnd} className={`app-screen ${isVibesPro ? 'bg-[#0B0B0B]' : 'bg-linear-to-br from-sky-100 via-white to-cyan-100'} px-4 sm:px-6`}>
       <div className="mx-auto max-w-md pb-24 pt-4">
         {focusedPost ? (
           <div className={`rounded-[32px] border p-2 shadow-2xl backdrop-blur-md ${isVibesPro ? 'border-[#D4AF37]/20 bg-[#181818]' : 'border-white/40 bg-white/70'}`}>
@@ -1043,7 +1072,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
 
   // Normal feed content that can be wrapped by VibesProFeed theme
   const feedContent = (
-    <div className={`app-screen ${isVibesPro ? 'bg-[#0B0B0B]' : 'bg-linear-to-br from-sky-100 via-white to-cyan-100'} px-4 sm:px-6`}>
+    <div onTouchStart={handleFeedTouchStart} onTouchEnd={handleFeedTouchEnd} className={`app-screen ${isVibesPro ? 'bg-[#0B0B0B]' : 'bg-linear-to-br from-sky-100 via-white to-cyan-100'} px-4 sm:px-6`}>
       {!shouldFocusOnPost && !isVibesPro && <Navbar />}
 
       <div className={`max-w-md mx-auto pb-24 space-y-5 ${shouldFocusOnPost ? 'pt-4' : isVibesPro ? 'pt-8' : 'pt-28'}`}>
@@ -1454,6 +1483,18 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
           )}
           {loading && filteredPosts.length > 0 && (
             isVibesPro ? <VibesProFeedSkeleton count={1} /> : <FreeFeedSkeleton count={1} />
+          )}
+          {feedError && (
+            <div className="mt-4 flex items-center justify-center gap-3 rounded-2xl border border-rose-200 bg-rose-50/90 px-4 py-3 text-sm text-rose-700 shadow-sm">
+              <span>{feedError}</span>
+              <button
+                type="button"
+                onClick={() => void loadMorePosts()}
+                className="font-semibold underline underline-offset-2"
+              >
+                Retry
+              </button>
+            </div>
           )}
         </div>
       </div>
