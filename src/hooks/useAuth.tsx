@@ -5,6 +5,7 @@ import { clearClientCaches } from "../lib/clearClientCaches";
 import { queryClient } from "../lib/queryClient";
 import { clearUserScopedClientState } from "../lib/authStateIsolation";
 import { setAuthBoundaryUser, teardownUserRealtimeChannels } from "../lib/authBoundary";
+import { getAuthBoundaryVersion } from "../lib/authBoundary";
 
 type AuthContextType = {
   user: User | null;
@@ -18,6 +19,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const previousUserRef = useRef<User | null>(null);
   const authTransitionRef = useRef(0);
+  const authHydratedRef = useRef(false);
+  const pendingAuthEventRef = useRef<{ event: string; user: User | null } | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -51,16 +54,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       queryClient.clear();
     };
 
+    const logAuthState = (source: string, event: string, nextUser: User | null, session: { access_token?: string } | null) => {
+      if (!import.meta.env.DEV) return;
+      console.debug("[AuthTrace]", {
+        source,
+        event,
+        hasSession: Boolean(session),
+        hasAccessToken: Boolean(session?.access_token),
+        currentUserId: nextUser?.id ?? null,
+        authBoundaryVersion: getAuthBoundaryVersion(),
+      });
+    };
+
     supabase.auth.getSession().then(({ data }) => {
       if (!mounted) return;
       const nextUser = data.session?.user ?? null;
-      void applyAuthState(nextUser);
+      logAuthState("getSession", "SESSION_RESOLVED", nextUser, data.session);
+      void applyAuthState(nextUser).then(() => {
+        if (!mounted) return;
+        authHydratedRef.current = true;
+        const pending = pendingAuthEventRef.current;
+        pendingAuthEventRef.current = null;
+        if (pending && pending.event !== "INITIAL_SESSION") {
+          void applyAuthState(pending.user);
+        }
+      });
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
       const nextUser = session?.user ?? null;
-      if (event === "SIGNED_OUT" || (!session && previousUserRef.current)) {
+      logAuthState("onAuthStateChange", event, nextUser, session);
+      if (!authHydratedRef.current) {
+        pendingAuthEventRef.current = { event, user: nextUser };
+        return;
+      }
+      if (event === "SIGNED_OUT") {
         clearOnLogout();
       }
       void applyAuthState(nextUser);

@@ -146,10 +146,17 @@ export async function findOrCreateConversation(
       .select("*")
       .eq("user_1", minId)
       .eq("user_2", maxId)
+      .order("created_at", { ascending: true })
       .limit(1);
 
     if (selectError) throw selectError;
     if (existing && existing.length > 0) {
+      if (import.meta.env.DEV) console.debug("[MessageTrace] conversation resolved", {
+        requestedUserIds: [userId1, userId2],
+        authenticatedUserId: authUserId,
+        conversationId: existing[0].id,
+        participants: [existing[0].user_1, existing[0].user_2],
+      });
       return existing[0];
     }
 
@@ -158,10 +165,17 @@ export async function findOrCreateConversation(
       .select("*")
       .eq("user_1", maxId)
       .eq("user_2", minId)
+      .order("created_at", { ascending: true })
       .limit(1);
 
     if (legacyError) throw legacyError;
     if (legacyExisting && legacyExisting.length > 0) {
+      if (import.meta.env.DEV) console.debug("[MessageTrace] legacy conversation resolved", {
+        requestedUserIds: [userId1, userId2],
+        authenticatedUserId: authUserId,
+        conversationId: legacyExisting[0].id,
+        participants: [legacyExisting[0].user_1, legacyExisting[0].user_2],
+      });
       return legacyExisting[0];
     }
 
@@ -199,6 +213,12 @@ export async function findOrCreateConversation(
       throw error;
     }
 
+    if (import.meta.env.DEV) console.debug("[MessageTrace] conversation created", {
+      requestedUserIds: [userId1, userId2],
+      authenticatedUserId: authUserId,
+      conversationId: data?.id,
+      participants: data ? [data.user_1, data.user_2] : null,
+    });
     return data;
   } catch (e) {
     console.error("findOrCreateConversation error", e);

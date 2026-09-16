@@ -5,7 +5,9 @@ import type { CallSession } from "../../types/call";
 interface VideoCallProps {
   session: CallSession;
   localVideoRef: RefObject<HTMLVideoElement | null>;
+  localStream: MediaStream | null;
   remoteVideoRef: RefObject<HTMLVideoElement | null>;
+  remoteStream: MediaStream | null;
   isRemoteVideoActive: boolean;
   isMuted: boolean;
   isCameraOff: boolean;
@@ -14,8 +16,18 @@ interface VideoCallProps {
   onEndCall: () => void;
 }
 
-export default function VideoCall({ session, localVideoRef, remoteVideoRef, isRemoteVideoActive, isMuted, isCameraOff, onToggleMute, onToggleCamera, onEndCall }: VideoCallProps) {
+export default function VideoCall({ session, localVideoRef, localStream, remoteVideoRef, remoteStream, isRemoteVideoActive, isMuted, isCameraOff, onToggleMute, onToggleCamera, onEndCall }: VideoCallProps) {
   const [duration, setDuration] = useState(0);
+  useEffect(() => {
+    if (localVideoRef.current && localStream) {
+      localVideoRef.current.srcObject = localStream;
+    }
+  }, [localStream, localVideoRef]);
+  useEffect(() => {
+    if (remoteVideoRef.current && remoteStream) {
+      remoteVideoRef.current.srcObject = remoteStream;
+    }
+  }, [remoteStream, remoteVideoRef]);
   useEffect(() => {
     if (!session.startTime) return;
     const timer = window.setInterval(() => setDuration(Math.floor((Date.now() - new Date(session.startTime!).getTime()) / 1000)), 1000);

@@ -14,7 +14,7 @@ export function getMessagesChannelName(conversationId: string, role = "default")
 
 export function subscribeToMessages(
   conversationId: string,
-  callback: (message: Message) => void,
+  callback: (message: Message, event?: "INSERT" | "UPDATE" | "DELETE") => void,
   role = "default"
 ): RealtimeChannel {
   if (BACKEND === "mock") {
@@ -23,6 +23,11 @@ export function subscribeToMessages(
 
   const channelName = getMessagesChannelName(conversationId, role);
   const channel = supabase.channel(channelName);
+  const logRealtime = (...args: unknown[]) => {
+    if (import.meta.env.DEV) console.debug("[Realtime][messages]", ...args);
+  };
+
+  logRealtime("subscribe start", { channelName, conversationId });
 
   channel.on(
     "postgres_changes",
@@ -35,7 +40,8 @@ export function subscribeToMessages(
     (payload) => {
       const message = payload.new as Message;
       if (message && message.id) {
-        callback(message);
+        logRealtime("event received", { channelName, event: "INSERT", messageId: message.id });
+        callback(message, "INSERT");
       }
     }
   );
@@ -51,7 +57,8 @@ export function subscribeToMessages(
     (payload) => {
       const message = payload.new as Message;
       if (message && message.id) {
-        callback(message);
+        logRealtime("event received", { channelName, event: "UPDATE", messageId: message.id });
+        callback(message, "UPDATE");
       }
     }
   );
@@ -67,6 +74,7 @@ export function subscribeToMessages(
     (payload) => {
       const deletedMessage = payload.old as Message;
       if (deletedMessage && deletedMessage.id) {
+        logRealtime("event received", { channelName, event: "DELETE", messageId: deletedMessage.id });
         const deleteMarker: Message = {
           ...deletedMessage,
           id: deletedMessage.id,
@@ -76,14 +84,17 @@ export function subscribeToMessages(
           video_url: undefined,
           metadata: { deleted: true },
         };
-        callback(deleteMarker);
+        callback(deleteMarker, "DELETE");
       }
     }
   );
 
   channel.subscribe((status) => {
+    logRealtime("subscribe status", { channelName, status });
     if (status === "SUBSCRIBED") {
       console.debug(`Subscribed to messages for conversation ${conversationId}`);
+    } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+      console.warn("[Realtime][messages] subscription failed", { channelName, status });
     } else if (status === "CLOSED") {
       console.debug(`Unsubscribed from messages for conversation ${conversationId}`);
     }

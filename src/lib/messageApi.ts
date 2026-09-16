@@ -444,7 +444,9 @@ export function subscribeToMessages(
   callback: (message: Message, event?: "INSERT" | "UPDATE" | "DELETE") => void,
   _role?: string
 ): RealtimeChannel {
-  const channel = supabase.channel(`messages:${conversationId}`);
+  const channelName = `messages:${conversationId}`;
+  const channel = supabase.channel(channelName);
+  if (import.meta.env.DEV) console.debug("[RealtimeLifecycle] create", { channelName, feature: "messages", conversationId });
   
   // Subscribe to both INSERT and UPDATE events in one channel
   channel.on(
@@ -458,6 +460,7 @@ export function subscribeToMessages(
     (payload) => {
       const message = payload.new as Message;
       if (message && message.id) {
+        if (import.meta.env.DEV) console.debug("[Realtime][messages] event received", { channelName, event: "INSERT", messageId: message.id });
         callback(message, "INSERT");
       }
     }
@@ -474,6 +477,7 @@ export function subscribeToMessages(
     (payload) => {
       const message = payload.new as Message;
       if (message && message.id) {
+        if (import.meta.env.DEV) console.debug("[Realtime][messages] event received", { channelName, event: "UPDATE", messageId: message.id });
         callback(message, "UPDATE");
       }
     }
@@ -491,6 +495,7 @@ export function subscribeToMessages(
       // Broadcast delete event with a special marker
       const deletedMessage = payload.old as Message;
       if (deletedMessage && deletedMessage.id) {
+        if (import.meta.env.DEV) console.debug("[Realtime][messages] event received", { channelName, event: "DELETE", messageId: deletedMessage.id });
         // Create a delete marker message
         const deleteMarker: Message = {
           ...deletedMessage,
@@ -501,12 +506,13 @@ export function subscribeToMessages(
           video_url: undefined,
           metadata: { deleted: true },
         };
-        callback(deleteMarker);
+        callback(deleteMarker, "DELETE");
       }
     }
   );
 
   channel.subscribe((status) => {
+    if (import.meta.env.DEV) console.debug("[RealtimeLifecycle] subscribe", { channelName, status });
     if (status === "SUBSCRIBED") {
       console.debug(`Subscribed to messages for conversation ${conversationId}`);
     } else if (status === "CLOSED") {

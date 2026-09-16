@@ -1,6 +1,7 @@
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 import { resetNotificationSubscriptions } from "./notificationApi";
+import { resetRealtimeChannelRegistry } from "./realtimeChannelRegistry";
 
 const USER_CHANNEL_PREFIXES = ["messages:", "typing:", "presence:", "notifications:", "calls:"];
 
@@ -34,6 +35,7 @@ export async function teardownUserRealtimeChannels() {
     const channels = supabase.getChannels().filter(isUserChannel);
     await Promise.allSettled(channels.map((channel) => supabase.removeChannel(channel)));
     resetNotificationSubscriptions();
+    resetRealtimeChannelRegistry();
   })().finally(() => {
     teardownInFlight = null;
   });

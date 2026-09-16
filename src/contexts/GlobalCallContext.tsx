@@ -1,10 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import type { RealtimeChannel } from "@supabase/supabase-js";
 import IncomingCall from "../components/calls/IncomingCall";
 import { useAuth } from "../hooks/useAuth";
 import { updateCallHistory } from "../lib/callHistoryApi";
 import { supabase } from "../lib/supabase";
+import { acquireRealtimeChannel, releaseRealtimeChannel } from "../lib/realtimeChannelRegistry";
 
 export type PendingIncomingCall = {
   conversationId: string;
@@ -67,12 +67,13 @@ export function GlobalCallProvider({ children }: { children: ReactNode }) {
     }
 
     let cancelled = false;
-    const channels = new Map<string, RealtimeChannel>();
+    const channels = new Map<string, { channelName: string; owner: string }>();
+    const subscribedPairs = new Set<string>();
 
     const subscribeToUserCalls = async () => {
       const { data: conversations, error } = await supabase
         .from("conversations")
-        .select("id")
+        .select("id, user_1, user_2")
         .or(`user_1.eq.${user.id},user_2.eq.${user.id}`);
 
       if (cancelled || error) {
@@ -82,13 +83,23 @@ export function GlobalCallProvider({ children }: { children: ReactNode }) {
 
       for (const conversation of conversations ?? []) {
         const conversationId = conversation.id as string;
-        if (channels.has(conversationId)) continue;
+        const otherUserId = conversation.user_1 === user.id ? conversation.user_2 : conversation.user_1;
+        if (!otherUserId || subscribedPairs.has(otherUserId)) continue;
+        subscribedPairs.add(otherUserId);
 
-        const channel = supabase.channel(`calls:${conversationId}`);
+        const channelName = `calls:${conversationId}`;
+        const owner = `global-call:${user.id}:${otherUserId}`;
+        const channel = acquireRealtimeChannel(channelName, owner);
+        const logCall = (...args: unknown[]) => {
+          if (import.meta.env.DEV) console.debug("[Realtime][calls]", ...args);
+        };
+        logCall("subscribe start", { channelName: `calls:${conversationId}`, userId: user.id });
         channel.on("broadcast", { event: "call-offer" }, (event) => {
-          const payload = event.payload as Partial<PendingIncomingCall> & { recipientId?: string };
+          const payload = event.payload as Partial<PendingIncomingCall> & { recipientId?: string; renegotiation?: boolean };
+          logCall("offer received", { conversationId, userId: user.id, senderId: payload.senderId, recipientId: payload.recipientId });
           if (
             payload.recipientId !== user.id ||
+            payload.renegotiation ||
             !payload.senderId ||
             !payload.sdp ||
             !payload.callType ||
@@ -122,8 +133,8 @@ export function GlobalCallProvider({ children }: { children: ReactNode }) {
           }
         });
 
-        channel.subscribe();
-        channels.set(conversationId, channel);
+        channel.subscribe((status) => logCall("subscribe status", { conversationId, userId: user.id, status }));
+        channels.set(conversationId, { channelName, owner });
       }
     };
 
@@ -137,8 +148,8 @@ export function GlobalCallProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
       window.removeEventListener("focus", refreshSubscriptions);
-      for (const channel of channels.values()) {
-        void channel.unsubscribe();
+      for (const { channelName, owner } of channels.values()) {
+        void releaseRealtimeChannel(channelName, owner, "global call provider cleanup");
       }
     };
   }, [user?.id]);

@@ -16,6 +16,10 @@ export function useMediaStream(options: UseMediaStreamOptions = { audio: true, v
     setError(null);
     
     try {
+      if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Microphone or camera access is unavailable. Use a secure HTTPS or localhost connection and check browser support.");
+      }
+
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         audio: options.audio ? { echoCancellation: true, noiseSuppression: true } : false,
         video: options.video ? { 

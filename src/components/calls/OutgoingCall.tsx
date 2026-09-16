@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Phone, Video } from "lucide-react";
 import type { RefObject } from "react";
 import type { CallSession } from "../../types/call";
@@ -5,11 +6,18 @@ import type { CallSession } from "../../types/call";
 interface OutgoingCallProps {
   session: CallSession;
   localVideoRef: RefObject<HTMLVideoElement | null>;
+  localStream: MediaStream | null;
   onEndCall: () => void;
 }
 
-export default function OutgoingCall({ session, localVideoRef, onEndCall }: OutgoingCallProps) {
+export default function OutgoingCall({ session, localVideoRef, localStream, onEndCall }: OutgoingCallProps) {
   const isVideo = session.callType === "video";
+
+  useEffect(() => {
+    if (localVideoRef.current && localStream) {
+      localVideoRef.current.srcObject = localStream;
+    }
+  }, [localStream, localVideoRef]);
 
   return (
     <div className="fixed inset-0 z-90 flex items-center justify-center overflow-hidden bg-linear-to-br from-slate-950 via-sky-950 to-slate-950 text-white">

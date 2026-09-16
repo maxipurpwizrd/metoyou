@@ -123,7 +123,7 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
   const [followLoading, setFollowLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const { user: authUser } = useAuth();
+  const { user: authUser, isLoading: authLoading } = useAuth();
   const viewerId = sessionProfile?.id ?? authUser?.id;
   const profileId = profile?.id;
   const actorUsername = sessionProfile?.username ?? authUser?.user_metadata?.first_name ?? "";
@@ -136,7 +136,7 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
         : t("profile.follow");
 
   const openHommiesList = useCallback(async (mode: "mutual" | "followers" = "mutual") => {
-    if (!profileId) return;
+    if (!profileId || authLoading || !authUser?.id) return;
 
     setHommiesListOpen(true);
     setHommiesListLoading(true);
@@ -161,7 +161,7 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
     } finally {
       setHommiesListLoading(false);
     }
-  }, [profileId]);
+  }, [authLoading, authUser?.id, profileId]);
 
   const closeHommiesList = () => {
     setHommiesListOpen(false);
@@ -725,6 +725,7 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
 
   useEffect(() => {
     let mounted = true;
+    if (authLoading || !authUser?.id) return;
     const cacheKey = routeUsername ? `metoyou-profile:${routeUsername}` : `metoyou-profile:me`;
     const lastKey = `${cacheKey}:lastFetch`;
 
@@ -758,7 +759,7 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
 
         const remote = routeUsername
           ? await fetchProfileByUsername(routeUsername)
-          : await fetchProfileFromSupabase();
+          : await fetchProfileFromSupabase(authUser.id);
 
         if (!mounted || !remote) {
           setProfileLoading(false);
@@ -794,7 +795,7 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
     return () => {
       mounted = false;
     };
-  }, [profileRefreshVersion, routeProfileRequested, routeUsername, routeUserId, setLanguage]);
+  }, [authLoading, authUser?.id, profileRefreshVersion, routeProfileRequested, routeUsername, routeUserId, setLanguage]);
 
   useEffect(() => {
     let mounted = true;
