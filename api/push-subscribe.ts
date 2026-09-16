@@ -1,36 +1,22 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY || '';
-
-function buildDataClient() {
-  if (supabaseServiceRoleKey) {
-    return createClient(supabaseUrl, supabaseServiceRoleKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-  }
-  return createClient(supabaseUrl, supabaseAnonKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
+import { getAuthenticatedUser } from './_auth';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-  const { subscription, userId } = body || {};
+  const { subscription } = body || {};
 
   if (!subscription || !subscription.endpoint) {
     return res.status(400).json({ error: 'Missing subscription' });
   }
 
   try {
-    const client = buildDataClient();
+    const { user, client } = await getAuthenticatedUser(req);
+    if (!user) return res.status(401).json({ error: 'Authentication required' });
 
     const payload = {
-      user_id: userId ?? null,
+      user_id: user.id,
       endpoint: subscription.endpoint,
       keys: subscription.keys ?? null,
       expiration_time: subscription.expirationTime ?? null,

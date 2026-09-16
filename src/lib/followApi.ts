@@ -33,7 +33,7 @@ export async function getFollowers(userId: string): Promise<MutualConnection[]> 
     if (followerIds.length === 0) return [];
 
     const { data: profiles, error: profilesError } = await supabase
-      .from("profiles")
+      .from("public_profiles")
       .select("id, username, profile_pic")
       .in("id", followerIds);
 

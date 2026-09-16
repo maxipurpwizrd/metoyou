@@ -1,3 +1,5 @@
+import { supabase } from "./supabase";
+
 interface PushSubscriptionPayload {
   endpoint: string;
   expirationTime: number | null;
@@ -86,10 +88,15 @@ export async function sendPushSubscriptionToServer(
   }
 
   try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+    if (!accessToken) return false;
+
     const response = await fetch("/api/push-subscribe", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify({
         subscription,

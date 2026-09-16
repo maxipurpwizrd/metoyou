@@ -1,3 +1,1 @@
-export const BACKEND = "mock" as const;
-// later change to:
-// export const BACKEND = "supabase" as const;
+export const BACKEND: "supabase" | "mock" = "supabase";

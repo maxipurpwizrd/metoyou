@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Stripe from 'stripe';
+import { getAuthenticatedUser } from './_auth';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? '', {
   apiVersion: '2025-02-24.acacia',
@@ -15,16 +16,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { userId, email } = req.body || {};
-    if (!userId) {
-      return res.status(400).json({ error: 'Missing userId' });
-    }
+    const { user } = await getAuthenticatedUser(req);
+    if (!user) return res.status(401).json({ error: 'Authentication required' });
 
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       line_items: [{ price: PRICE_ID, quantity: 1 }],
-      customer_email: email || undefined,
-      metadata: { userId },
+      customer_email: user.email || undefined,
+      metadata: { userId: user.id },
       success_url: `${SITE_URL}/vibes-pro/success`,
       cancel_url: `${SITE_URL}/settings?checkout=cancel`,
       payment_method_collection: 'if_required',

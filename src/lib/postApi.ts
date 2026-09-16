@@ -12,6 +12,20 @@ export type ImageUploadVariants = {
   originalUrl: string | null;
 };
 
+async function attachPublicAuthors<T extends { author_id: string }>(posts: T[]): Promise<(T & { profiles?: PostRecord["profiles"] })[]> {
+  const authorIds = Array.from(new Set(posts.map((post) => post.author_id).filter(Boolean)));
+  if (authorIds.length === 0) return posts;
+
+  const { data: profiles, error } = await supabase
+    .from("public_profiles")
+    .select("id, username, profile_pic, vibes_pro")
+    .in("id", authorIds);
+  if (error) throw error;
+
+  const profileById = new Map((profiles ?? []).map((profile) => [profile.id, profile]));
+  return posts.map((post) => ({ ...post, profiles: profileById.get(post.author_id) ?? null }));
+}
+
 function inferAudioMimeType(audio: string) {
   if (audio.startsWith("data:")) {
     const match = audio.match(/^data:(.+);base64,/);
@@ -201,9 +215,7 @@ export async function fetchPostsFromSupabase(options?: {
 
     let builder = supabase
       .from("posts")
-      .select(
-        `id, author_id, text, image_url, image_original_url, video_url, audio_url, media_type, likes_count, comments_count, highlighted, created_at, profiles(username, profile_pic, is_vibes_pro)`
-      )
+      .select("id, author_id, text, image_url, image_original_url, video_url, audio_url, media_type, likes_count, comments_count, highlighted, created_at")
       .order("created_at", { ascending: false })
       .limit(limit);
 
@@ -222,12 +234,10 @@ export async function fetchPostsFromSupabase(options?: {
     const { data, error } = await builder;
     if (error) throw error;
 
-    const normalizedRows = (data ?? []).map((record) => ({
+    const normalizedRows = await attachPublicAuthors((data ?? []).map((record) => ({
       ...record,
-      profiles: Array.isArray(record.profiles)
-        ? record.profiles[0] ?? null
-        : record.profiles ?? null,
-    }));
+      profiles: null,
+    })));
 
     return normalizedRows as PostRecord[];
   } catch (e) {
@@ -259,9 +269,7 @@ export async function fetchPostByIdFromSupabase(postId: string): Promise<PostRec
   try {
     const { data, error } = await supabase
       .from("posts")
-      .select(
-        `id, author_id, text, image_url, image_original_url, video_url, audio_url, media_type, likes_count, comments_count, highlighted, created_at, profiles(username, profile_pic, is_vibes_pro)`
-      )
+      .select("id, author_id, text, image_url, image_original_url, video_url, audio_url, media_type, likes_count, comments_count, highlighted, created_at")
       .eq("id", postId)
       .maybeSingle();
 
@@ -269,12 +277,8 @@ export async function fetchPostByIdFromSupabase(postId: string): Promise<PostRec
 
     if (!data) return null;
 
-    return {
-      ...data,
-      profiles: Array.isArray(data.profiles)
-        ? data.profiles[0] ?? null
-        : data.profiles ?? null,
-    } as PostRecord;
+    const [post] = await attachPublicAuthors([{ ...data, profiles: null }]);
+    return post as PostRecord;
   } catch (e) {
     console.error("fetchPostByIdFromSupabase error", e);
     return null;

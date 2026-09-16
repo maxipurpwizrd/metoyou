@@ -44,7 +44,7 @@ export async function getMessageThreads(userId: string): Promise<MessageThread[]
     });
 
     const { data: profiles, error: profileError } = await supabase
-      .from("profiles")
+      .from("public_profiles")
       .select("id, username")
       .in("id", Array.from(otherUserIds));
 

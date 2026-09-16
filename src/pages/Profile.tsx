@@ -803,11 +803,19 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
 
     const postsKey = `metoyou-profile-posts:${profile.id}`;
     const postsLastKey = `${postsKey}:lastFetch`;
+    setMyPosts([]);
 
     void (async () => {
       try {
         const last = Number(sessionStorage.getItem(postsLastKey) || "0");
         const now = Date.now();
+        const raw = sessionStorage.getItem(postsKey);
+        if (raw) {
+          const cachedPosts = JSON.parse(raw) as ProfilePost[];
+          if (mounted && Array.isArray(cachedPosts)) {
+            setMyPosts(cachedPosts);
+          }
+        }
         if (last && now - last < 30_000) return;
 
         type PostRecord = {
@@ -1266,7 +1274,7 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
             </div>
 
             <div className="mt-6 md:mt-8">
-              <h2 className="font-bold text-xl md:text-2xl mb-3 md:mb-4">{t("profile.mySnapshots")}</h2>
+              <h2 className="font-bold text-xl md:text-2xl mb-3 md:mb-4">{t(viewingOwn ? "profile.mySnapshots" : "profile.snapshots")}</h2>
               <div className="space-y-4">
                 {myPosts.map((post) => {
                   const isPostVibesPro = isVibesProEnabled(post.author ?? profile);

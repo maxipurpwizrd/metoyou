@@ -172,7 +172,7 @@ export async function getNotifications(userId: string) {
 
     if (actorIds.length > 0) {
       const { data: profiles, error: profileError } = await supabase
-        .from("profiles")
+        .from("public_profiles")
         .select("id, username, profile_pic")
         .in("id", actorIds as string[]);
 

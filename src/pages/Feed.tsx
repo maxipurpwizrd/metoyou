@@ -104,6 +104,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
     return saved ? (JSON.parse(saved) as string[]) : [];
   });
   const listRef = useRef<any>(null);
+  const previousFilteredLengthRef = useRef(0);
   const cache = useRef(
     new CellMeasurerCache({
       fixedWidth: true,
@@ -193,8 +194,17 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
   }, [posts, mutedUsers, requestedPostId]);
 
   useEffect(() => {
-    cache.current.clearAll();
-    listRef.current?.recomputeRowHeights();
+    const previousLength = previousFilteredLengthRef.current;
+    const isAppend = filteredPosts.length > previousLength && previousLength > 0;
+
+    if (isAppend) {
+      listRef.current?.recomputeRowHeights(previousLength);
+    } else {
+      cache.current.clearAll();
+      listRef.current?.recomputeRowHeights();
+    }
+
+    previousFilteredLengthRef.current = filteredPosts.length;
   }, [filteredPosts.length, selectedPostId]);
 
   useEffect(() => {

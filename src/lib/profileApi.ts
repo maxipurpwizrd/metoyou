@@ -117,7 +117,7 @@ export async function fetchProfileByUsername(username?: string): Promise<Profile
   try {
     if (!username) return null;
 
-    const { data, error } = await supabase.from("profiles").select("*").eq("username", username).maybeSingle();
+    const { data, error } = await supabase.from("public_profiles").select("*").eq("username", username).maybeSingle();
     if (error) throw error;
     if (!data) return null;
 

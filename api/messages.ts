@@ -1,46 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || 'https://mncmricrntxkedhfdavd.supabase.co';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || 'sb_publishable_o4hnX8-XN7oraua0o0BVDw_qeLCCdpr';
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY;
-
-function buildAuthClient(req: VercelRequest) {
-  const authHeader = req.headers.authorization;
-  const token = typeof authHeader === 'string' ? authHeader.replace(/^Bearer\s+/i, '') : undefined;
-
-  return createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-    },
-    global: token
-      ? {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      : undefined,
-  });
-}
-
-function buildDataClient() {
-  if (supabaseServiceRoleKey) {
-    return createClient(supabaseUrl, supabaseServiceRoleKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    });
-  }
-
-  return createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-    },
-  });
-}
+import { getAuthenticatedUser } from './_auth';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'GET') {
@@ -52,7 +11,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Missing conversationId' });
     }
 
-    const supabase = buildDataClient();
+    const { user, client: supabase } = await getAuthenticatedUser(req);
+    if (!user) return res.status(401).json({ error: 'Authentication required' });
+
+    const { data: conversation, error: conversationError } = await supabase
+      .from('conversations')
+      .select('id')
+      .eq('id', conversationId)
+      .or(`user_1.eq.${user.id},user_2.eq.${user.id}`)
+      .maybeSingle();
+    if (conversationError) return res.status(500).json({ error: conversationError.message });
+    if (!conversation) return res.status(403).json({ error: 'Conversation access denied' });
+
     const { data, error } = await supabase
       .from('messages')
       .select('*')
@@ -68,21 +38,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === 'POST') {
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-    const authClient = buildAuthClient(req);
-    const dataClient = buildDataClient();
-    const { data: userData, error: userError } = await authClient.auth.getUser();
+    const { user, client: dataClient } = await getAuthenticatedUser(req);
 
-    if (userError || !userData?.user) {
+    if (!user) {
       return res.status(401).json({ error: 'Authentication required' });
     }
 
-    const { action, conversationId, userId1, userId2, senderId, text, imageUrl, audioUrl, videoUrl, messageType, userId } = body || {};
+    const { action, conversationId, userId1, userId2, senderId, text, imageUrl, audioUrl, videoUrl, messageType } = body || {};
 
     if (action === 'getThreads') {
       const { data: conversations, error: conversationError } = await dataClient
         .from('conversations')
         .select('*')
-        .or(`user_1.eq.${userId},user_2.eq.${userId}`);
+        .or(`user_1.eq.${user.id},user_2.eq.${user.id}`);
 
       if (conversationError) {
         return res.status(500).json({ error: conversationError.message });
@@ -95,7 +63,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const threads: Array<{ otherId: string; otherUsername: string; lastText?: string | null; lastTime?: string }> = [];
 
       for (const conv of conversations) {
-        const otherId = conv.user_1 === userId ? conv.user_2 : conv.user_1;
+        const otherId = conv.user_1 === user.id ? conv.user_2 : conv.user_1;
 
         const { data: profile } = await dataClient
           .from('profiles')
@@ -123,6 +91,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (action === 'findOrCreateConversation') {
+      if (![userId1, userId2].includes(user.id)) {
+        return res.status(403).json({ error: 'Conversation participant mismatch' });
+      }
       const { data: existing } = await dataClient
         .from('conversations')
         .select('*')
@@ -152,9 +123,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Missing conversationId or senderId' });
     }
 
-    if (userData.user.id !== senderId) {
+    if (user.id !== senderId) {
       return res.status(403).json({ error: 'Sender does not match authenticated user' });
     }
+
+    const { data: conversation, error: conversationError } = await dataClient
+      .from('conversations')
+      .select('id')
+      .eq('id', conversationId)
+      .or(`user_1.eq.${user.id},user_2.eq.${user.id}`)
+      .maybeSingle();
+    if (conversationError) return res.status(500).json({ error: conversationError.message });
+    if (!conversation) return res.status(403).json({ error: 'Conversation access denied' });
 
     const { data, error } = await dataClient
       .from('messages')

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSession } from "../contexts/SessionContext";
+import { supabase } from "../lib/supabase";
 
 const FEATURES = [
   "Gold badge",
@@ -19,17 +20,23 @@ export default function VibesProUpgrade() {
   const [error, setError] = useState<string | null>(null);
 
   if (!profileFromContext) return null;
-  const profile = profileFromContext;
 
   async function handleSubscribe() {
     setLoading(true);
     setError(null);
 
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("Authentication required.");
+
       const response = await fetch("/api/checkout", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: profile.id, email: profile.email }),
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({}),
       });
 
       const payload = await response.json();
