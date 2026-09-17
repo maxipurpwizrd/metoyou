@@ -1,14 +1,14 @@
 import { supabase } from "./supabase";
 
-export type ClipRecord = {
+export type FlickRecord = {
   id: string;
   author_id: string;
   username: string;
   profile_pic: string | null;
   text: string | null;
-  image_url: string | null;
+  image_url: string;
   image_original_url: string | null;
-  video_url: string;
+  video_url: string | null;
   audio_url: string | null;
   duration_ms: number | null;
   created_at: string;
@@ -17,13 +17,13 @@ export type ClipRecord = {
   liked?: boolean;
 };
 
-export async function fetchClipsPage(limit = 8, before?: string | null): Promise<ClipRecord[]> {
+export async function fetchFlicksPage(limit = 8, before?: string | null): Promise<FlickRecord[]> {
   const { data, error } = await supabase.rpc("get_surface_posts", {
-    p_surface: "clips",
+    p_surface: "flicks",
     p_limit: limit,
     p_before: before ?? null,
   });
 
   if (error) throw error;
-  return (data ?? []) as ClipRecord[];
+  return (data ?? []) as FlickRecord[];
 }

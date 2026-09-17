@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useLanguage } from "../../contexts/LanguageContext";
 import VibesProHero from './VibesProHero';
 import VibesProPostsCarousel from './VibesProPostsCarousel';
-import ImageViewer from '../ImageViewer';
 import type { VibesProPostType } from './types';
 
 type VibesProProfilePageProps = {
@@ -100,20 +100,13 @@ export default function VibesProProfilePage({
 }: VibesProProfilePageProps) {
   const mappedPosts = useMemo(() => posts, [posts]);
   const { t } = useLanguage();
-  const [selectedPostId, setSelectedPostId] = useState<string | number | null>(null);
-
-  const mediaPosts = useMemo(
-    () => mappedPosts.filter((post) => Boolean(post.mediaUrl)),
-    [mappedPosts],
-  );
-
-  const selectedMediaIndex = selectedPostId === null
-    ? -1
-    : mediaPosts.findIndex((post) => post.id === selectedPostId);
+  const navigate = useNavigate();
 
   const handlePostSelect = (post: VibesProPostType) => {
     if (post.mediaUrl) {
-      setSelectedPostId(post.id);
+      const params = new URLSearchParams({ image: post.mediaUrl });
+      params.set("postId", String(post.id));
+      navigate(`/flicks?${params.toString()}`);
     }
   };
 
@@ -241,16 +234,6 @@ export default function VibesProProfilePage({
         </div>
       ) : null}
 
-      {selectedMediaIndex >= 0 && mediaPosts[selectedMediaIndex]?.mediaUrl ? (
-        <ImageViewer
-          images={mediaPosts.map((post) => post.mediaUrl as string)}
-          initialIndex={selectedMediaIndex}
-          onClose={() => setSelectedPostId(null)}
-          postId={selectedPostId ?? undefined}
-          authorUsername={username}
-          variant="vibespro"
-        />
-      ) : null}
     </div>
   );
 }

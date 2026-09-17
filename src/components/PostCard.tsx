@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Mic, Square } from "lucide-react";
-import ImageViewer from "./ImageViewer";
 import EditPostModal from "./EditPostModal";
+import MediaActionMenu, { type MediaAction } from "./MediaActionMenu";
 import { useSession } from "../contexts/SessionContext";
 import { useAutoplayVideo } from "../hooks/useAutoplayVideo";
 import { useAutoplayAudio } from "../hooks/useAutoplayAudio";
@@ -98,12 +98,8 @@ export default function PostCard({
   const isOwner = Boolean(currentUser && ownerId && currentUser.id === ownerId);
 
   const [showMenu, setShowMenu] = useState(false);
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  const menuButtonRef = useRef<HTMLButtonElement | null>(null);
   const [displayLikes, setDisplayLikes] = useState(likes);
   const [displayLiked, setDisplayLiked] = useState(Boolean(liked));
-  const [viewerOpen, setViewerOpen] = useState(false);
-  const [viewerIndex, setViewerIndex] = useState(0);
   const [newComment, setNewComment] = useState("");
   const [voiceComment, setVoiceComment] = useState<string | undefined>(undefined);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -189,29 +185,6 @@ export default function PostCard({
       document.body.style.overflow = previousOverflow;
     };
   }, [isReadingModeOpen]);
-
-  useEffect(() => {
-    const onScroll = () => setShowMenu(false);
-    const onDocClick = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (
-        menuRef.current &&
-        !menuRef.current.contains(target) &&
-        menuButtonRef.current &&
-        !menuButtonRef.current.contains(target)
-      ) {
-        setShowMenu(false);
-      }
-    };
-
-    window.addEventListener("scroll", onScroll, { passive: true });
-    document.addEventListener("mousedown", onDocClick);
-
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      document.removeEventListener("mousedown", onDocClick);
-    };
-  }, []);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setShowMenu(false), 0);
@@ -460,6 +433,21 @@ export default function PostCard({
       : `${normalizedText.split(/\r?\n/).slice(0, 7).join("\n")}…`
     : normalizedText;
   const isPremiumTheme = Boolean(isVibesPro || variant === "gold" || author?.is_vibes_pro);
+  const feedMenuActions: MediaAction[] = isOwner
+    ? [
+        { label: "Edit post", icon: "edit", onClick: () => { setDraftPostText(text); setIsEditingPost(true); setShowMenu(false); } },
+        ...(image ? [{ label: "Delete image", icon: "delete" as const, tone: "danger" as const, onClick: () => { onDeleteImage?.(); setShowMenu(false); } }] : []),
+        ...(video ? [{ label: "Delete video", icon: "delete" as const, tone: "danger" as const, onClick: () => { onDeleteVideo?.(); setShowMenu(false); } }] : []),
+        { label: highlighted ? "Unhighlight" : "Highlight", icon: "highlight", onClick: () => { onHighlight?.(); setShowMenu(false); } },
+        { label: "Delete post", icon: "delete" as const, tone: "danger" as const, onClick: () => { onDeletePost?.(); setShowMenu(false); } },
+      ]
+    : [
+        { label: "Share", icon: "share", onClick: async () => { try { if (navigator.share) await navigator.share({ title: `${author.username}'s post`, text, url: window.location.href }); else await navigator.clipboard.writeText(window.location.href); } catch {} setShowMenu(false); } },
+        { label: "Save", icon: "download", onClick: () => { onSavePost?.(); setShowMenu(false); } },
+        { label: "Repost", icon: "repost", onClick: () => { onRepost?.(); setShowMenu(false); } },
+        { label: "Report", icon: "report", onClick: () => { alert("Report submitted. Thanks for helping keep MeToYou safe."); setShowMenu(false); } },
+        { label: "Block author", icon: "block", tone: "danger", onClick: () => { onMuteUser?.(); setShowMenu(false); } },
+      ];
 
   return (
     <>
@@ -540,162 +528,7 @@ export default function PostCard({
 
         {/* Dropdown Options Button Menu - Floats Right */}
         <div className="relative shrink-0">
-          <button
-            ref={menuButtonRef}
-            type="button"
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowMenu((prev) => !prev);
-            }}
-            className={`font-bold text-lg w-8 h-8 flex items-center justify-center rounded-full transition-colors ${isPremiumTheme ? "text-amber-800 hover:text-amber-900 hover:bg-white/60" : "text-slate-400 hover:text-slate-600 hover:bg-slate-100"}`}
-          >
-            ⋯
-          </button>
-
-          {showMenu && (
-            <div
-              ref={menuRef}
-              onMouseDown={(e) => e.stopPropagation()}
-              className="absolute right-0 top-full mt-1 w-44 rounded-xl bg-white border border-slate-100 shadow-xl text-xs font-semibold text-slate-600 overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-100"
-            >
-              {isOwner ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDraftPostText(text);
-                      setIsEditingPost(true);
-                      setShowMenu(false);
-                    }}
-                    className="w-full text-left px-4 py-2.5 hover:bg-slate-50 transition-colors"
-                  >
-                    ✏️ Edit Post
-                  </button>
-
-                  {image && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onDeleteImage?.();
-                        setShowMenu(false);
-                      }}
-                      className="w-full text-left px-4 py-2.5 hover:bg-slate-50 transition-colors"
-                    >
-                      🗑️ Delete Image
-                    </button>
-                  )}
-
-                  {video && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onDeleteVideo?.();
-                        setShowMenu(false);
-                      }}
-                      className="w-full text-left px-4 py-2.5 hover:bg-slate-50 transition-colors"
-                    >
-                      🗑️ Delete Video
-                    </button>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onHighlight?.();
-                      setShowMenu(false);
-                    }}
-                    className="w-full text-left px-4 py-2.5 hover:bg-slate-50 transition-colors text-amber-600"
-                  >
-                    {highlighted ? "✨ Unhighlight" : "✨ Highlight"}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onDeletePost?.();
-                      setShowMenu(false);
-                    }}
-                    className="w-full text-left px-4 py-2.5 hover:bg-red-50 text-red-500 transition-colors border-t border-slate-50"
-                  >
-                    🗑️ Delete Post
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        await navigator.share({ title: `${author.username}'s post`, text, url: window.location.href });
-                      } catch (err) {
-                        console.warn(err);
-                      }
-                      setShowMenu(false);
-                    }}
-                    className="w-full text-left px-4 py-2.5 hover:bg-slate-50 transition-colors"
-                  >
-                    📤 Share
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onRepost?.();
-                      setShowMenu(false);
-                    }}
-                    className="w-full text-left px-4 py-2.5 hover:bg-slate-50 transition-colors"
-                  >
-                    🔁 Repost
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onSavePost?.();
-                      setShowMenu(false);
-                    }}
-                    className="w-full text-left px-4 py-2.5 hover:bg-slate-50 transition-colors"
-                  >
-                    💾 Save Post
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onMuteUser?.();
-                      setShowMenu(false);
-                    }}
-                    className="w-full text-left px-4 py-2.5 hover:bg-slate-50 transition-colors text-slate-500"
-                  >
-                    🔕 Mute User
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      alert("Report submitted. Thanks for helping keep MeToYou safe.");
-                      setShowMenu(false);
-                    }}
-                    className="w-full text-left px-4 py-2.5 hover:bg-red-50 text-red-500 transition-colors border-t border-slate-50"
-                  >
-                    🚩 Report
-                  </button>
-                </>
-              )}
-              <button
-                type="button"
-                onClick={() => {
-                  navigator.clipboard.writeText(`${window.location.origin}/post/${postId ?? ownerId}`);
-                  alert("Link copied!");
-                  setShowMenu(false);
-                }}
-                className="w-full text-left px-4 py-2.5 hover:bg-slate-50 transition-colors border-t border-slate-50"
-              >
-                🔗 Copy Link
-              </button>
-            </div>
-          )}
+          <MediaActionMenu open={showMenu} isDark={isPremiumTheme} onToggle={() => setShowMenu((prev) => !prev)} onClose={() => setShowMenu(false)} actions={feedMenuActions} />
         </div>
       </div>
 
@@ -797,9 +630,12 @@ export default function PostCard({
                     }}
                     onClick={(e) => {
                       e.stopPropagation();
-                      setViewerIndex(0);
                       onClosePost?.();
-                      setViewerOpen(true);
+                      const selectedImage = imageOriginal ?? image;
+                      if (!selectedImage) return;
+                      const params = new URLSearchParams({ image: selectedImage });
+                      if (postId !== undefined) params.set("postId", String(postId));
+                      navigate(`/flicks?${params.toString()}`);
                     }}
                   />
                 )}
@@ -1180,22 +1016,6 @@ export default function PostCard({
 
       </div>
 
-      {viewerOpen && image && (
-        <ImageViewer
-          images={[imageOriginal ?? image]}
-          initialIndex={viewerIndex}
-          onClose={() => setViewerOpen(false)}
-          postId={postId}
-          authorId={authorId ?? author.id}
-          authorUsername={author.username}
-          onEditPost={onEditPost}
-          onDeleteImage={onDeleteImage}
-          onDeletePost={onDeletePost}
-          onRepost={onRepost}
-          onMuteUser={onMuteUser}
-          variant={isPremiumTheme ? "vibespro" : "default"}
-        />
-      )}
     </div>
     </>
   );

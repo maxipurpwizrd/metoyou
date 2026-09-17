@@ -9,6 +9,7 @@ import PWAInstallPrompt from "./components/PWAInstallPrompt";
 import Home from "./pages/Home";
 import Feed from "./pages/Feed";
 import Clips from "./pages/Clips";
+import Flicks from "./pages/Flicks";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import Login from "./pages/Login";
@@ -49,6 +50,7 @@ const BACK_REDIRECT_ROUTES = new Set([
   "/admin-users",
   "/admin-posts",
   "/clips",
+  "/flicks",
 ]);
 
 function shouldRedirectToFeed(pathname: string) {
@@ -150,6 +152,7 @@ function AppRoutes() {
       <Route path="/" element={<PublicRoute><Home /></PublicRoute>} />
       <Route path="/feed" element={<RequireAuth><Feed /></RequireAuth>} />
       <Route path="/clips" element={<RequireAuth><Clips /></RequireAuth>} />
+      <Route path="/flicks" element={<RequireAuth><Flicks /></RequireAuth>} />
       <Route path="/welcome" element={<PublicRoute><AuthChoice /></PublicRoute>} />
       <Route path="/about" element={<AboutMeToYou />} />
       <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />

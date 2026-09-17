@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState, type FormEvent, type TouchEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { CloudSun, LoaderCircle, MessageCircle, MoonStar, Play, Volume2, VolumeX } from "lucide-react";
+import { Ban, CloudSun, Download, Flag, Grid2X2, LoaderCircle, MessageCircle, Mic, MoonStar, Play, Repeat2, Share2, Square, Volume2, VolumeX } from "lucide-react";
 import { useSession } from "../contexts/SessionContext";
 import RequireVibesPro from "../components/RequireVibesPro";
 import { fetchClipsPage, type ClipRecord } from "../lib/clipsApi";
 import { likePost, unlikePost } from "../lib/likeApi";
-import { addComment, getComments, type CommentRecord } from "../lib/commentApi";
+import { addComment, deleteComment, editComment, getComments, type CommentRecord } from "../lib/commentApi";
+import { getSurfacePostInteractionCounts, hydrateSurfacePostInteractions } from "../lib/surfacePostInteractions";
+import { useVoiceCommentRecorder } from "../hooks/useVoiceCommentRecorder";
 import { useAuth } from "../hooks/useAuth";
+import { savePostToSupabase } from "../lib/postApi";
+import { supabase } from "../lib/supabase";
 
 const PAGE_SIZE = 8;
 
@@ -37,14 +41,28 @@ function ClipCard({
   onLike: (clip: ClipRecord) => void;
   onVisible: (node: HTMLDivElement | null) => void;
 }) {
+  const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [liked, setLiked] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [comments, setComments] = useState<CommentRecord[]>([]);
   const [commentText, setCommentText] = useState("");
   const [commentsLoading, setCommentsLoading] = useState(false);
+  const [isCaptionExpanded, setIsCaptionExpanded] = useState(false);
+  const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingCommentText, setEditingCommentText] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [blockedAuthorIds, setBlockedAuthorIds] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("metoyou-muted-users") ?? "[]") as string[];
+    } catch {
+      return [];
+    }
+  });
+  const longPressTimerRef = useRef<number | null>(null);
+  const { isRecording, recordingDuration, voiceUrl, startRecording, stopRecording, clearVoiceUrl } = useVoiceCommentRecorder();
 
   useEffect(() => {
     const video = videoRef.current;
@@ -59,16 +77,32 @@ function ClipCard({
     }
   }, [isActive, isMuted]);
 
+  useEffect(() => {
+    if (!commentsOpen) return;
+
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousDocumentOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousDocumentOverflow;
+    };
+  }, [commentsOpen]);
+
   const toggleLike = async () => {
     if (!userId) return;
-    const nextLiked = !liked;
-    setLiked(nextLiked);
+    const nextLiked = !clip.liked;
     try {
-      if (nextLiked) await likePost(clip.id, userId);
-      else await unlikePost(clip.id, userId);
-      onLike(clip);
+      const result = nextLiked
+        ? await likePost(clip.id, userId)
+        : await unlikePost(clip.id, userId);
+      if (!result) return;
+      const counts = await getSurfacePostInteractionCounts(clip.id);
+      onLike({ ...clip, liked: nextLiked, ...counts });
     } catch {
-      setLiked(!nextLiked);
+      onLike(clip);
     }
   };
 
@@ -88,13 +122,104 @@ function ClipCard({
   const submitComment = async (event: FormEvent) => {
     event.preventDefault();
     const text = commentText.trim();
-    if (!text || !userId) return;
-    const added = await addComment(clip.id, userId, text);
+    if ((!text && !voiceUrl) || !userId) return;
+    const added = await addComment(clip.id, userId, text, voiceUrl);
     if (added) {
       setComments((current) => [...current, added]);
       setCommentText("");
+      clearVoiceUrl();
+      onLike({ ...clip, ...(await getSurfacePostInteractionCounts(clip.id)) });
     }
   };
+
+  const startCommentLongPress = (comment: CommentRecord) => {
+    if (!userId || comment.author_id !== userId) return;
+    if (longPressTimerRef.current !== null) window.clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = window.setTimeout(() => {
+      setActiveCommentId(comment.id);
+      longPressTimerRef.current = null;
+    }, 500);
+  };
+
+  const cancelCommentLongPress = () => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const removeComment = async (comment: CommentRecord) => {
+    if (!userId || comment.author_id !== userId) return;
+    if (!await deleteComment(comment.id)) return;
+    setComments((current) => current.filter((item) => item.id !== comment.id));
+    setActiveCommentId(null);
+    onLike({ ...clip, ...(await getSurfacePostInteractionCounts(clip.id)) });
+  };
+
+  const saveCommentEdit = async (comment: CommentRecord) => {
+    if (!userId || comment.author_id !== userId) return;
+    const text = editingCommentText.trim();
+    if (!text) return;
+    const updated = await editComment(comment.id, text);
+    if (!updated) return;
+    setComments((current) => current.map((item) => item.id === comment.id ? { ...item, text: updated.text } : item));
+    setEditingCommentId(null);
+    setActiveCommentId(null);
+  };
+
+  const shareClip = async () => {
+    const url = `${window.location.origin}/clips`;
+    try {
+      if (navigator.share) await navigator.share({ title: `${clip.username}'s Clip`, text: clip.text ?? "", url });
+      else await navigator.clipboard.writeText(url);
+    } catch {
+      // Sharing was cancelled.
+    }
+    setMenuOpen(false);
+  };
+
+  const saveClipToDevice = async () => {
+    try {
+      const response = await fetch(clip.video_url);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `clip-${clip.id}`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      window.alert("Unable to save this Clip.");
+    }
+    setMenuOpen(false);
+  };
+
+  const repostClip = async () => {
+    if (!userId) return;
+    try {
+      await savePostToSupabase({ author_id: userId, text: clip.text, image_url: clip.image_url, video_url: clip.video_url });
+      window.alert("Reposted to your feed.");
+    } catch {
+      window.alert("Unable to repost this Clip.");
+    }
+    setMenuOpen(false);
+  };
+
+  const reportClip = async () => {
+    if (!userId) return;
+    const { error: reportError } = await supabase.from("reports").insert({ report_type: "post", post_id: clip.id, reporter_id: userId, reported_user_id: clip.author_id, status: "pending" });
+    window.alert(reportError ? "Unable to report this Clip." : "Clip reported.");
+    setMenuOpen(false);
+  };
+
+  const blockClipAuthor = () => {
+    const next = blockedAuthorIds.includes(clip.author_id) ? blockedAuthorIds : [...blockedAuthorIds, clip.author_id];
+    setBlockedAuthorIds(next);
+    localStorage.setItem("metoyou-muted-users", JSON.stringify(next));
+    setMenuOpen(false);
+  };
+
+  if (blockedAuthorIds.includes(clip.author_id)) return null;
 
   return (
     <article ref={onVisible} className={`relative mx-auto min-h-[calc(100svh-7rem)] max-w-xl overflow-hidden rounded-3xl shadow-2xl ${isDark ? "bg-[#111111] shadow-amber-950/30" : "bg-slate-950 shadow-sky-900/20"}`}>
@@ -124,39 +249,127 @@ function ClipCard({
 
       <div className="absolute bottom-0 left-0 right-0 flex items-end gap-4 p-5 text-white">
         <div className="min-w-0 flex-1">
-          <p className="font-bold">@{clip.username}</p>
-          <p className="mt-2 line-clamp-3 text-sm text-white/90">{clip.text || ""}</p>
+          <button type="button" onClick={() => navigate(`/profile/${encodeURIComponent(clip.username)}`)} className="pointer-events-auto font-bold hover:underline">
+            @{clip.username}
+          </button>
+          {clip.text ? (
+            <div className={`mt-2 ${isCaptionExpanded ? "max-h-40 overflow-y-auto rounded-xl border border-white/15 bg-slate-950/95 p-3 shadow-xl backdrop-blur-sm" : ""}`}>
+              <p className={`text-base text-white/90 ${!isCaptionExpanded ? "line-clamp-3" : ""}`}>
+                {clip.text}
+              </p>
+              {clip.text.length > 120 && (
+                <button
+                  type="button"
+                  onClick={() => setIsCaptionExpanded((current) => !current)}
+                  aria-expanded={isCaptionExpanded}
+                  className="pointer-events-auto mt-1 inline-flex text-xs font-semibold text-sky-200 underline-offset-2 hover:underline"
+                >
+                  {isCaptionExpanded ? "See less" : "See more"}
+                </button>
+              )}
+            </div>
+          ) : null}
         </div>
         <div className="flex flex-col items-center gap-4">
           <button type="button" onClick={() => void toggleLike()} aria-label="Like clip" className="text-2xl transition hover:scale-110">
-            {liked ? "❤️" : "🤍"}
+            {clip.liked ? "❤️" : "🤍"}
           </button>
           <span className="text-xs text-white/80">{clip.likes_count}</span>
           <button type="button" onClick={() => void toggleComments()} aria-label="Comments" className="text-white/90">
             <MessageCircle className="h-7 w-7" />
           </button>
           <span className="text-xs text-white/80">{clip.comments_count}</span>
+          <div className="relative">
+            <button type="button" onClick={() => setMenuOpen((current) => !current)} aria-label="More Clip actions" className="text-white/90 transition hover:scale-110">
+              <Grid2X2 className="h-6 w-6" />
+            </button>
+            {menuOpen && (
+              <div className="fixed inset-0 z-60 grid place-items-center bg-black/35 p-4">
+                <button type="button" aria-label="Close actions" onClick={() => setMenuOpen(false)} className="absolute inset-0" />
+                <div onClick={(event) => event.stopPropagation()} className={`relative z-10 grid w-full max-w-xs grid-cols-2 gap-2 rounded-2xl border p-3 text-left text-xs shadow-2xl ${isDark ? "border-white/15 bg-slate-950 text-white" : "border-sky-100 bg-white text-slate-700"}`}>
+                  <button type="button" onClick={() => void shareClip()} className="flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center hover:bg-sky-50"><Share2 className="h-5 w-5" />Share</button>
+                  <button type="button" onClick={() => void saveClipToDevice()} className="flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center hover:bg-sky-50"><Download className="h-5 w-5" />Save to device</button>
+                  <button type="button" onClick={() => void repostClip()} className="flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center hover:bg-sky-50"><Repeat2 className="h-5 w-5" />Repost</button>
+                  <button type="button" onClick={() => void reportClip()} className="flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center hover:bg-sky-50"><Flag className="h-5 w-5" />Report</button>
+                  <button type="button" onClick={blockClipAuthor} className="col-span-2 flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center text-rose-500 hover:bg-rose-50"><Ban className="h-5 w-5" />Block author</button>
+                </div>
+              </div>
+            )}
+          </div>
           <button type="button" onClick={() => setIsMuted((value) => !value)} aria-label={isMuted ? "Unmute clip" : "Mute clip"} className="text-white/90">
             {isMuted ? <VolumeX className="h-6 w-6" /> : <Volume2 className="h-6 w-6" />}
           </button>
         </div>
       </div>
       {commentsOpen && (
-        <div className="absolute inset-x-4 bottom-24 z-20 max-h-64 overflow-y-auto rounded-2xl bg-slate-950/95 p-4 text-white shadow-2xl">
-          <div className="mb-3 flex items-center justify-between">
-            <p className="font-semibold">Comments</p>
-            <button type="button" onClick={() => setCommentsOpen(false)} className="text-white/60">Close</button>
-          </div>
-          {commentsLoading ? <p className="text-sm text-white/60">Loading...</p> : comments.length === 0 ? <p className="text-sm text-white/60">No comments yet.</p> : (
-            <div className="space-y-2">
-              {comments.map((comment) => <p key={comment.id} className="text-sm"><strong>{comment.profiles?.username ?? "User"}</strong> {comment.text}</p>)}
+        <>
+          <button
+            type="button"
+            aria-label="Close comments"
+            onClick={() => setCommentsOpen(false)}
+            className="fixed inset-0 z-40 cursor-default bg-black/20"
+          />
+          <div onClick={(event) => event.stopPropagation()} className={`fixed inset-x-[3%] bottom-[10%] z-50 flex max-h-[80vh] flex-col overflow-hidden rounded-2xl p-4 shadow-2xl ring-1 ${isDark ? "bg-slate-950/98 text-white ring-white/15" : "bg-white/98 text-slate-900 ring-sky-200"}`}>
+            <div className="mb-3 flex items-center justify-between">
+              <p className="font-semibold">Comments</p>
+              <button type="button" onClick={() => setCommentsOpen(false)} className={isDark ? "text-white/60" : "text-slate-500"}>Close</button>
             </div>
-          )}
-          <form onSubmit={submitComment} className="mt-3 flex gap-2">
-            <input value={commentText} onChange={(event) => setCommentText(event.target.value)} placeholder="Add a comment" className="min-w-0 flex-1 rounded-xl bg-white/10 px-3 py-2 text-sm outline-none" />
-            <button type="submit" className="rounded-xl bg-sky-500 px-3 py-2 text-sm font-semibold">Send</button>
-          </form>
-        </div>
+            <div className="max-h-[calc(80vh-9rem)] overflow-y-auto pr-1">
+              {commentsLoading ? <p className={isDark ? "text-sm text-white/60" : "text-sm text-slate-500"}>Loading...</p> : comments.length === 0 ? <p className={isDark ? "text-sm text-white/60" : "text-sm text-slate-500"}>No comments yet.</p> : (
+                <div className="space-y-2">
+                  {comments.map((comment) => (
+                    <div
+                      key={comment.id}
+                      onPointerDown={() => startCommentLongPress(comment)}
+                      onPointerUp={cancelCommentLongPress}
+                      onPointerLeave={cancelCommentLongPress}
+                      onPointerCancel={cancelCommentLongPress}
+                      onContextMenu={(event) => event.preventDefault()}
+                      className={`rounded-xl border p-3 ${isDark ? "border-white/10 bg-white/5" : "border-sky-100 bg-sky-50/80"}`}
+                    >
+                      {editingCommentId === comment.id ? (
+                        <div className="space-y-2">
+                          <textarea value={editingCommentText} onChange={(event) => setEditingCommentText(event.target.value)} rows={3} className={`w-full resize-none rounded-lg p-2 text-sm outline-none ${isDark ? "bg-white/10" : "bg-slate-100"}`} />
+                          <div className="flex gap-2">
+                            <button type="button" onClick={() => void saveCommentEdit(comment)} className="rounded-lg bg-sky-500 px-3 py-1 text-xs font-semibold">Save</button>
+                            <button type="button" onClick={() => setEditingCommentId(null)} className={`rounded-lg px-3 py-1 text-xs ${isDark ? "bg-white/10" : "bg-slate-100 text-slate-600"}`}>Cancel</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="max-h-20 overflow-y-auto whitespace-pre-wrap wrap-break-word text-sm leading-5"><strong>{comment.profiles?.username ?? "User"}</strong> {comment.text}{comment.voice_url && <audio controls src={comment.voice_url} className="mt-2 h-8 w-full" />}</p>
+                      )}
+                      {activeCommentId === comment.id && editingCommentId !== comment.id && (
+                        <div className={`mt-2 flex gap-2 border-t pt-2 ${isDark ? "border-white/10" : "border-sky-100"}`}>
+                          <button type="button" onClick={() => { setEditingCommentId(comment.id); setEditingCommentText(comment.text ?? ""); }} className="text-xs font-semibold text-sky-300">Edit</button>
+                          <button type="button" onClick={() => void removeComment(comment)} className="text-xs font-semibold text-rose-300">Delete</button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            {voiceUrl && (
+              <div className={`mb-2 flex items-center gap-2 rounded-xl border p-2 ${isDark ? "border-white/10 bg-white/5" : "border-sky-100 bg-sky-50/80"}`}>
+                <audio controls src={voiceUrl} className="h-7 min-w-0 flex-1" />
+                <button type="button" onClick={clearVoiceUrl} className={isDark ? "text-xs text-white/60" : "text-xs text-slate-500"}>Remove</button>
+              </div>
+            )}
+            {isRecording && <p className="mb-2 text-xs text-rose-300">Recording voice comment: {recordingDuration}s / 15s</p>}
+            <form onSubmit={submitComment} className="mt-3 flex w-full items-end gap-2">
+              <textarea value={commentText} onChange={(event) => setCommentText(event.target.value)} placeholder="Add a comment" rows={4} className={`w-full min-w-0 flex-1 resize-none overflow-y-auto rounded-xl px-3 py-2 text-sm outline-none ${isDark ? "bg-white/10 text-white placeholder:text-white/45" : "bg-slate-100 text-slate-900 placeholder:text-slate-400"}`} />
+              <button
+                type="button"
+                onClick={() => void (isRecording ? stopRecording() : startRecording())}
+                aria-label={isRecording ? "Stop voice comment" : "Record voice comment"}
+                className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${isRecording ? "bg-rose-500 text-white" : isDark ? "bg-white/10 text-white" : "bg-sky-100 text-sky-700"}`}
+              >
+                {isRecording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+              </button>
+              <button type="submit" className="shrink-0 rounded-xl bg-sky-500 px-3 py-2 text-sm font-semibold">Send</button>
+            </form>
+          </div>
+        </>
       )}
     </article>
   );
@@ -197,8 +410,8 @@ export default function Clips() {
     const touch = event.changedTouches[0];
     const deltaX = touch.clientX - start.x;
     const deltaY = touch.clientY - start.y;
-    if (deltaX >= 80 && Math.abs(deltaX) > Math.abs(deltaY) * 1.35) {
-      navigate("/feed", { replace: true });
+    if (Math.abs(deltaX) > 80 && Math.abs(deltaX) > Math.abs(deltaY) * 1.35) {
+      navigate(deltaX < 0 ? "/flicks" : "/feed", { replace: true });
     }
   };
 
@@ -215,9 +428,9 @@ export default function Clips() {
     let active = true;
     setLoading(true);
     void fetchClipsPage(PAGE_SIZE)
-      .then((rows) => {
+      .then(async (rows) => {
         if (!active) return;
-        setClips(rows);
+        setClips(await hydrateSurfacePostInteractions(rows, user?.id));
         setActiveId(rows[0]?.id ?? null);
         setHasMore(rows.length === PAGE_SIZE);
       })
@@ -232,7 +445,7 @@ export default function Clips() {
       active = false;
       observerRef.current?.disconnect();
     };
-  }, [profile?.is_vibes_pro]);
+  }, [profile?.is_vibes_pro, user?.id]);
 
   useEffect(() => {
     observerRef.current?.disconnect();
@@ -259,9 +472,10 @@ export default function Clips() {
     setError(null);
     try {
       const rows = await fetchClipsPage(PAGE_SIZE, clips[clips.length - 1].created_at);
+      const hydratedRows = await hydrateSurfacePostInteractions(rows, user?.id);
       setClips((current) => {
         const seen = new Set(current.map((clip) => clip.id));
-        return [...current, ...rows.filter((clip) => !seen.has(clip.id))];
+        return [...current, ...hydratedRows.filter((clip) => !seen.has(clip.id))];
       });
       setHasMore(rows.length === PAGE_SIZE);
     } catch {
@@ -317,7 +531,7 @@ export default function Clips() {
             userId={user?.id}
             isActive={activeId === clip.id}
             isDark={isDark}
-            onLike={() => undefined}
+            onLike={(nextClip) => setClips((current) => current.map((item) => item.id === nextClip.id ? nextClip : item))}
             onVisible={(node) => {
               if (node) {
                 node.dataset.clipId = clip.id;

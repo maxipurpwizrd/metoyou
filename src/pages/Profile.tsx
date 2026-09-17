@@ -7,13 +7,11 @@ import { fetchPostsFromSupabase } from "../lib/postApi";
 import { addComment, getComments, editComment, deleteComment } from "../lib/commentApi";
 import { likePost, unlikePost, getPostLikes, hydratePostLikeState } from "../lib/likeApi";
 import { followUser, unfollowUser, getFollowStatus, getMutualConnections, getFollowers, type MutualConnection } from "../lib/followApi";
-import { updatePostInSupabase } from "../lib/postApi";
 import FollowButton from "../components/social/FollowButton";
 import { useAuth } from "../hooks/useAuth";
 import type { ProfileData } from "../types/profile";
 import { useLanguage } from "../contexts/LanguageContext";
 import { normalizeLanguage } from "../lib/i18n";
-import ImageViewer from "../components/ImageViewer";
 import PostCard from "../components/PostCard";
 import VibesProProfilePage from "../components/VibesPro/VibesProProfilePage";
 import { ProfileSkeleton } from "../components/skeletons/Skeletons";
@@ -81,12 +79,6 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
   console.debug("[Profile] Viewing profile:", routeUsername ?? routeUserId ?? "me");
   console.debug("[Profile] Session user:", sessionProfile?.id ?? "none");
   console.debug("[Profile] isOwnProfile:", isOwnProfile);
-  const [viewerOpen, setViewerOpen] = useState(false);
-  const [viewerImages, setViewerImages] = useState<string[]>([]);
-  const [viewerIndex, setViewerIndex] = useState(0);
-  const [viewerPostId, setViewerPostId] = useState<string | number | null>(null);
-  const [viewerAuthorId, setViewerAuthorId] = useState<string | undefined>(undefined);
-  const [viewerAuthorUsername, setViewerAuthorUsername] = useState<string | undefined>(undefined);
   const [profilePictureMenuOpen, setProfilePictureMenuOpen] = useState(false);
   const [selectedPostId, setSelectedPostId] = useState<string | number | null>(null);
   const [, setLoadingCommentsByPost] = useState<Record<string, boolean>>({});
@@ -175,12 +167,8 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
     if (!profilePic) return;
 
     setProfilePictureMenuOpen(false);
-    setViewerImages([!profile.is_vibes_pro ? profile.profile_original_pic ?? profilePic : profilePic]);
-    setViewerIndex(0);
-    setViewerPostId(null);
-    setViewerAuthorId(profile.id);
-    setViewerAuthorUsername(profile.username);
-    setViewerOpen(true);
+    const image = !profile.is_vibes_pro ? profile.profile_original_pic ?? profilePic : profilePic;
+    navigate(`/flicks?${new URLSearchParams({ image }).toString()}`);
   };
 
   const handleProfilePicClick = () => {
@@ -1314,37 +1302,6 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
             </div>
 
             {/* The conditional logic container is now clean and within the fragment branch boundary */}
-            {viewerOpen && viewerImages.length > 0 && (
-              <ImageViewer
-                images={viewerImages}
-                initialIndex={viewerIndex}
-                onClose={() => setViewerOpen(false)}
-                postId={viewerPostId ?? undefined}
-                authorId={viewerAuthorId}
-                authorUsername={viewerAuthorUsername}
-                variant={isVibesProEnabled(profile) ? "vibespro" : "default"}
-                onEditPost={async (nextText) => {
-                  const trimmed = nextText.trim();
-                  setMyPosts((prev) => prev.map((p) => (p.id === viewerPostId ? { ...p, text: trimmed } : p)));
-
-                  if (viewerPostId) {
-                    try {
-                      await updatePostInSupabase(String(viewerPostId), { text: trimmed });
-                    } catch (err) {
-                      console.error("Failed to update profile post in Supabase", err);
-                    }
-                  }
-                }}
-                onDeleteImage={() => {
-                  setMyPosts((prev) => prev.map((p) => (p.id === viewerPostId ? { ...p, image: undefined } : p)));
-                  setViewerOpen(false);
-                }}
-                onDeletePost={() => {
-                  setMyPosts((prev) => prev.filter((p) => p.id !== viewerPostId));
-                  setViewerOpen(false);
-                }}
-              />
-            )}
           </>
         )}
       </div>

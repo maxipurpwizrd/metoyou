@@ -11,6 +11,7 @@ import { supabase } from "../lib/supabase";
 
 import CreatePost from "../components/CreatePost";
 import PostCard from "../components/PostCard";
+import MediaActionMenu, { type MediaAction } from "../components/MediaActionMenu";
 import { FreeFeedSkeleton, VibesProFeedSkeleton } from "../components/skeletons/FeedSkeletons";
 import { savePostToSupabase, deletePostFromSupabase, updatePostInSupabase, uploadAudioToSupabase, uploadImageVariantsToSupabase, fetchPostByIdFromSupabase } from "../lib/postApi";
 import { addComment, editComment, deleteComment } from "../lib/commentApi";
@@ -331,6 +332,15 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
   const cancelDeleteStory = () => {
     setConfirmDeleteStory(false);
   };
+
+  const storyMenuActions: MediaAction[] = selectedStory
+    ? [
+        { label: "Share", icon: "share", onClick: () => { void handleShareStory(); } },
+        { label: "Save story", icon: "download", onClick: handleSaveStory },
+        { label: "Report", icon: "report", onClick: handleReportStory },
+        ...(isStoryOwner ? [{ label: "Delete story", icon: "delete" as const, tone: "danger" as const, onClick: handleDeleteStory }] : []),
+      ]
+    : [];
 
   const autoCloseTimeoutRef = useRef<number | null>(null);
 
@@ -1536,64 +1546,9 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
               <button type="button" className="h-full w-1/2" aria-label="Next story" onClick={goToNextStory} />
             </div>
 
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                setStoryMenuOpen((open) => !open);
-              }}
-              className="absolute top-4 left-4 z-50 flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/40 text-white shadow-md shadow-black/40 transition hover:bg-white/10"
-              aria-label="Story actions"
-            >
-              <span className="text-lg leading-none">⋯</span>
-            </button>
-
-            {storyMenuOpen && selectedStory && (
-              <div className="absolute top-16 left-4 z-50 min-w-45 rounded-2xl border border-white/15 bg-slate-950/95 p-2 shadow-2xl shadow-black/50">
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    handleShareStory();
-                  }}
-                  className="w-full rounded-xl px-3 py-2 text-left text-sm text-white hover:bg-white/10 transition"
-                >
-                  Share story
-                </button>
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    handleSaveStory();
-                  }}
-                  className="w-full rounded-xl px-3 py-2 text-left text-sm text-white hover:bg-white/10 transition"
-                >
-                  {savedStories.includes(selectedStory.id) ? "Saved" : "Save story"}
-                </button>
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    handleReportStory();
-                  }}
-                  className="w-full rounded-xl px-3 py-2 text-left text-sm text-white hover:bg-white/10 transition"
-                >
-                  Report story
-                </button>
-                {isStoryOwner && (
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      handleDeleteStory();
-                    }}
-                    className="w-full rounded-xl px-3 py-2 text-left text-sm text-rose-200 hover:bg-rose-500/20 transition"
-                  >
-                    Delete story
-                  </button>
-                )}
-              </div>
-            )}
+            <div className="absolute top-4 left-4 z-50">
+              <MediaActionMenu open={storyMenuOpen} isDark={true} onToggle={() => setStoryMenuOpen((open) => !open)} onClose={() => setStoryMenuOpen(false)} actions={storyMenuActions} />
+            </div>
 
             {confirmDeleteStory && selectedStory && (
               <div className="fixed inset-0 z-10001 flex items-center justify-center bg-black/80 p-4">

@@ -160,12 +160,14 @@ async function getPostLikeMetrics(postId: string, userId?: string) {
     return {
       liked,
       likesCount: likes.length,
+      resolved: true,
     };
   } catch (e) {
     console.error("getPostLikeMetrics error", e);
     return {
       liked: false,
       likesCount: 0,
+      resolved: false,
     };
   }
 }
@@ -189,9 +191,9 @@ export async function hydratePostLikeState<T extends { id: string | number }>(po
 
   const results = await Promise.all(
     posts.map(async (post) => {
-      const { liked, likesCount } = await getPostLikeMetrics(String(post.id), userId);
+      const { liked, likesCount, resolved } = await getPostLikeMetrics(String(post.id), userId);
       const fallbackCount = existingLikes[String(post.id)] ?? 0;
-      const resolvedCount = likesCount > 0 ? likesCount : fallbackCount;
+      const resolvedCount = resolved ? likesCount : fallbackCount;
 
       return {
         ...post,
