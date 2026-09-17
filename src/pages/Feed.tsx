@@ -11,6 +11,7 @@ import { supabase } from "../lib/supabase";
 
 import CreatePost from "../components/CreatePost";
 import PostCard from "../components/PostCard";
+import SurfaceDock from "../components/SurfaceDock";
 import MediaActionMenu, { type MediaAction } from "../components/MediaActionMenu";
 import { FreeFeedSkeleton, VibesProFeedSkeleton } from "../components/skeletons/FeedSkeletons";
 import { savePostToSupabase, deletePostFromSupabase, updatePostInSupabase, uploadAudioToSupabase, uploadImageVariantsToSupabase, fetchPostByIdFromSupabase } from "../lib/postApi";
@@ -2056,6 +2057,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
           )}
         </div>
       )}
+      <SurfaceDock />
     </div>
   );
 

@@ -10,6 +10,7 @@ import Home from "./pages/Home";
 import Feed from "./pages/Feed";
 import Clips from "./pages/Clips";
 import Flicks from "./pages/Flicks";
+import Tracks from "./pages/Tracks";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import Login from "./pages/Login";
@@ -51,6 +52,7 @@ const BACK_REDIRECT_ROUTES = new Set([
   "/admin-posts",
   "/clips",
   "/flicks",
+  "/tracks",
 ]);
 
 function shouldRedirectToFeed(pathname: string) {
@@ -153,6 +155,7 @@ function AppRoutes() {
       <Route path="/feed" element={<RequireAuth><Feed /></RequireAuth>} />
       <Route path="/clips" element={<RequireAuth><Clips /></RequireAuth>} />
       <Route path="/flicks" element={<RequireAuth><Flicks /></RequireAuth>} />
+      <Route path="/tracks" element={<RequireAuth><Tracks /></RequireAuth>} />
       <Route path="/welcome" element={<PublicRoute><AuthChoice /></PublicRoute>} />
       <Route path="/about" element={<AboutMeToYou />} />
       <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type TouchEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { Ban, CloudSun, Download, Flag, Grid2X2, LoaderCircle, MessageCircle, Mic, MoonStar, Play, Repeat2, Share2, Square, Volume2, VolumeX } from "lucide-react";
+import { Ban, CloudSun, Download, Flag, Grid2X2, LoaderCircle, MessageCircle, Mic, MoonStar, Music2, Play, Repeat2, Share2, Square, Volume2, VolumeX } from "lucide-react";
 import { useSession } from "../contexts/SessionContext";
 import RequireVibesPro from "../components/RequireVibesPro";
 import { fetchClipsPage, type ClipRecord } from "../lib/clipsApi";
@@ -11,6 +11,7 @@ import { useVoiceCommentRecorder } from "../hooks/useVoiceCommentRecorder";
 import { useAuth } from "../hooks/useAuth";
 import { savePostToSupabase } from "../lib/postApi";
 import { supabase } from "../lib/supabase";
+import SurfaceDock from "../components/SurfaceDock";
 
 const PAGE_SIZE = 8;
 
@@ -516,7 +517,16 @@ export default function Clips() {
         >
           <MoonStar className="h-5 w-5" />
         </button>
-        {loadingMore && <LoaderCircle className={`absolute right-12 h-5 w-5 animate-spin ${isDark ? "text-amber-300" : "text-sky-600"}`} />}
+        <button
+          type="button"
+          onClick={() => navigate("/tracks", { replace: true })}
+          aria-label="Open Tracks"
+          title="Tracks"
+          className={`absolute right-12 grid h-10 w-10 place-items-center rounded-full border shadow-sm ${isDark ? "border-white/15 bg-white/5 text-amber-300" : "border-sky-200 bg-white/70 text-sky-600"}`}
+        >
+          <Music2 className="h-5 w-5" />
+        </button>
+        {loadingMore && <LoaderCircle className={`absolute right-24 h-5 w-5 animate-spin ${isDark ? "text-amber-300" : "text-sky-600"}`} />}
       </div>
 
       {loading && <ClipSkeleton />}
@@ -550,6 +560,7 @@ export default function Clips() {
           {loadingMore ? "Loading..." : "Load more"}
         </button>
       )}
+      <SurfaceDock />
     </main>
   );
 }

@@ -7,6 +7,7 @@ import { addComment, deleteComment, editComment, getComments, type CommentRecord
 import { getSurfacePostInteractionCounts, hydrateSurfacePostInteractions } from "../lib/surfacePostInteractions";
 import { useVoiceCommentRecorder } from "../hooks/useVoiceCommentRecorder";
 import { useAuth } from "../hooks/useAuth";
+import SurfaceDock from "../components/SurfaceDock";
 import { savePostToSupabase } from "../lib/postApi";
 import { supabase } from "../lib/supabase";
 
@@ -79,6 +80,7 @@ export default function Flicks() {
     const deltaY = touch.clientY - start.y;
     if (Math.abs(deltaX) < 80 || Math.abs(deltaX) <= Math.abs(deltaY) * 1.35) return;
     if (deltaX >= 80) navigate("/clips", { replace: true });
+    else if (deltaX <= -80) navigate("/tracks", { replace: true });
   };
 
   useEffect(() => {
@@ -530,6 +532,7 @@ export default function Flicks() {
       {!loading && hasMore && flicks.length > 0 && (
         <button type="button" onClick={() => void loadMore()} disabled={loadingMore} className="mx-auto mt-5 block rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50">{loadingMore ? "Loading..." : "Load more"}</button>
       )}
+      <SurfaceDock />
     </main>
   );
 }
