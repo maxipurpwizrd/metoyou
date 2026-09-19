@@ -1,5 +1,5 @@
 import Navbar from "../components/Navbar";
-import { useMemo, useState, useEffect, useRef, useCallback } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback, useLayoutEffect } from "react";
 import { AutoSizer, CellMeasurer, CellMeasurerCache, List, WindowScroller } from "react-virtualized";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useFeed, type Post as FeedPost } from "../contexts/FeedContext";
@@ -106,7 +106,8 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
     return saved ? (JSON.parse(saved) as string[]) : [];
   });
   const listRef = useRef<any>(null);
-  const previousFilteredLengthRef = useRef(0);
+  const previousFilteredIdsRef = useRef<string[]>([]);
+  const previousLayoutSignatureRef = useRef("");
   const cache = useRef(
     new CellMeasurerCache({
       fixedWidth: true,
@@ -196,19 +197,35 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
     return basePosts.filter((post) => String(post.id) === requestedPostId);
   }, [posts, mutedUsers, requestedPostId]);
 
-  useEffect(() => {
-    const previousLength = previousFilteredLengthRef.current;
-    const isAppend = filteredPosts.length > previousLength && previousLength > 0;
+  useLayoutEffect(() => {
+    const currentIds = filteredPosts.map((post) => String(post.id));
+    const currentLayoutSignature = filteredPosts
+      .map((post) => `${post.id}:${post.uploadState ?? ""}`)
+      .join("|");
+    const previousIds = previousFilteredIdsRef.current;
+    const previousLayoutSignature = previousLayoutSignatureRef.current;
+    const isInitialRender = previousIds.length === 0;
+    const isAppend =
+      previousIds.length > 0 &&
+      currentIds.length > previousIds.length &&
+      previousIds.every((id, index) => currentIds[index] === id);
+    const orderChanged =
+      currentIds.length !== previousIds.length ||
+      currentIds.some((id, index) => id !== previousIds[index]);
+    const layoutChanged = currentLayoutSignature !== previousLayoutSignature;
 
-    if (isAppend) {
-      listRef.current?.recomputeRowHeights(previousLength);
-    } else {
+    if (isInitialRender || (orderChanged && !isAppend) || (layoutChanged && !isAppend)) {
       cache.current.clearAll();
+      listRef.current?.recomputeRowHeights(0);
+    } else if (isAppend) {
+      listRef.current?.recomputeRowHeights(previousIds.length);
+    } else if (selectedPostId !== null) {
       listRef.current?.recomputeRowHeights();
     }
 
-    previousFilteredLengthRef.current = filteredPosts.length;
-  }, [filteredPosts.length, selectedPostId]);
+    previousFilteredIdsRef.current = currentIds;
+    previousLayoutSignatureRef.current = currentLayoutSignature;
+  }, [filteredPosts, selectedPostId]);
 
   useEffect(() => {
     if (!requestedPostId) {
@@ -1227,7 +1244,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                       rowCount={filteredPosts.length}
                       rowHeight={cache.current.rowHeight}
                       deferredMeasurementCache={cache.current}
-                      overscanRowCount={3}
+                      overscanRowCount={8}
                       rowRenderer={({ index, parent, style }: any) => {
                         const post = filteredPosts[index];
                         const isSelected = selectedPostId === post.id;

@@ -146,8 +146,7 @@ export async function getFollowStatus(
 
 export async function followUser(
   viewerId: string,
-  targetId: string,
-  actorUsername: string
+  targetId: string
 ) {
   try {
     const { error: followError } = await supabase.from("followers").insert({
@@ -156,30 +155,6 @@ export async function followUser(
       created_at: normalizeTimestamp(new Date()) ?? new Date().toISOString(),
     });
     if (followError) throw followError;
-
-    if (actorUsername) {
-      const { data: mutualFollowData, error: mutualFollowError } = await supabase
-        .from("followers")
-        .select("id")
-        .match({ follower_id: targetId, following_id: viewerId })
-        .maybeSingle();
-
-      if (mutualFollowError) throw mutualFollowError;
-
-      const notificationType = mutualFollowData ? "follow_back" : "follow";
-      const message = mutualFollowData ? "followed you back" : "followed you";
-      const createdAt = normalizeTimestamp(new Date()) ?? new Date().toISOString();
-      const { error: notificationError } = await supabase.from("notifications").insert({
-        type: notificationType,
-        message,
-        target_id: targetId,
-        actor_id: viewerId,
-        user_id: targetId,
-        created_at: createdAt,
-        is_read: false,
-      });
-      if (notificationError) throw notificationError;
-    }
 
     // Recompute followers count and persist to profiles.hommies_count
     try {

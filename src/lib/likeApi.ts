@@ -58,38 +58,6 @@ export async function likePost(postId: string, userId: string) {
 
     await syncPostLikeCount(postId, 1);
 
-    const { data: postData, error: postError } = await supabase
-      .from("posts")
-      .select("author_id")
-      .eq("id", postId)
-      .maybeSingle();
-    if (postError) throw postError;
-
-    const authorId = postData?.author_id;
-    if (authorId && authorId !== userId) {
-      const { data: actorData, error: actorError } = await supabase
-        .from("profiles")
-        .select("username")
-        .eq("id", userId)
-        .maybeSingle();
-      if (!actorError && actorData?.username) {
-        const createdAt = normalizeTimestamp(new Date()) ?? new Date().toISOString();
-        const notificationData = {
-          type: "like",
-          message: "liked your post",
-          actor_id: userId,
-          user_id: authorId,
-          created_at: createdAt,
-          is_read: false,
-        };
-
-        const { error: notificationError } = await supabase.from("notifications").insert(notificationData);
-        if (notificationError) {
-          console.warn("Like notification skipped", notificationError.message);
-        }
-      }
-    }
-
     return (data as PostLikeRecord) ?? null;
   } catch (e) {
     console.error("likePost error", e);

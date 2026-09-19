@@ -118,7 +118,6 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
   const { user: authUser, isLoading: authLoading } = useAuth();
   const viewerId = sessionProfile?.id ?? authUser?.id;
   const profileId = profile?.id;
-  const actorUsername = sessionProfile?.username ?? authUser?.user_metadata?.first_name ?? "";
   const followLabel = isFollowing && isFollowedBy
     ? t("profile.homie")
     : isFollowing
@@ -928,7 +927,7 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
         setHommiesCount(nextConnections.length);
       }
     } else {
-      const success = await followUser(viewerId, profile.id, actorUsername);
+      const success = await followUser(viewerId, profile.id);
       if (success) {
         setIsFollowing(true);
         const nextConnections = await getMutualConnections(profile.id);

@@ -4,6 +4,7 @@ import { getMessageThreads } from '../lib/messageApi';
 import { getNotifications, subscribeToNotifications } from '../lib/notificationApi';
 import { useAppInit } from '../contexts/AppInitContext';
 import { useSession } from '../contexts/SessionContext';
+import { registerNotificationsServiceWorker } from '../lib/notificationPush';
 
 export default function AppBootstrap({ children }: { children: React.ReactNode }) {
   const { setProgress, setCurrentTask, setAppReady } = useAppInit();
@@ -50,6 +51,9 @@ export default function AppBootstrap({ children }: { children: React.ReactNode }
 
         setCurrentTask?.('Initializing realtime...');
         setProgress?.(95);
+        if (import.meta.env.PROD) {
+          try { await registerNotificationsServiceWorker(); } catch (e) {}
+        }
         if (currentUserId) {
           try { subscribeToNotifications(currentUserId, () => {}); } catch (e) {}
         }

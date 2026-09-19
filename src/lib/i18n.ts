@@ -226,6 +226,9 @@ export const translations: Record<AppLanguage, Record<string, string>> = {
     "about.cta": "MeToYou is more than an app. It is a movement of connection, culture, and care.",
     // Settings page
     "settings.premiumBanner": "Premium settings for your MeToYou experience",
+    "settings.premiumTitle": "Unlock premium features",
+    "settings.premiumBody": "Subscribe for $4.99/month to unlock VibesPro and the premium experience ahead.",
+    "settings.premiumCta": "Upgrade to VibesPro",
     "settings.title": "Settings",
     "settings.subtitle": "A liquid glass control center crafted for family, community and style.",
     "settings.profileSection": "Profile & Personal Details",
@@ -509,6 +512,9 @@ export const translations: Record<AppLanguage, Record<string, string>> = {
     "about.cta": "MeToYou is more than an app. It is a movement of connection, culture, and care.",
     // Settings page
     "settings.premiumBanner": "Premium settings for your MeToYou experience",
+    "settings.premiumTitle": "Unlock premium features",
+    "settings.premiumBody": "Subscribe for $4.99/month to unlock VibesPro and the premium experience ahead.",
+    "settings.premiumCta": "Upgrade to VibesPro",
     "settings.title": "Settings",
     "settings.subtitle": "A liquid glass control center crafted for family, community and style.",
     "settings.profileSection": "Profile & Personal Details",

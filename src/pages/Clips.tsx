@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type TouchEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { Ban, CloudSun, Download, Flag, Grid2X2, LoaderCircle, MessageCircle, Mic, MoonStar, Music2, Play, Repeat2, Share2, Square, Volume2, VolumeX } from "lucide-react";
+import { Ban, CloudSun, Download, Flag, Grid2X2, LoaderCircle, MessageCircle, Mic, MoonStar, Music2, Play, Repeat2, Share2, Square, Trash2, Volume2, VolumeX } from "lucide-react";
 import { useSession } from "../contexts/SessionContext";
 import RequireVibesPro from "../components/RequireVibesPro";
 import { fetchClipsPage, type ClipRecord } from "../lib/clipsApi";
@@ -9,9 +9,10 @@ import { addComment, deleteComment, editComment, getComments, type CommentRecord
 import { getSurfacePostInteractionCounts, hydrateSurfacePostInteractions } from "../lib/surfacePostInteractions";
 import { useVoiceCommentRecorder } from "../hooks/useVoiceCommentRecorder";
 import { useAuth } from "../hooks/useAuth";
-import { savePostToSupabase } from "../lib/postApi";
-import { supabase } from "../lib/supabase";
+import { deletePostFromSupabase, savePostToSupabase } from "../lib/postApi";
 import SurfaceDock from "../components/SurfaceDock";
+import ReportReasonModal, { type PostReportReason } from "../components/ReportReasonModal";
+import { submitPostReport } from "../lib/reportApi";
 
 const PAGE_SIZE = 8;
 
@@ -33,6 +34,7 @@ function ClipCard({
   isDark,
   userId,
   onLike,
+  onDelete,
   onVisible,
 }: {
   clip: ClipRecord;
@@ -40,6 +42,7 @@ function ClipCard({
   isDark: boolean;
   userId?: string;
   onLike: (clip: ClipRecord) => void;
+  onDelete: (clipId: string) => void;
   onVisible: (node: HTMLDivElement | null) => void;
 }) {
   const navigate = useNavigate();
@@ -55,6 +58,7 @@ function ClipCard({
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentText, setEditingCommentText] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [blockedAuthorIds, setBlockedAuthorIds] = useState<string[]>(() => {
     try {
       return JSON.parse(localStorage.getItem("metoyou-muted-users") ?? "[]") as string[];
@@ -91,6 +95,20 @@ function ClipCard({
       document.documentElement.style.overflow = previousDocumentOverflow;
     };
   }, [commentsOpen]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousDocumentOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousDocumentOverflow;
+    };
+  }, [menuOpen]);
 
   const toggleLike = async () => {
     if (!userId) return;
@@ -206,17 +224,31 @@ function ClipCard({
     setMenuOpen(false);
   };
 
-  const reportClip = async () => {
+  const reportClip = async (reason: PostReportReason) => {
     if (!userId) return;
-    const { error: reportError } = await supabase.from("reports").insert({ report_type: "post", post_id: clip.id, reporter_id: userId, reported_user_id: clip.author_id, status: "pending" });
-    window.alert(reportError ? "Unable to report this Clip." : "Clip reported.");
-    setMenuOpen(false);
+    await submitPostReport({ postId: clip.id, reporterId: userId, reportedUserId: clip.author_id, reason });
+    window.alert("Report submitted. Thanks for helping keep MeToYou safe.");
+    setIsReportModalOpen(false);
   };
 
   const blockClipAuthor = () => {
     const next = blockedAuthorIds.includes(clip.author_id) ? blockedAuthorIds : [...blockedAuthorIds, clip.author_id];
     setBlockedAuthorIds(next);
     localStorage.setItem("metoyou-muted-users", JSON.stringify(next));
+    setMenuOpen(false);
+  };
+
+  const deleteClip = async () => {
+    if (!userId || clip.author_id !== userId) return;
+    if (!window.confirm("Delete this Clip?")) return;
+
+    const deleted = await deletePostFromSupabase(clip.id);
+    if (!deleted) {
+      window.alert("Unable to delete this Clip right now.");
+      return;
+    }
+
+    onDelete(clip.id);
     setMenuOpen(false);
   };
 
@@ -291,8 +323,15 @@ function ClipCard({
                   <button type="button" onClick={() => void shareClip()} className="flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center hover:bg-sky-50"><Share2 className="h-5 w-5" />Share</button>
                   <button type="button" onClick={() => void saveClipToDevice()} className="flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center hover:bg-sky-50"><Download className="h-5 w-5" />Save to device</button>
                   <button type="button" onClick={() => void repostClip()} className="flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center hover:bg-sky-50"><Repeat2 className="h-5 w-5" />Repost</button>
-                  <button type="button" onClick={() => void reportClip()} className="flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center hover:bg-sky-50"><Flag className="h-5 w-5" />Report</button>
-                  <button type="button" onClick={blockClipAuthor} className="col-span-2 flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center text-rose-500 hover:bg-rose-50"><Ban className="h-5 w-5" />Block author</button>
+                  {clip.author_id !== userId && (
+                    <button type="button" onClick={() => { setIsReportModalOpen(true); setMenuOpen(false); }} className="flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center hover:bg-sky-50"><Flag className="h-5 w-5" />Report</button>
+                  )}
+                  {clip.author_id === userId && (
+                    <button type="button" onClick={() => void deleteClip()} className="col-span-2 flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center text-rose-500 hover:bg-rose-50"><Trash2 className="h-5 w-5" />Delete</button>
+                  )}
+                  {clip.author_id !== userId && (
+                    <button type="button" onClick={blockClipAuthor} className="col-span-2 flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center text-rose-500 hover:bg-rose-50"><Ban className="h-5 w-5" />Block author</button>
+                  )}
                 </div>
               </div>
             )}
@@ -302,6 +341,11 @@ function ClipCard({
           </button>
         </div>
       </div>
+      <ReportReasonModal
+        open={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        onSelect={reportClip}
+      />
       {commentsOpen && (
         <>
           <button
@@ -542,6 +586,7 @@ export default function Clips() {
             isActive={activeId === clip.id}
             isDark={isDark}
             onLike={(nextClip) => setClips((current) => current.map((item) => item.id === nextClip.id ? nextClip : item))}
+            onDelete={(clipId) => setClips((current) => current.filter((item) => item.id !== clipId))}
             onVisible={(node) => {
               if (node) {
                 node.dataset.clipId = clip.id;

@@ -66,6 +66,43 @@ export default function Tracks() {
   }, [theme]);
 
   useEffect(() => {
+    if (!currentTrack || !("mediaSession" in navigator)) return;
+
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: currentTrack.text?.trim() || "Untitled Track",
+      artist: currentTrack.username || "MeToYou",
+      album: "MeToYou Tracks",
+      artwork: currentTrack.image_url ? [{ src: currentTrack.image_url }] : [],
+    });
+    navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
+
+    const actionHandlers: Array<[MediaSessionAction, MediaSessionActionHandler]> = [
+      ["play", () => void play()],
+      ["pause", pause],
+      ["nexttrack", () => void next()],
+      ["previoustrack", previous],
+    ];
+
+    for (const [action, handler] of actionHandlers) {
+      try {
+        navigator.mediaSession.setActionHandler(action, handler);
+      } catch {
+        // Some browsers expose Media Session without supporting every action.
+      }
+    }
+
+    return () => {
+      for (const [action] of actionHandlers) {
+        try {
+          navigator.mediaSession.setActionHandler(action, null);
+        } catch {
+          // Ignore unsupported action cleanup.
+        }
+      }
+    };
+  }, [currentTrack, isPlaying]);
+
+  useEffect(() => {
     if (!profile?.is_vibes_pro) {
       setLoading(false);
       return;

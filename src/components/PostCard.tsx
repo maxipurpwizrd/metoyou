@@ -3,10 +3,12 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { Mic, Square } from "lucide-react";
 import EditPostModal from "./EditPostModal";
 import MediaActionMenu, { type MediaAction } from "./MediaActionMenu";
+import ReportReasonModal, { type PostReportReason } from "./ReportReasonModal";
 import { useSession } from "../contexts/SessionContext";
 import { useAutoplayVideo } from "../hooks/useAutoplayVideo";
 import { useAutoplayAudio } from "../hooks/useAutoplayAudio";
 import { useVideoContext } from "../contexts/VideoContext";
+import { submitPostReport } from "../lib/reportApi";
 import type { Comment, User } from "../contexts/FeedContext";
 const loadedImageUrls = new Set<string>();
 
@@ -78,7 +80,6 @@ export default function PostCard({
   onDeletePost,
   onRetryPost,
   onEditPost,
-  onDeleteImage,
   onDeleteVideo,
   onHighlight,
   audio,
@@ -108,6 +109,7 @@ export default function PostCard({
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [isReadingModeOpen, setIsReadingModeOpen] = useState(false);
   const [isEditingPost, setIsEditingPost] = useState(false);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [draftPostText, setDraftPostText] = useState(text);
   const MAX_RECORDING_SECONDS = 60;
 
@@ -187,6 +189,20 @@ export default function PostCard({
   }, [isReadingModeOpen]);
 
   useEffect(() => {
+    if (!showMenu) return;
+
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousDocumentOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousDocumentOverflow;
+    };
+  }, [showMenu]);
+
+  useEffect(() => {
     const timeout = window.setTimeout(() => setShowMenu(false), 0);
     return () => window.clearTimeout(timeout);
   }, [location.pathname]);
@@ -203,7 +219,6 @@ export default function PostCard({
     }
 
     setMediaReady(!image || loadedImageUrls.has(image));
-      setMediaReady(!image || loadedImageUrls.has(image));
     setMediaErrored(false);
   }, [image, video]);
 
@@ -436,7 +451,7 @@ export default function PostCard({
   const feedMenuActions: MediaAction[] = isOwner
     ? [
         { label: "Edit post", icon: "edit", onClick: () => { setDraftPostText(text); setIsEditingPost(true); setShowMenu(false); } },
-        ...(image ? [{ label: "Delete image", icon: "delete" as const, tone: "danger" as const, onClick: () => { onDeleteImage?.(); setShowMenu(false); } }] : []),
+        { label: "Share", icon: "share", onClick: async () => { try { if (navigator.share) await navigator.share({ title: `${author.username}'s post`, text, url: window.location.href }); else await navigator.clipboard.writeText(window.location.href); } catch {} setShowMenu(false); } },
         ...(video ? [{ label: "Delete video", icon: "delete" as const, tone: "danger" as const, onClick: () => { onDeleteVideo?.(); setShowMenu(false); } }] : []),
         { label: highlighted ? "Unhighlight" : "Highlight", icon: "highlight", onClick: () => { onHighlight?.(); setShowMenu(false); } },
         { label: "Delete post", icon: "delete" as const, tone: "danger" as const, onClick: () => { onDeletePost?.(); setShowMenu(false); } },
@@ -445,9 +460,23 @@ export default function PostCard({
         { label: "Share", icon: "share", onClick: async () => { try { if (navigator.share) await navigator.share({ title: `${author.username}'s post`, text, url: window.location.href }); else await navigator.clipboard.writeText(window.location.href); } catch {} setShowMenu(false); } },
         { label: "Save", icon: "download", onClick: () => { onSavePost?.(); setShowMenu(false); } },
         { label: "Repost", icon: "repost", onClick: () => { onRepost?.(); setShowMenu(false); } },
-        { label: "Report", icon: "report", onClick: () => { alert("Report submitted. Thanks for helping keep MeToYou safe."); setShowMenu(false); } },
+        { label: "Report", icon: "report", onClick: () => { setIsReportModalOpen(true); setShowMenu(false); } },
         { label: "Block author", icon: "block", tone: "danger", onClick: () => { onMuteUser?.(); setShowMenu(false); } },
       ];
+
+  const handleReport = async (reason: PostReportReason) => {
+    if (!currentUser?.id || !ownerId || postId === undefined) {
+      throw new Error("Authentication is required to report this post.");
+    }
+
+    await submitPostReport({
+      postId: String(postId),
+      reporterId: currentUser.id,
+      reportedUserId: ownerId,
+      reason,
+    });
+    window.alert("Report submitted. Thanks for helping keep MeToYou safe.");
+  };
 
   return (
     <>
@@ -1015,6 +1044,12 @@ export default function PostCard({
       )}
 
       </div>
+
+      <ReportReasonModal
+        open={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        onSelect={handleReport}
+      />
 
     </div>
     </>

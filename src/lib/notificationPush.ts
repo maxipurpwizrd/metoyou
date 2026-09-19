@@ -61,6 +61,12 @@ function normalizePushSubscription(subscription: PushSubscription): PushSubscrip
 export async function subscribeToPushNotifications(registration: ServiceWorkerRegistration): Promise<PushSubscriptionPayload | null> {
   if (!registration.pushManager) return null;
 
+  const vapidPublicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+  if (!vapidPublicKey) {
+    console.warn("Push notifications require VITE_VAPID_PUBLIC_KEY.");
+    return null;
+  }
+
   try {
     const subscription = await registration.pushManager.getSubscription();
     if (subscription) {
@@ -69,7 +75,7 @@ export async function subscribeToPushNotifications(registration: ServiceWorkerRe
 
     const newSubscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: "",
+      applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
     });
 
     return normalizePushSubscription(newSubscription);
@@ -77,6 +83,17 @@ export async function subscribeToPushNotifications(registration: ServiceWorkerRe
     console.error("subscribeToPushNotifications error", error);
     return null;
   }
+}
+
+function urlBase64ToUint8Array(value: string): ArrayBuffer {
+  const padding = "=".repeat((4 - (value.length % 4)) % 4);
+  const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  const bytes = new Uint8Array(rawData.length);
+  [...rawData].forEach((character, index) => {
+    bytes[index] = character.charCodeAt(0);
+  });
+  return bytes.buffer;
 }
 
 export async function sendPushSubscriptionToServer(

@@ -89,34 +89,6 @@ async function syncPostCommentCount(postId: string, delta: number) {
   }
 }
 
-async function createCommentNotification(postId: string, actorId: string) {
-  try {
-    const { data: postData, error: postError } = await supabase.from("posts").select("author_id").eq("id", postId).maybeSingle();
-    if (postError) throw postError;
-
-    const authorId = postData?.author_id;
-    if (!authorId || authorId === actorId) return;
-
-    const { data: actorData, error: actorError } = await supabase.from("profiles").select("username").eq("id", actorId).maybeSingle();
-    if (actorError) throw actorError;
-    if (!actorData?.username) return;
-
-    const actorUsername = actorData.username;
-    const createdAt = normalizeTimestamp(new Date()) ?? new Date().toISOString();
-    await supabase.from("notifications").insert({
-      type: "comment",
-      message: `${actorUsername} commented on your post`,
-      target_id: postId,
-      actor_id: actorId,
-      user_id: authorId,
-      created_at: createdAt,
-      is_read: false,
-    });
-  } catch (e) {
-    console.error("createCommentNotification error", e);
-  }
-}
-
 export async function addComment(
   postId: string,
   authorId: string,
@@ -171,8 +143,6 @@ export async function addComment(
 
     if (error) throw error;
     await syncPostCommentCount(postId, 1);
-    await createCommentNotification(postId, authorId);
-
     return {
       ...(data as CommentRecord),
       likes: 0,
@@ -193,7 +163,6 @@ export async function addComment(
         .maybeSingle();
       if (error) throw error;
       await syncPostCommentCount(postId, 1);
-      await createCommentNotification(postId, authorId);
       return {
         ...(data as CommentRecord),
         likes: 0,
@@ -225,12 +194,6 @@ export async function addComment(
         } catch {
           // ignore
         }
-        try {
-          await createCommentNotification(postId, authorId);
-        } catch {
-          // ignore
-        }
-
         return localComment;
       } catch (finalErr) {
         console.error("addComment final fallback error", finalErr);

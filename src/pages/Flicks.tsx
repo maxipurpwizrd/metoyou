@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type TouchEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Ban, CloudSun, Download, Flag, Grid2X2, LoaderCircle, MessageCircle, Mic, MoonStar, Repeat2, Share2, Square } from "lucide-react";
+import { Ban, CloudSun, Download, Flag, Grid2X2, LoaderCircle, MessageCircle, Mic, MoonStar, Repeat2, Share2, Square, Trash2 } from "lucide-react";
 import { fetchFlicksPage, type FlickRecord } from "../lib/flicksApi";
 import { likePost, unlikePost } from "../lib/likeApi";
 import { addComment, deleteComment, editComment, getComments, type CommentRecord } from "../lib/commentApi";
@@ -8,10 +8,11 @@ import { getSurfacePostInteractionCounts, hydrateSurfacePostInteractions } from 
 import { useVoiceCommentRecorder } from "../hooks/useVoiceCommentRecorder";
 import { useAuth } from "../hooks/useAuth";
 import SurfaceDock from "../components/SurfaceDock";
-import { savePostToSupabase } from "../lib/postApi";
-import { supabase } from "../lib/supabase";
+import ReportReasonModal, { type PostReportReason } from "../components/ReportReasonModal";
+import { deletePostFromSupabase, savePostToSupabase } from "../lib/postApi";
+import { submitPostReport } from "../lib/reportApi";
 
-const PAGE_SIZE = 8;
+const PAGE_SIZE = 7;
 
 function FlickSkeleton() {
   return (
@@ -49,6 +50,7 @@ export default function Flicks() {
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentText, setEditingCommentText] = useState("");
   const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [reportTarget, setReportTarget] = useState<FlickRecord | null>(null);
   const [blockedAuthorIds, setBlockedAuthorIds] = useState<string[]>(() => {
     try {
       return JSON.parse(localStorage.getItem("metoyou-muted-users") ?? "[]") as string[];
@@ -57,6 +59,7 @@ export default function Flicks() {
     }
   });
   const longPressTimerRef = useRef<number | null>(null);
+  const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const { isRecording, recordingDuration, voiceUrl, startRecording, stopRecording, clearVoiceUrl } = useVoiceCommentRecorder();
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const isDark = theme === "dark";
@@ -86,6 +89,20 @@ export default function Flicks() {
   useEffect(() => {
     window.localStorage.setItem("metoyou-clips-theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    if (!menuFor) return;
+
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousDocumentOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousDocumentOverflow;
+    };
+  }, [menuFor]);
 
   useEffect(() => {
     if (!commentsFor) return;
@@ -168,6 +185,21 @@ export default function Flicks() {
       setLoadingMore(false);
     }
   };
+
+  useEffect(() => {
+    const sentinel = loadMoreSentinelRef.current;
+    if (!sentinel || !hasMore || loading || loadingMore || flicks.length === 0) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) void loadMore();
+      },
+      { rootMargin: "0px 0px 600px 0px" },
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [flicks.length, hasMore, loading, loadingMore]);
 
   const toggleLike = async (flick: FlickRecord) => {
     if (!user) return;
@@ -286,17 +318,31 @@ export default function Flicks() {
     setMenuFor(null);
   };
 
-  const reportFlick = async (flick: FlickRecord) => {
+  const reportFlick = async (flick: FlickRecord, reason: PostReportReason) => {
     if (!user) return;
-    const { error: reportError } = await supabase.from("reports").insert({ report_type: "post", post_id: flick.id, reporter_id: user.id, reported_user_id: flick.author_id, status: "pending" });
-    window.alert(reportError ? "Unable to report this Flick." : "Flick reported.");
-    setMenuFor(null);
+    await submitPostReport({ postId: flick.id, reporterId: user.id, reportedUserId: flick.author_id, reason });
+    window.alert("Report submitted. Thanks for helping keep MeToYou safe.");
+    setReportTarget(null);
   };
 
   const blockFlickAuthor = (flick: FlickRecord) => {
     const next = blockedAuthorIds.includes(flick.author_id) ? blockedAuthorIds : [...blockedAuthorIds, flick.author_id];
     setBlockedAuthorIds(next);
     localStorage.setItem("metoyou-muted-users", JSON.stringify(next));
+    setMenuFor(null);
+  };
+
+  const deleteFlick = async (flick: FlickRecord) => {
+    if (!user || flick.author_id !== user.id) return;
+    if (!window.confirm("Delete this Flick?")) return;
+
+    const deleted = await deletePostFromSupabase(flick.id);
+    if (!deleted) {
+      window.alert("Unable to delete this Flick right now.");
+      return;
+    }
+
+    setFlicks((current) => current.filter((item) => item.id !== flick.id));
     setMenuFor(null);
   };
 
@@ -429,8 +475,15 @@ export default function Flicks() {
                           <button type="button" onClick={() => void shareFlick(flick)} className="flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center hover:bg-sky-50"><Share2 className="h-5 w-5" />Share</button>
                           <button type="button" onClick={() => void saveFlickToDevice(flick)} className="flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center hover:bg-sky-50"><Download className="h-5 w-5" />Save to device</button>
                           <button type="button" onClick={() => void repostFlick(flick)} className="flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center hover:bg-sky-50"><Repeat2 className="h-5 w-5" />Repost</button>
-                          <button type="button" onClick={() => void reportFlick(flick)} className="flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center hover:bg-sky-50"><Flag className="h-5 w-5" />Report</button>
-                          <button type="button" onClick={() => blockFlickAuthor(flick)} className="col-span-2 flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center text-rose-500 hover:bg-rose-50"><Ban className="h-5 w-5" />Block author</button>
+                          {flick.author_id !== user?.id && (
+                            <button type="button" onClick={() => { setReportTarget(flick); setMenuFor(null); }} className="flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center hover:bg-sky-50"><Flag className="h-5 w-5" />Report</button>
+                          )}
+                          {flick.author_id !== user?.id && (
+                            <button type="button" onClick={() => blockFlickAuthor(flick)} className="col-span-2 flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center text-rose-500 hover:bg-rose-50"><Ban className="h-5 w-5" />Block author</button>
+                          )}
+                          {flick.author_id === user?.id && (
+                            <button type="button" onClick={() => void deleteFlick(flick)} className="col-span-2 flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center text-rose-500 hover:bg-rose-50"><Trash2 className="h-5 w-5" />Delete</button>
+                          )}
                         </div>
                       </div>
                     )}
@@ -528,10 +581,14 @@ export default function Flicks() {
         })}
       </div>
 
-      {loadingMore && <LoaderCircle className="mx-auto mt-5 h-6 w-6 animate-spin text-sky-600" />}
-      {!loading && hasMore && flicks.length > 0 && (
-        <button type="button" onClick={() => void loadMore()} disabled={loadingMore} className="mx-auto mt-5 block rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50">{loadingMore ? "Loading..." : "Load more"}</button>
-      )}
+      <ReportReasonModal
+        open={reportTarget !== null}
+        onClose={() => setReportTarget(null)}
+        onSelect={(reason) => reportTarget ? reportFlick(reportTarget, reason) : Promise.reject(new Error("No report target selected."))}
+      />
+
+      {hasMore && flicks.length > 0 && <div ref={loadMoreSentinelRef} className="h-4" aria-hidden="true" />}
+      {loadingMore && <LoaderCircle className="mx-auto mt-5 h-6 w-6 animate-spin text-sky-600" aria-label="Loading more Flicks" />}
       <SurfaceDock />
     </main>
   );

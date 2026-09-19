@@ -10,9 +10,13 @@ self.addEventListener('push', function (event) {
   const title = data.title || 'New message';
   const options = {
     body: data.body || '',
-    icon: data.icon || '/logo192.png',
+    icon: data.icon || '/icon-192.png',
     data: data,
-    badge: data.badge || '/favicon.ico',
+    badge: data.badge || '/favicon.png',
+    tag: data.tag || data.type || 'metoyou-notification',
+    renotify: Boolean(data.renotify),
+    requireInteraction: Boolean(data.requireInteraction),
+    actions: Array.isArray(data.actions) ? data.actions : [],
   };
 
   event.waitUntil(self.registration.showNotification(title, options));
@@ -20,9 +24,9 @@ self.addEventListener('push', function (event) {
 
 self.addEventListener('notificationclick', function (event) {
   event.notification.close();
-  var targetUrl = event.notification.data && event.notification.data.url
-    ? event.notification.data.url
-    : '/';
+  var notificationData = event.notification.data || {};
+  var actionTarget = notificationData.actionUrls && notificationData.actionUrls[event.action];
+  var targetUrl = actionTarget || notificationData.url || '/';
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList) {
       for (const client of clientList) {
