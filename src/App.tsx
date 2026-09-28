@@ -29,7 +29,12 @@ import AdminPosts from "./pages/AdminPosts";
 import AdminUsers from "./pages/AdminUsers";
 import VibesProUpgrade from "./pages/VibesProUpgrade";
 import VibesProSuccess from "./pages/VibesProSuccess";
+import ProfileStatus from "./pages/ProfileStatus";
+import BlockedUsers from "./pages/BlockedUsers";
 import RequireAuth from "./components/RequireAuth";
+import RestrictedModeBanner from "./components/moderation/RestrictedModeBanner";
+import SignupWelcomePopup from "./components/SignupWelcomePopup";
+import LoginWelcomePopup from "./components/LoginWelcomePopup";
 import { useAuth } from "./hooks/useAuth";
 import { GlobalCallProvider } from "./contexts/GlobalCallContext";
 import { shouldRedirectAuthenticatedPublicRoute } from "./lib/authStateIsolation";
@@ -44,6 +49,8 @@ const BACK_REDIRECT_ROUTES = new Set([
   "/messages/archived",
   "/chat",
   "/profile",
+  "/profile/status",
+  "/settings/blocked-users",
   "/settings",
   "/settings/vibes-pro",
   "/vibes-pro/success",
@@ -162,7 +169,9 @@ function AppRoutes() {
       <Route path="/signup" element={<PublicRoute><Signup /></PublicRoute>} />
       <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
       <Route path="/profile/:username" element={<RequireAuth><Profile /></RequireAuth>} />
+      <Route path="/profile/status" element={<RequireAuth><ProfileStatus /></RequireAuth>} />
       <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
+      <Route path="/settings/blocked-users" element={<RequireAuth><BlockedUsers /></RequireAuth>} />
       <Route path="/settings/vibes-pro" element={<RequireAuth><VibesProUpgrade /></RequireAuth>} />
       <Route path="/vibes-pro/success" element={<RequireAuth><VibesProSuccess /></RequireAuth>} />
       <Route path="/messages" element={<RequireAuth><Messages /></RequireAuth>} />
@@ -188,6 +197,9 @@ function App() {
             <GlobalCallProvider>
               <ScrollRestoration />
               <AppRoutes />
+              <RestrictedModeBanner />
+              <SignupWelcomePopup />
+              <LoginWelcomePopup />
               <PWAInstallPrompt />
             </GlobalCallProvider>
           </BrowserRouter>

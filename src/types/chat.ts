@@ -9,6 +9,7 @@ export type Message = {
   audio_url?: string | null;
   video_url?: string | null;
   status?: MessageStatus;
+  read_at?: string | null;
   message_type?: string | null;
   metadata?: Record<string, unknown> | null;
   reactions?: Record<string, string[]>;

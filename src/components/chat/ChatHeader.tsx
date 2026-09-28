@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { getPresenceLabel } from "../../lib/presenceStatus";
 
 interface ChatHeaderProps {
   recipientName: string;
@@ -69,9 +70,10 @@ export function ChatHeader({
               <p className={`text-xs mt-1 ${headerSubtextClassName}`}>
                 {typingUsers.includes(recipientId)
                   ? `${recipientName} is typing...`
-                  : chatPresenceReady && isUserOnline(recipientId)
-                    ? "🟢 Online"
-                    : "⚫ Offline"}
+                  : getPresenceLabel({
+                      isOnline: chatPresenceReady && isUserOnline(recipientId),
+                      lastActive: chatPresenceReady ? undefined : undefined,
+                    })}
               </p>
             </div>
 

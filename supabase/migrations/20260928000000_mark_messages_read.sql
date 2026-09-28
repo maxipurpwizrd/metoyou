@@ -1,0 +1,17 @@
+-- This repository file is intentionally NOT a deployable migration.
+-- The authoritative live contract was already created in Supabase and is:
+--   public.mark_messages_read(p_message_ids uuid[])
+--
+-- This file is retained only as a local reference to prevent stale frontend
+-- assumptions. It must not be executed against the live database.
+--
+-- live contract summary:
+--   - SECURITY DEFINER
+--   - search_path = pg_catalog
+--   - authenticated only
+--   - caller identity derives from auth.uid()
+--   - accepts message IDs only
+--   - updates only read_at
+--   - ignores already-read rows
+--   - rejects unrelated or unauthorized rows without broad updates
+--   - leaves status/is_read untouched

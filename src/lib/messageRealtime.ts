@@ -8,6 +8,9 @@ import {
   subscribeToTyping as mockSubscribeToTyping,
 } from "@/services/mock/realtimeHub";
 
+const messageCallbacksByChannel = new Map<string, Set<(message: Message, event?: "INSERT" | "UPDATE" | "DELETE") => void>>();
+const messageChannelsByConversation = new Map<string, RealtimeChannel>();
+
 export function getMessagesChannelName(conversationId: string, role = "default"): string {
   return `messages:${conversationId}:${role}`;
 }
@@ -22,12 +25,29 @@ export function subscribeToMessages(
   }
 
   const channelName = getMessagesChannelName(conversationId, role);
+  const existingChannel = messageChannelsByConversation.get(channelName);
+  const callbackSet = messageCallbacksByChannel.get(channelName) ?? new Set();
+  if (!callbackSet.has(callback)) {
+    callbackSet.add(callback);
+    messageCallbacksByChannel.set(channelName, callbackSet);
+  }
+
+  if (existingChannel) {
+    return existingChannel;
+  }
+
   const channel = supabase.channel(channelName);
   const logRealtime = (...args: unknown[]) => {
     if (import.meta.env.DEV) console.debug("[Realtime][messages]", ...args);
   };
 
   logRealtime("subscribe start", { channelName, conversationId });
+
+  const notifyCallbacks = (message: Message, event?: "INSERT" | "UPDATE" | "DELETE") => {
+    for (const registeredCallback of messageCallbacksByChannel.get(channelName) ?? []) {
+      registeredCallback(message, event);
+    }
+  };
 
   channel.on(
     "postgres_changes",
@@ -41,7 +61,7 @@ export function subscribeToMessages(
       const message = payload.new as Message;
       if (message && message.id) {
         logRealtime("event received", { channelName, event: "INSERT", messageId: message.id });
-        callback(message, "INSERT");
+        notifyCallbacks(message, "INSERT");
       }
     }
   );
@@ -58,7 +78,7 @@ export function subscribeToMessages(
       const message = payload.new as Message;
       if (message && message.id) {
         logRealtime("event received", { channelName, event: "UPDATE", messageId: message.id });
-        callback(message, "UPDATE");
+        notifyCallbacks(message, "UPDATE");
       }
     }
   );
@@ -84,7 +104,7 @@ export function subscribeToMessages(
           video_url: undefined,
           metadata: { deleted: true },
         };
-        callback(deleteMarker, "DELETE");
+        notifyCallbacks(deleteMarker, "DELETE");
       }
     }
   );
@@ -97,9 +117,12 @@ export function subscribeToMessages(
       console.warn("[Realtime][messages] subscription failed", { channelName, status });
     } else if (status === "CLOSED") {
       console.debug(`Unsubscribed from messages for conversation ${conversationId}`);
+      messageChannelsByConversation.delete(channelName);
+      messageCallbacksByChannel.delete(channelName);
     }
   });
 
+  messageChannelsByConversation.set(channelName, channel);
   return channel;
 }
 

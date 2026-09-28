@@ -30,8 +30,8 @@ export const VibesProStories: React.FC<VibesProStoriesProps> = ({
   const displayStories = stories.length > 0 ? stories : defaultStories;
 
   return (
-    <div className="px-4 py-6 overflow-x-auto bg-[#0B0B0B]">
-      <div className="flex gap-4 min-w-min">
+    <div className="px-4 py-0 overflow-x-auto bg-[#0B0B0B]">
+      <div className="flex gap-3 min-w-min">
         {/* Your Story Card */}
         <button
           onClick={onAddStory}

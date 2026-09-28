@@ -1,6 +1,7 @@
 import { supabase } from "./supabase";
 import { normalizeTimestamp } from "./time";
 import type { Conversation, Message, MessageThread } from "../types/chat";
+import { resolveOrCreateConversation } from "./conversationResolver";
 
 export function mergeMessages(messages: Message[]): Message[] {
   const unique = new Map<string, Message>();
@@ -122,104 +123,25 @@ export async function findOrCreateConversation(
   userId2: string
 ): Promise<Conversation | null> {
   try {
-    const [minId, maxId] = userId1 < userId2 ? [userId1, userId2] : [userId2, userId1];
-
-    const { data: sessionData } = await supabase.auth.getUser();
-    const authUserId = sessionData?.user?.id ?? null;
-    if (!minId || !maxId) {
-      console.error("[messageApi] findOrCreateConversation missing participant ids", { userId1, userId2 });
+    if (!userId1 || !userId2) {
       return null;
     }
 
-    if (!authUserId) {
-      console.error("[messageApi] findOrCreateConversation no auth session available", { userId1, userId2 });
+    const { data: sessionData, error: sessionError } = await supabase.auth.getUser();
+    if (sessionError || !sessionData?.user?.id) {
+      console.error("[messageApi] findOrCreateConversation auth session missing", sessionError);
       return null;
     }
 
-    if (authUserId !== userId1 && authUserId !== userId2) {
-      console.error("[messageApi] findOrCreateConversation auth user is not a participant", { authUserId, userId1, userId2 });
+    const currentUserId = sessionData.user.id;
+    const targetUserId = userId1 === currentUserId ? userId2 : userId2 === currentUserId ? userId1 : null;
+    if (!targetUserId) {
+      console.error("[messageApi] findOrCreateConversation auth user is not a participant", { currentUserId, userId1, userId2 });
       return null;
     }
 
-    const { data: existing, error: selectError } = await supabase
-      .from("conversations")
-      .select("*")
-      .eq("user_1", minId)
-      .eq("user_2", maxId)
-      .order("created_at", { ascending: true })
-      .limit(1);
-
-    if (selectError) throw selectError;
-    if (existing && existing.length > 0) {
-      if (import.meta.env.DEV) console.debug("[MessageTrace] conversation resolved", {
-        requestedUserIds: [userId1, userId2],
-        authenticatedUserId: authUserId,
-        conversationId: existing[0].id,
-        participants: [existing[0].user_1, existing[0].user_2],
-      });
-      return existing[0];
-    }
-
-    const { data: legacyExisting, error: legacyError } = await supabase
-      .from("conversations")
-      .select("*")
-      .eq("user_1", maxId)
-      .eq("user_2", minId)
-      .order("created_at", { ascending: true })
-      .limit(1);
-
-    if (legacyError) throw legacyError;
-    if (legacyExisting && legacyExisting.length > 0) {
-      if (import.meta.env.DEV) console.debug("[MessageTrace] legacy conversation resolved", {
-        requestedUserIds: [userId1, userId2],
-        authenticatedUserId: authUserId,
-        conversationId: legacyExisting[0].id,
-        participants: [legacyExisting[0].user_1, legacyExisting[0].user_2],
-      });
-      return legacyExisting[0];
-    }
-
-    const { data, error } = await supabase
-      .from("conversations")
-      .insert({ user_1: minId, user_2: maxId })
-      .select()
-      .single();
-
-    if (error) {
-      console.error("[messageApi] conversation insert error", error, { minId, maxId });
-      if (error.code === "23505" || error.message?.includes("unique")) {
-        const { data: raceConditionExisting } = await supabase
-          .from("conversations")
-          .select("*")
-          .eq("user_1", minId)
-          .eq("user_2", maxId)
-          .limit(1);
-
-        if (raceConditionExisting && raceConditionExisting.length > 0) {
-          return raceConditionExisting[0];
-        }
-
-        const { data: raceConditionLegacy } = await supabase
-          .from("conversations")
-          .select("*")
-          .eq("user_1", maxId)
-          .eq("user_2", minId)
-          .limit(1);
-
-        if (raceConditionLegacy && raceConditionLegacy.length > 0) {
-          return raceConditionLegacy[0];
-        }
-      }
-      throw error;
-    }
-
-    if (import.meta.env.DEV) console.debug("[MessageTrace] conversation created", {
-      requestedUserIds: [userId1, userId2],
-      authenticatedUserId: authUserId,
-      conversationId: data?.id,
-      participants: data ? [data.user_1, data.user_2] : null,
-    });
-    return data;
+    const row = await resolveOrCreateConversation(targetUserId);
+    return row as Conversation | null;
   } catch (e) {
     console.error("findOrCreateConversation error", e);
     return null;
@@ -365,7 +287,6 @@ export async function sendMessage({
       image_url: imageUrl ?? null,
       audio_url: audioUrl ?? null,
       video_url: videoUrl ?? null,
-      created_at: normalizeTimestamp(new Date()) ?? new Date().toISOString(),
     };
 
     const fullPayload: Record<string, unknown> = {
@@ -390,7 +311,6 @@ export async function sendMessage({
       "reply_to_id",
       "reply_to_text",
       "status",
-      "created_at",
     ]);
 
     let lastError: Error | null = null;
@@ -464,25 +384,24 @@ export async function markMessagesAsRead(
       .select("id")
       .eq("conversation_id", conversationId)
       .neq("sender_id", currentUserId)
-      .or(`status.is.null,status.neq.read`);
+      .is("read_at", null);
 
     if (fetchError) {
       console.error("markMessagesAsRead fetch error", fetchError);
       return false;
     }
 
-    if (!unreadMessages || unreadMessages.length === 0) {
+    const messageIds = (unreadMessages ?? []).map((message) => message.id);
+    if (messageIds.length === 0) {
       return true;
     }
 
-    const messageIds = unreadMessages.map((m) => m.id);
-    const { error: updateError } = await supabase
-      .from("messages")
-      .update({ status: "read" })
-      .in("id", messageIds);
+    const { error: rpcError } = await supabase.rpc("mark_messages_read", {
+      p_message_ids: messageIds,
+    });
 
-    if (updateError) {
-      console.error("markMessagesAsRead update error", updateError);
+    if (rpcError) {
+      console.error("markMessagesAsRead RPC error", rpcError);
       return false;
     }
 

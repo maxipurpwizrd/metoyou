@@ -11,6 +11,35 @@ import { useAuth } from "../hooks/useAuth";
 import SurfaceDock from "../components/SurfaceDock";
 
 const PAGE_SIZE = 8;
+const TRACKS_CACHE_KEY = "metoyou-tracks-cache";
+
+type CachedTracksState = {
+  tracks: TrackRecord[];
+  currentIndex: number;
+  hasMore: boolean;
+};
+
+const readTracksCache = (): CachedTracksState => {
+  if (typeof window === "undefined") {
+    return { tracks: [], currentIndex: 0, hasMore: true };
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(TRACKS_CACHE_KEY);
+    if (!raw) {
+      return { tracks: [], currentIndex: 0, hasMore: true };
+    }
+
+    const parsed = JSON.parse(raw) as Partial<CachedTracksState>;
+    return {
+      tracks: Array.isArray(parsed.tracks) ? parsed.tracks : [],
+      currentIndex: typeof parsed.currentIndex === "number" ? parsed.currentIndex : 0,
+      hasMore: parsed.hasMore !== false,
+    };
+  } catch {
+    return { tracks: [], currentIndex: 0, hasMore: true };
+  }
+};
 
 function TrackSkeleton() {
   return (
@@ -43,14 +72,16 @@ export default function Tracks() {
   const [theme, setTheme] = useState<"bluesky" | "dark">(() => (
     typeof window !== "undefined" && window.localStorage.getItem("metoyou-clips-theme") === "dark" ? "dark" : "bluesky"
   ));
-  const [tracks, setTracks] = useState<TrackRecord[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const cachedTracks = readTracksCache();
+  const hasCachedTracks = cachedTracks.tracks.length > 0;
+  const [tracks, setTracks] = useState<TrackRecord[]>(() => cachedTracks.tracks);
+  const [currentIndex, setCurrentIndex] = useState(() => cachedTracks.currentIndex);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => cachedTracks.tracks.length === 0);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
+  const [hasMore, setHasMore] = useState(() => cachedTracks.hasMore);
   const [error, setError] = useState<string | null>(null);
   const [audioError, setAudioError] = useState<string | null>(null);
   const [commentsOpen, setCommentsOpen] = useState(false);
@@ -60,6 +91,74 @@ export default function Tracks() {
 
   const isDark = theme === "dark";
   const currentTrack = tracks[currentIndex];
+
+  const play = async () => {
+    if (!audioRef.current || !currentTrack) return;
+    try {
+      await audioRef.current.play();
+      setIsPlaying(true);
+      setAudioError(null);
+    } catch {
+      setIsPlaying(false);
+      setAudioError("This Track could not be played.");
+    }
+  };
+
+  const pause = () => {
+    audioRef.current?.pause();
+    setIsPlaying(false);
+  };
+
+  const loadMore = async () => {
+    if (loadingMore || !hasMore || tracks.length === 0) return [] as TrackRecord[];
+    setLoadingMore(true);
+    try {
+      const rows = await fetchTracksPage(PAGE_SIZE, tracks[tracks.length - 1].created_at);
+      const hydrated = await hydrateSurfacePostInteractions(rows, user?.id);
+      const addedTracks = hydrated.filter((track) => !tracks.some((current) => current.id === track.id));
+      setTracks((current) => {
+        const seen = new Set(current.map((track) => track.id));
+        return [...current, ...hydrated.filter((track) => !seen.has(track.id))];
+      });
+      setHasMore(rows.length === PAGE_SIZE);
+      return addedTracks;
+    } catch {
+      setError("Unable to load more Tracks.");
+      return [] as TrackRecord[];
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  const next = async () => {
+    if (currentIndex < tracks.length - 1) {
+      setCurrentIndex((index) => index + 1);
+      setIsPlaying(true);
+      return;
+    }
+    if (hasMore) {
+      const loaded = await loadMore();
+      if (loaded.length > 0) {
+        setCurrentIndex((index) => index + 1);
+        setIsPlaying(true);
+      }
+    } else {
+      pause();
+      setCurrentTime(0);
+    }
+  };
+
+  const previous = () => {
+    if (currentTime > 3 && audioRef.current) {
+      audioRef.current.currentTime = 0;
+      setCurrentTime(0);
+      return;
+    }
+    if (currentIndex > 0) {
+      setCurrentIndex((index) => index - 1);
+      setIsPlaying(true);
+    }
+  };
 
   useEffect(() => {
     window.localStorage.setItem("metoyou-clips-theme", theme);
@@ -103,33 +202,36 @@ export default function Tracks() {
   }, [currentTrack, isPlaying]);
 
   useEffect(() => {
-    if (!profile?.is_vibes_pro) {
-      setLoading(false);
-      return;
-    }
+    if (!profile?.is_vibes_pro || hasCachedTracks) return;
 
     const requestId = ++requestRef.current;
-    setLoading(true);
-    void fetchTracksPage(PAGE_SIZE)
-      .then(async (rows) => {
+    void (async () => {
+      setLoading(true);
+      try {
+        const rows = await fetchTracksPage(PAGE_SIZE);
         const hydrated = await hydrateSurfacePostInteractions(rows, user?.id);
         if (requestId !== requestRef.current) return;
         setTracks(hydrated);
         setCurrentIndex(0);
         setHasMore(rows.length === PAGE_SIZE);
-      })
-      .catch(() => {
+      } catch {
         if (requestId === requestRef.current) setError("Unable to load Tracks right now.");
-      })
-      .finally(() => {
+      } finally {
         if (requestId === requestRef.current) setLoading(false);
-      });
+      }
+    })();
 
     return () => {
       requestRef.current += 1;
       audioRef.current?.pause();
     };
   }, [profile?.is_vibes_pro, user?.id]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!profile?.is_vibes_pro) return;
+    window.sessionStorage.setItem(TRACKS_CACHE_KEY, JSON.stringify({ tracks, currentIndex, hasMore }));
+  }, [currentIndex, hasMore, profile?.is_vibes_pro, tracks]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -146,74 +248,6 @@ export default function Tracks() {
       void audio.play().catch(() => setIsPlaying(false));
     }
   }, [currentIndex, currentTrack?.id]);
-
-  const loadMore = async () => {
-    if (loadingMore || !hasMore || tracks.length === 0) return [] as TrackRecord[];
-    setLoadingMore(true);
-    try {
-      const rows = await fetchTracksPage(PAGE_SIZE, tracks[tracks.length - 1].created_at);
-      const hydrated = await hydrateSurfacePostInteractions(rows, user?.id);
-      const addedTracks = hydrated.filter((track) => !tracks.some((current) => current.id === track.id));
-      setTracks((current) => {
-        const seen = new Set(current.map((track) => track.id));
-        return [...current, ...hydrated.filter((track) => !seen.has(track.id))];
-      });
-      setHasMore(rows.length === PAGE_SIZE);
-      return addedTracks;
-    } catch {
-      setError("Unable to load more Tracks.");
-      return [] as TrackRecord[];
-    } finally {
-      setLoadingMore(false);
-    }
-  };
-
-  const play = async () => {
-    if (!audioRef.current || !currentTrack) return;
-    try {
-      await audioRef.current.play();
-      setIsPlaying(true);
-      setAudioError(null);
-    } catch {
-      setIsPlaying(false);
-      setAudioError("This Track could not be played.");
-    }
-  };
-
-  const pause = () => {
-    audioRef.current?.pause();
-    setIsPlaying(false);
-  };
-
-  const next = async () => {
-    if (currentIndex < tracks.length - 1) {
-      setCurrentIndex((index) => index + 1);
-      setIsPlaying(true);
-      return;
-    }
-    if (hasMore) {
-      const loaded = await loadMore();
-      if (loaded.length > 0) {
-        setCurrentIndex((index) => index + 1);
-        setIsPlaying(true);
-      }
-    } else {
-      pause();
-      setCurrentTime(0);
-    }
-  };
-
-  const previous = () => {
-    if (currentTime > 3 && audioRef.current) {
-      audioRef.current.currentTime = 0;
-      setCurrentTime(0);
-      return;
-    }
-    if (currentIndex > 0) {
-      setCurrentIndex((index) => index - 1);
-      setIsPlaying(true);
-    }
-  };
 
   const toggleLike = async () => {
     if (!user || !currentTrack) return;

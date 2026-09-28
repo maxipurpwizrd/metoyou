@@ -2,6 +2,25 @@ import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { CloudSun, Eye, EyeOff } from "lucide-react";
 import { login } from "../lib/auth";
+
+function GoogleIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
+      <path d="M21.6 12.2c0-.7-.1-1.3-.2-1.9H12v3.6h5.4c-.2 1.1-1.4 3.4-5.4 3.4-3.3 0-6-2.7-6-6s2.7-6 6-6c1.9 0 3.5.8 4.8 2.1l2.8-2.8C17.2 2.6 14.8 1.8 12 1.8 6.9 1.8 2.8 5.9 2.8 11c0 5.2 4.1 9.3 9.2 9.3 5.3 0 9-3.9 9-9.2Z" fill="#4285F4"/>
+      <path d="M12 20.3c2.6 0 4.8-.8 6.4-2.2l-3.1-2.5c-.8.5-1.8.8-3.3.8-2.6 0-4.7-1.8-5.4-4.1H.8v2.6A9.3 9.3 0 0 0 12 20.3Z" fill="#34A853"/>
+      <path d="M6.6 14.1A5.6 5.6 0 0 1 6.2 12c0-.6.1-1.2.4-1.7V7.7H3.4A9.2 9.2 0 0 0 2.5 12c0 1.5.4 2.9 1 4.1l3.1-2Z" fill="#FBBC05"/>
+      <path d="M12 4.8c1.5 0 2.8.5 3.9 1.5l2.9-2.9A9.1 9.1 0 0 0 12 1.8 9.3 9.3 0 0 0 3.4 7.7l3.2 2.6c.7-2.3 2.8-4 5.4-4Z" fill="#EA4335"/>
+    </svg>
+  );
+}
+
+function AppleIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5 fill-current">
+      <path d="M16.7 12.7c0-2.4 2-3.6 2.1-3.7-1.1-1.7-2.9-1.9-3.5-2-1.5-.2-2.9.9-3.6.9-.8 0-2-.9-3.2-.9-1.7 0-3.2 1-4.1 2.4-1.7 3-.4 7.4 1.2 9.8.8 1.1 1.7 2.4 3 2.3 1.2-.1 1.7-.8 3.1-.8s1.9.8 3.1.8c1.3 0 2.1-1.1 3-2.2.9-1.4 1.3-2.8 1.3-2.9-.1 0-2.8-1.1-4.2-3.4ZM15.8 4.5c.7-.8 1.1-1.9 1-3.1-.9.1-2.1.6-2.8 1.4-.6.7-1.2 1.8-1 3 .9.1 2.1-.5 2.8-1.3Z"/>
+    </svg>
+  );
+}
 import { fetchProfileFromSupabase, upsertProfileToSupabase } from "../lib/profileApi";
 import { supabase } from "../lib/supabase";
 import { useLanguage } from "../contexts/LanguageContext";
@@ -58,6 +77,7 @@ export default function Login() {
       }
 
       setLanguage(selectedLanguage);
+      window.dispatchEvent(new Event("metoyou:login-welcome"));
       navigate(returnTo, { replace: true });
     } catch (error) {
       alert(t("auth.loginFailed"));
@@ -74,17 +94,17 @@ export default function Login() {
   }
 
   return (
-    <div className="app-screen min-h-screen overflow-hidden bg-linear-to-b from-sky-300 via-sky-100 to-white px-4 py-8 sm:px-6 sm:py-12">
+    <div className="app-screen min-h-screen overflow-hidden bg-linear-to-b from-sky-300 via-sky-100 to-white px-0 py-0">
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute -left-20 top-16 h-44 w-44 rounded-full bg-white/55 blur-2xl" />
         <div className="absolute -right-16 top-36 h-56 w-56 rounded-full bg-white/45 blur-3xl" />
         <div className="absolute bottom-0 left-1/3 h-48 w-48 rounded-full bg-cyan-200/45 blur-3xl" />
       </div>
 
-      <div className="relative mx-auto flex min-h-[calc(100vh-6rem)] max-w-md items-center justify-center">
+      <div className="relative mx-auto flex min-h-screen w-full max-w-none items-center justify-center px-4 py-8 sm:px-6 sm:py-12">
         <form
           onSubmit={handleLogin}
-          className="w-full rounded-4xl border border-white/80 bg-white/78 p-6 shadow-[0_24px_80px_rgba(14,116,144,0.2)] backdrop-blur-2xl sm:p-8"
+          className="w-full max-w-md rounded-none border-0 bg-white/78 p-6 shadow-none backdrop-blur-2xl sm:p-8"
         >
           <div className="mb-7 text-center">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-linear-to-br from-sky-500 to-cyan-400 text-white shadow-lg shadow-sky-400/30">
@@ -128,11 +148,11 @@ export default function Login() {
 
           <div className="grid gap-3 sm:grid-cols-2">
             <button type="button" onClick={() => void handleOAuthLogin("google")} disabled={loading} className="flex items-center justify-center gap-2 rounded-2xl border border-sky-200 bg-white/90 px-4 py-3 font-semibold text-sky-950 transition hover:bg-white disabled:opacity-60">
-              <span className="font-black text-blue-600" aria-hidden="true">G</span>
+              <GoogleIcon />
               {oauthComingSoon === "Google" ? "Coming soon" : "Google"}
             </button>
             <button type="button" onClick={() => void handleOAuthLogin("apple")} disabled={loading} className="flex items-center justify-center gap-2 rounded-2xl border border-sky-200 bg-white/90 px-4 py-3 font-semibold text-sky-950 transition hover:bg-white disabled:opacity-60">
-              <span className="text-lg" aria-hidden="true"></span>
+              <AppleIcon />
               {oauthComingSoon === "Apple" ? "Coming soon" : "Apple"}
             </button>
           </div>

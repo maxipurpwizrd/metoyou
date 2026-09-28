@@ -1,4 +1,4 @@
-import { Ban, Download, Flag, Grid2X2, Link, Pencil, Repeat2, Share2, Sparkles, Trash2, X } from "lucide-react";
+import { Ban, Download, Flag, Grid2X2, Link, MessageCircle, Pencil, Repeat2, Share2, Sparkles, Trash2, UserRound, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useEffect } from "react";
 
@@ -6,7 +6,8 @@ export type MediaAction = {
   label: string;
   onClick: () => void;
   tone?: "default" | "danger";
-  icon: "share" | "download" | "repost" | "report" | "block" | "close" | "edit" | "delete" | "highlight" | "link";
+  icon: "share" | "download" | "repost" | "report" | "block" | "close" | "edit" | "delete" | "highlight" | "link" | "message" | "status";
+  disabled?: boolean;
 };
 
 const icons = {
@@ -20,6 +21,8 @@ const icons = {
   delete: Trash2,
   highlight: Sparkles,
   link: Link,
+  message: MessageCircle,
+  status: UserRound,
 };
 
 export default function MediaActionMenu({
@@ -45,7 +48,7 @@ export default function MediaActionMenu({
 
   return (
     <>
-      <button type="button" onClick={(event) => { event.stopPropagation(); onToggle(); }} aria-label="More actions" className="text-white/90 transition hover:scale-110">
+      <button type="button" onClick={(event) => { event.stopPropagation(); onToggle(); }} aria-label="More actions" className={`${isDark ? "text-white/90" : "text-slate-700"} transition hover:scale-110`}>
         <Grid2X2 className="h-6 w-6" />
       </button>
       {open && typeof document !== "undefined" && createPortal(
@@ -58,8 +61,9 @@ export default function MediaActionMenu({
                 <button
                   key={action.label}
                   type="button"
-                  onClick={action.onClick}
-                  className={`flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center ${action.tone === "danger" ? "text-rose-500 hover:bg-rose-50" : "hover:bg-sky-50"} ${action.icon === "block" || action.icon === "close" ? "col-span-2" : ""}`}
+                  onClick={action.disabled ? undefined : action.onClick}
+                  disabled={action.disabled}
+                  className={`flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center transition ${action.tone === "danger" ? "text-rose-500 hover:bg-rose-50" : "hover:bg-sky-50"} ${action.icon === "close" ? "col-span-2" : ""} ${action.disabled ? "cursor-not-allowed opacity-40 blur-[0.5px]" : ""}`}
                 >
                   <Icon className="h-5 w-5" />
                   {action.label}

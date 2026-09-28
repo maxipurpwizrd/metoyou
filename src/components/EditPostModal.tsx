@@ -19,12 +19,6 @@ export default function EditPostModal({
   const dialogRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (isOpen) {
-      setValue(initialValue);
-    }
-  }, [initialValue, isOpen]);
-
-  useEffect(() => {
     if (!isOpen) return;
 
     const previousOverflow = document.body.style.overflow;
@@ -106,6 +100,7 @@ export default function EditPostModal({
         </div>
 
         <textarea
+          key={`${initialValue}-${isOpen ? "open" : "closed"}`}
           value={value}
           onChange={(event) => setValue(event.target.value)}
           rows={8}

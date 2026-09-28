@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Mic, Square } from "lucide-react";
 import EditPostModal from "./EditPostModal";
@@ -42,6 +42,7 @@ type Props = {
   onRepost?: () => void;
   onSavePost?: () => void;
   onMuteUser?: () => void;
+  onBlockUser?: () => void;
   onHighlight?: () => void;
 
   audio?: string;
@@ -76,7 +77,7 @@ export default function PostCard({
   onClosePost,
   onRepost,
   onSavePost,
-  onMuteUser,
+  onBlockUser,
   onDeletePost,
   onRetryPost,
   onEditPost,
@@ -155,14 +156,68 @@ export default function PostCard({
   const hasVisualMedia = Boolean(image || video);
   const showMedia = Boolean(image || video || audio || text);
 
-  useEffect(() => {
-    setDisplayLikes(likes);
-    setDisplayLiked(Boolean(liked));
-  }, [likes, liked]);
+  const stopWaveformVisualization = () => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
 
-  useEffect(() => {
-    setDraftPostText(text);
-  }, [text]);
+    if (audioContextRef.current) {
+      void audioContextRef.current.close().catch(() => undefined);
+      audioContextRef.current = null;
+    }
+
+    analyserRef.current = null;
+
+    if (waveCanvasRef.current) {
+      const canvasCtx = waveCanvasRef.current.getContext("2d");
+      if (canvasCtx) {
+        canvasCtx.clearRect(0, 0, waveCanvasRef.current.width, waveCanvasRef.current.height);
+      }
+    }
+  };
+
+  const drawWaveformFromUrl = useCallback(async (audioUrl: string) => {
+    const canvas = waveCanvasRef.current;
+    if (!canvas) return;
+
+    try {
+      const response = await fetch(audioUrl);
+      const arrayBuffer = await response.arrayBuffer();
+      const AudioContextCtor = window.AudioContext || (window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextCtor) return;
+
+      const audioContext = new AudioContextCtor();
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+      const rawData = audioBuffer.getChannelData(0);
+      const canvasCtx = canvas.getContext("2d");
+      if (!canvasCtx) return;
+
+      const width = (canvas.width = canvas.clientWidth || 240);
+      const height = (canvas.height = 40);
+      canvasCtx.clearRect(0, 0, width, height);
+      canvasCtx.fillStyle = "rgba(148, 163, 184, 0.2)";
+      const blockSize = Math.max(1, Math.floor(rawData.length / width));
+      for (let i = 0; i < width; i += 1) {
+        let sum = 0;
+        const start = i * blockSize;
+        for (let j = 0; j < blockSize; j += 1) {
+          sum += Math.abs(rawData[start + j] ?? 0);
+        }
+        const avg = sum / blockSize;
+        const barHeight = Math.max(3, avg * height * 2);
+        const y = (height - barHeight) / 2;
+        canvasCtx.fillRect(i, y, 1, barHeight);
+      }
+
+      await audioContext.close();
+    } catch {
+      const canvasCtx = canvas.getContext("2d");
+      if (canvasCtx) {
+        canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     if (import.meta.env.DEV) {
@@ -210,17 +265,7 @@ export default function PostCard({
   useEffect(() => {
     if (isRecording || !voiceComment) return;
     void drawWaveformFromUrl(voiceComment);
-  }, [voiceComment, isRecording]);
-
-  useEffect(() => {
-    if (!image && !video) {
-      setMediaReady(true);
-      return;
-    }
-
-    setMediaReady(!image || loadedImageUrls.has(image));
-    setMediaErrored(false);
-  }, [image, video]);
+  }, [voiceComment, isRecording, drawWaveformFromUrl]);
 
   useEffect(() => {
     return () => {
@@ -240,27 +285,6 @@ export default function PostCard({
       }
     };
   }, []);
-
-  const stopWaveformVisualization = () => {
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
-
-    if (audioContextRef.current) {
-      void audioContextRef.current.close().catch(() => undefined);
-      audioContextRef.current = null;
-    }
-
-    analyserRef.current = null;
-
-    if (waveCanvasRef.current) {
-      const canvasCtx = waveCanvasRef.current.getContext("2d");
-      if (canvasCtx) {
-        canvasCtx.clearRect(0, 0, waveCanvasRef.current.width, waveCanvasRef.current.height);
-      }
-    }
-  };
 
   const startWaveformVisualization = (stream: MediaStream) => {
     const AudioContextCtor = window.AudioContext || (window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -302,48 +326,6 @@ export default function PostCard({
     };
 
     drawWaveform();
-  };
-
-  const drawWaveformFromUrl = async (audioUrl: string) => {
-    const canvas = waveCanvasRef.current;
-    if (!canvas) return;
-
-    try {
-      const response = await fetch(audioUrl);
-      const arrayBuffer = await response.arrayBuffer();
-      const AudioContextCtor = window.AudioContext || (window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (!AudioContextCtor) return;
-
-      const audioContext = new AudioContextCtor();
-      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-      const rawData = audioBuffer.getChannelData(0);
-      const canvasCtx = canvas.getContext("2d");
-      if (!canvasCtx) return;
-
-      const width = (canvas.width = canvas.clientWidth || 240);
-      const height = (canvas.height = 40);
-      canvasCtx.clearRect(0, 0, width, height);
-      canvasCtx.fillStyle = "rgba(148, 163, 184, 0.2)";
-      const blockSize = Math.max(1, Math.floor(rawData.length / width));
-      for (let i = 0; i < width; i += 1) {
-        let sum = 0;
-        const start = i * blockSize;
-        for (let j = 0; j < blockSize; j += 1) {
-          sum += Math.abs(rawData[start + j] ?? 0);
-        }
-        const avg = sum / blockSize;
-        const barHeight = Math.max(3, avg * height * 2);
-        const y = (height - barHeight) / 2;
-        canvasCtx.fillRect(i, y, 1, barHeight);
-      }
-
-      await audioContext.close();
-    } catch {
-      const canvasCtx = canvas.getContext("2d");
-      if (canvasCtx) {
-        canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
-      }
-    }
   };
 
   const formatRecordingDuration = (seconds: number) => {
@@ -451,17 +433,17 @@ export default function PostCard({
   const feedMenuActions: MediaAction[] = isOwner
     ? [
         { label: "Edit post", icon: "edit", onClick: () => { setDraftPostText(text); setIsEditingPost(true); setShowMenu(false); } },
-        { label: "Share", icon: "share", onClick: async () => { try { if (navigator.share) await navigator.share({ title: `${author.username}'s post`, text, url: window.location.href }); else await navigator.clipboard.writeText(window.location.href); } catch {} setShowMenu(false); } },
+        { label: "Share", icon: "share", onClick: async () => { try { if (navigator.share) await navigator.share({ title: `${author.username}'s post`, text, url: window.location.href }); else await navigator.clipboard.writeText(window.location.href); } catch { /* ignore share failure */ } setShowMenu(false); } },
         ...(video ? [{ label: "Delete video", icon: "delete" as const, tone: "danger" as const, onClick: () => { onDeleteVideo?.(); setShowMenu(false); } }] : []),
         { label: highlighted ? "Unhighlight" : "Highlight", icon: "highlight", onClick: () => { onHighlight?.(); setShowMenu(false); } },
         { label: "Delete post", icon: "delete" as const, tone: "danger" as const, onClick: () => { onDeletePost?.(); setShowMenu(false); } },
       ]
     : [
-        { label: "Share", icon: "share", onClick: async () => { try { if (navigator.share) await navigator.share({ title: `${author.username}'s post`, text, url: window.location.href }); else await navigator.clipboard.writeText(window.location.href); } catch {} setShowMenu(false); } },
+        { label: "Share", icon: "share", onClick: async () => { try { if (navigator.share) await navigator.share({ title: `${author.username}'s post`, text, url: window.location.href }); else await navigator.clipboard.writeText(window.location.href); } catch { /* ignore share failure */ } setShowMenu(false); } },
         { label: "Save", icon: "download", onClick: () => { onSavePost?.(); setShowMenu(false); } },
         { label: "Repost", icon: "repost", onClick: () => { onRepost?.(); setShowMenu(false); } },
         { label: "Report", icon: "report", onClick: () => { setIsReportModalOpen(true); setShowMenu(false); } },
-        { label: "Block author", icon: "block", tone: "danger", onClick: () => { onMuteUser?.(); setShowMenu(false); } },
+        { label: "Block author", icon: "block", tone: "danger", onClick: () => { onBlockUser?.(); setShowMenu(false); } },
       ];
 
   const handleReport = async (reason: PostReportReason) => {
@@ -471,12 +453,17 @@ export default function PostCard({
 
     await submitPostReport({
       postId: String(postId),
-      reporterId: currentUser.id,
       reportedUserId: ownerId,
       reason,
     });
     window.alert("Report submitted. Thanks for helping keep MeToYou safe.");
   };
+
+  useEffect(() => {
+    if (!isSelected) {
+      onInteractionActivity?.(false);
+    }
+  }, [isSelected, onInteractionActivity]);
 
   return (
     <>
@@ -836,117 +823,167 @@ export default function PostCard({
         </div>
       )}
 
-      {/* Inline Comments Section Extension */}
+      {/* Comments overlay matching Flicks mobile pattern */}
       {isSelected && (
-        <div
-          className="mt-4 pt-4 border-t border-slate-200/60 space-y-4"
-          onTouchStart={() => onInteractionActivity?.(true)}
-          onTouchMove={() => onInteractionActivity?.(true)}
-          onTouchEnd={() => onInteractionActivity?.(false)}
-          onTouchCancel={() => onInteractionActivity?.(false)}
-          onWheel={() => onInteractionActivity?.(true)}
-          onPointerDown={() => onInteractionActivity?.(true)}
-          onPointerUp={() => onInteractionActivity?.(false)}
-        >
-          <h4 className="font-bold text-sm text-slate-800 px-0.5">Comments</h4>
+        <>
+          <button
+            type="button"
+            aria-label="Close comments"
+            onClick={() => onClosePost?.()}
+            className="fixed inset-0 z-40 cursor-default bg-black/20"
+          />
 
-          {/* Comments List Scroll Tray */}
-          <div className="max-h-56 overflow-y-auto space-y-3 pr-1 scrollbar-thin">
-            {comments?.length ? (
-              comments.map((comment) => (
-                <div
-                  key={comment.id}
-                  className="bg-slate-50/60 rounded-2xl p-3 border border-slate-100 space-y-1.5"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <p
-                      onClick={() => navigate(`/profile/${comment.user.username}`)}
-                      className="font-bold text-xs text-slate-800 cursor-pointer hover:text-sky-500 transition-colors"
+          <div
+            onClick={(event) => event.stopPropagation()}
+            className="fixed inset-x-[3%] bottom-[10%] z-50 flex max-h-[80vh] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white/98 p-4 shadow-2xl ring-1 ring-sky-200"
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <p className="font-semibold text-slate-900">Comments</p>
+              <button type="button" onClick={() => onClosePost?.()} className="text-sm text-slate-500">
+                Close
+              </button>
+            </div>
+
+            <div className="max-h-[calc(80vh-9rem)] overflow-y-auto pr-1">
+              {comments?.length ? (
+                <div className="space-y-2">
+                  {comments.map((comment) => (
+                    <div
+                      key={comment.id}
+                      className="rounded-xl border border-slate-100 bg-slate-50/80 p-3"
                     >
-                      {comment.user.username}
-                    </p>
+                      <div className="flex items-center justify-between gap-2">
+                        <p
+                          onClick={() => navigate(`/profile/${comment.user.username}`)}
+                          className="cursor-pointer text-xs font-bold text-slate-800 hover:text-sky-500"
+                        >
+                          {comment.user.username}
+                        </p>
 
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingId(Number(comment.id));
-                          setEditingText(comment.text || "");
-                        }}
-                        className="text-slate-400 hover:text-blue-500 text-xs p-0.5"
-                      >
-                        ✏️
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onDeleteComment?.(Number(comment.id))}
-                        className="text-slate-400 hover:text-red-500 text-xs p-0.5"
-                      >
-                        🗑️
-                      </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingId(Number(comment.id));
+                              setEditingText(comment.text || "");
+                            }}
+                            className="p-0.5 text-xs text-slate-400 hover:text-blue-500"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onDeleteComment?.(Number(comment.id))}
+                            className="p-0.5 text-xs text-slate-400 hover:text-red-500"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </div>
+
+                      {editingId === Number(comment.id) ? (
+                        <div className="space-y-2 pt-2">
+                          <textarea
+                            value={editingText}
+                            onChange={(event) => setEditingText(event.target.value)}
+                            rows={3}
+                            className="w-full resize-none rounded-lg border border-slate-200 bg-white p-2 text-sm outline-none focus:border-sky-300"
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onEditComment?.(Number(comment.id), editingText);
+                                setEditingId(null);
+                              }}
+                              className="rounded-lg bg-sky-500 px-3 py-1 text-xs font-semibold text-white"
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingId(null)}
+                              className="rounded-lg bg-slate-100 px-3 py-1 text-xs text-slate-600"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="max-h-20 overflow-y-auto whitespace-pre-wrap break-words text-sm leading-5 text-slate-600">
+                          {comment.text}
+                        </p>
+                      )}
+
+                      <div className="mt-2 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => onLikeComment?.(Number(comment.id))}
+                          className="text-[11px] font-semibold text-sky-500"
+                        >
+                          ❤️ {comment.likes}
+                        </button>
+                      </div>
+
+                      {comment.voice && (
+                        <div className="mt-2 pt-2">
+                          <audio controls src={comment.voice} className="h-8 w-full" />
+                        </div>
+                      )}
                     </div>
-                  </div>
-
-                  {editingId === Number(comment.id) ? (
-                    <div className="space-y-1.5 pt-1">
-                      <input
-                        type="text"
-                        value={editingText}
-                        onChange={(e) => setEditingText(e.target.value)}
-                        className="w-full border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs bg-white outline-none focus:border-sky-300"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onEditComment?.(Number(comment.id), editingText);
-                          setEditingId(null);
-                        }}
-                        className="bg-sky-500 hover:bg-sky-600 text-white font-bold px-3 py-1 rounded-lg text-[11px] transition-colors"
-                      >
-                        Save
-                      </button>
-                    </div>
-                  ) : (
-                    <p className="text-slate-600 text-xs font-medium leading-relaxed">
-                      {comment.text}
-                    </p>
-                  )}
-
-                  <div className="flex items-center gap-3 pt-0.5">
-                    <button
-                      type="button"
-                      onClick={() => onLikeComment?.(Number(comment.id))}
-                      className="text-sky-500 font-bold text-[11px] flex items-center gap-1 hover:scale-105 transition-transform"
-                    >
-                      <span>❤️</span> {comment.likes}
-                    </button>
-                  </div>
-
-                  {comment.voice && (
-                    <div className="mt-1.5 pt-1 border-t border-slate-100">
-                      <audio controls src={comment.voice} className="w-full h-6 opacity-80" />
-                    </div>
-                  )}
+                  ))}
                 </div>
-              ))
-            ) : (
-              <p className="text-slate-400 text-center text-xs py-4 font-medium">
-                No comments yet. Drop a vibe below! 👇
-              </p>
-            )}
-          </div>
+              ) : (
+                <p className="py-4 text-center text-sm text-slate-500">No comments yet.</p>
+              )}
+            </div>
 
-          {/* Bottom Interactive Comment Composer Bar */}
-          <div className="bg-slate-50 rounded-2xl p-2.5 border border-slate-100 space-y-2">
-            <div className="flex gap-2">
+            {voiceComment && !isRecording && (
+              <div className="mb-2 mt-3 flex items-center gap-2 rounded-xl border border-sky-100 bg-sky-50/80 p-2">
+                <audio controls src={voiceComment} className="h-7 min-w-0 flex-1" />
+                <button type="button" onClick={retryRecording} className="text-xs font-semibold text-sky-600">
+                  Retry
+                </button>
+                <button type="button" onClick={removeVoiceComment} className="text-xs text-slate-500">
+                  Remove
+                </button>
+              </div>
+            )}
+
+            {isRecording && (
+              <div className="mb-2 mt-3 rounded-xl border border-rose-200 bg-rose-50 p-2 text-xs text-rose-700">
+                <div className="flex items-center justify-between gap-2">
+                  <span>Recording voice comment</span>
+                  <span>{formatRecordingDuration(recordingDuration)} / 01:00</span>
+                </div>
+                <canvas ref={waveCanvasRef} className="mt-2 h-8 w-full rounded-xl bg-slate-900/90" />
+              </div>
+            )}
+
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (!newComment.trim() && !voiceComment) return;
+
+                onAddComment?.({
+                  id: Date.now(),
+                  text: newComment,
+                  voice: voiceComment,
+                });
+                setNewComment("");
+                setVoiceComment(undefined);
+              }}
+              className="mt-3 flex w-full items-end gap-2"
+            >
               <textarea
                 value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                placeholder="Write a comment..."
-                rows={3}
-                className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs outline-none focus:border-sky-300 transition-colors placeholder:text-slate-400 resize-none max-h-30 overflow-y-auto"
-                onFocus={() => onInteractionActivity?.(true)}
-                onBlur={() => onInteractionActivity?.(false)}
+                onChange={(event) => setNewComment(event.target.value)}
+                placeholder="Add a comment"
+                rows={4}
+                onPointerDown={(event) => event.stopPropagation()}
+                onTouchStart={(event) => event.stopPropagation()}
+                onMouseDown={(event) => event.stopPropagation()}
+                className="w-full min-w-0 flex-1 resize-none overflow-y-auto rounded-xl border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-sky-300"
               />
 
               <button
@@ -958,89 +995,21 @@ export default function PostCard({
                     void startRecording();
                   }
                 }}
-                className={`h-11 w-11 rounded-full flex items-center justify-center shrink-0 transition shadow-md ${
-                  isRecording ? "bg-red-500 text-white shadow-lg shadow-red-500/40 animate-pulse scale-105" : "bg-blue-500 text-white hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/30 active:scale-95"
-                }`}
-                title={isRecording ? "Stop recording" : "Start recording"}
+                aria-label={isRecording ? "Stop voice comment" : "Record voice comment"}
+                className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${isRecording ? "bg-rose-500 text-white" : "bg-sky-100 text-sky-700"}`}
               >
                 {isRecording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
               </button>
 
               <button
-                type="button"
-                onClick={() => {
-                  if (!newComment.trim() && !voiceComment) return;
-
-                  onAddComment?.({
-                    id: Date.now(),
-                    text: newComment,
-                    voice: voiceComment,
-                  });
-
-                  setNewComment("");
-                  setVoiceComment(undefined);
-                }}
-                className="bg-sky-500 hover:bg-sky-600 text-white font-bold px-3.5 rounded-xl text-xs transition-colors shadow-2xs"
+                type="submit"
+                className="shrink-0 rounded-xl bg-sky-500 px-3 py-2 text-sm font-semibold text-white"
               >
                 Send
               </button>
-            </div>
-
-            {isRecording && (
-              <div className="pt-1.5 border-t border-slate-200/50">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
-                    <span className="text-[11px] font-semibold text-red-600">Recording voice comment</span>
-                    <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">
-                      {formatRecordingDuration(recordingDuration)} / 01:00
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={stopRecording}
-                    className="rounded-full bg-red-500 px-2.5 py-1 text-[10px] font-semibold text-white"
-                  >
-                    ⏹ Stop
-                  </button>
-                </div>
-                <canvas ref={waveCanvasRef} className="mt-2 h-8 w-full rounded-xl bg-slate-900/90" />
-              </div>
-            )}
-
-            {voiceComment && !isRecording && (
-              <div className="pt-1.5 border-t border-slate-200/50">
-                <div className="flex items-center gap-2">
-                  <audio controls src={voiceComment} className="h-6 flex-1 opacity-90" />
-                  <button
-                    type="button"
-                    onClick={retryRecording}
-                    className="rounded-full border border-sky-300 bg-white px-2.5 py-1 text-[10px] font-semibold text-sky-600"
-                  >
-                    Retry
-                  </button>
-                  <button
-                    type="button"
-                    onClick={removeVoiceComment}
-                    className="rounded-full bg-slate-200 px-2 py-1 text-[10px] font-semibold text-slate-600"
-                  >
-                    ✕
-                  </button>
-                </div>
-                <canvas ref={waveCanvasRef} className="mt-2 h-8 w-full rounded-xl bg-slate-900/90" />
-              </div>
-            )}
+            </form>
           </div>
-
-          {/* Close Section Action Block */}
-          <button
-            type="button"
-            onClick={() => onClosePost?.()}
-            className="w-full py-2 rounded-xl bg-slate-100 text-slate-500 hover:text-slate-700 font-bold text-xs hover:bg-slate-200/80 transition-colors"
-          >
-            Close Comments
-          </button>
-        </div>
+        </>
       )}
 
       </div>

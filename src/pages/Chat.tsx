@@ -18,6 +18,9 @@ import { playMessageNotificationSound } from "../lib/notificationSound";
 import { createPeerConnection } from "../lib/webrtc";
 import { createCallHistory, updateCallHistory } from "../lib/callHistoryApi";
 import { getAuthBoundaryVersion } from "../lib/authBoundary";
+import { getBlockState, unblockUser } from "../lib/moderationApi";
+import { getPresenceLabel, isPresenceOnline } from "../lib/presenceStatus";
+import BlockedChatState from "../components/moderation/BlockedChatState";
 import { acquireRealtimeChannel, hasTrackedRealtimeChannel, releaseRealtimeChannel } from "../lib/realtimeChannelRegistry";
 import type { CallSession } from "../types/call";
 import {
@@ -29,8 +32,6 @@ import {
   updateConversationLastMessageTime,
   sendTypingIndicator,
   subscribeToTyping,
-  joinPresence,
-  leavePresence,
   mergeMessages,
   editMessage,
   deleteMessage,
@@ -52,6 +53,9 @@ export default function Chat() {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [chatBlocked, setChatBlocked] = useState(false);
+  const [canUnblockChat, setCanUnblockChat] = useState(false);
+  const [unblockingChat, setUnblockingChat] = useState(false);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearchBar, setShowSearchBar] = useState(false);
@@ -118,6 +122,19 @@ export default function Chat() {
   const typingStateRef = useRef<boolean>(false);
   const typingTimeoutRef = useRef<number | null>(null);
 
+  useEffect(() => {
+    const handlePresenceState = (event: Event) => {
+      const customEvent = event as CustomEvent<Record<string, { last_active?: number; username?: string }>>;
+      setPresenceState(customEvent.detail ?? {});
+    };
+
+    window.addEventListener('metoyou:app-presence-state', handlePresenceState as EventListener);
+
+    return () => {
+      window.removeEventListener('metoyou:app-presence-state', handlePresenceState as EventListener);
+    };
+  }, []);
+
   async function sendCallSignal(event: string, payload: Record<string, unknown>) {
     if (!callChannelRef.current || !userId) return;
 
@@ -156,6 +173,10 @@ export default function Chat() {
   }
 
   async function startCall(callType: "audio" | "video") {
+    if (chatBlocked) {
+      setSendError("You can't interact with this user.");
+      return;
+    }
     if (!userId || !recipientId || !conversationId) return;
 
     let callerCameraStream: MediaStream | null = null;
@@ -263,6 +284,7 @@ export default function Chat() {
   }
 
   async function handleStartAudioCall() {
+    if (chatBlocked) return;
     if (!userId || !recipientId) return;
 
     try {
@@ -279,6 +301,7 @@ export default function Chat() {
   }
 
   async function handleStartVideoCall() {
+    if (chatBlocked) return;
     if (!userId || !recipientId) return;
 
     try {
@@ -530,11 +553,15 @@ export default function Chat() {
   }
   const recordingTimerRef = useRef<number | null>(null);
   const [presenceState, setPresenceState] = useState<Record<string, { last_active?: number; username?: string }>>({});
-  const presenceChannelRef = useRef<RealtimeChannel | null>(null);
 
   const recipientId = searchParams.get("recipient") ?? "";
   const recipientName = searchParams.get("username") ?? "Friend";
   const userId = user?.id;
+  const recipientPresence = recipientId ? presenceState[recipientId] : undefined;
+  const recipientIsOnline = Boolean(recipientPresence);
+  const recipientStatusText = typingUsers.includes(recipientId)
+    ? `${recipientName} is typing...`
+    : getPresenceLabel({ isOnline: recipientIsOnline, lastActive: recipientPresence?.last_active });
   const { profile: profileFromContext } = useSession();
   const { pendingIncomingCall, clearPendingIncomingCall } = useGlobalCall();
   const profile = profileFromContext;
@@ -559,6 +586,19 @@ export default function Chat() {
 
     let mounted = true;
     (async () => {
+      try {
+        const blockState = await getBlockState(recipientId);
+        if (!mounted) return;
+        setChatBlocked(blockState.blocked);
+        setCanUnblockChat(blockState.canUnblock);
+        if (blockState.blocked) {
+          setConversationId(null);
+          return;
+        }
+      } catch (error) {
+        console.warn("Unable to check chat block state", error);
+      }
+
       const conversation = await findOrCreateConversation(userId, recipientId);
       if (!mounted) return;
 
@@ -578,6 +618,46 @@ export default function Chat() {
   }, [userId, recipientId]);
 
   useEffect(() => {
+    if (!userId || !recipientId) return;
+    const refreshBlockState = async () => {
+      try {
+        const blockState = await getBlockState(recipientId);
+        setChatBlocked(blockState.blocked);
+        setCanUnblockChat(blockState.canUnblock);
+        if (blockState.blocked) {
+          setConversationId(null);
+          setInputText("");
+          setSelectedFile(null);
+          clearRecording();
+          return;
+        }
+        const conversation = await findOrCreateConversation(userId, recipientId);
+        if (conversation) setConversationId(conversation.id);
+      } catch {
+        // Keep the current lock state until the backend can be checked again.
+      }
+    };
+    window.addEventListener("metoyou:block-state-changed", refreshBlockState);
+    return () => window.removeEventListener("metoyou:block-state-changed", refreshBlockState);
+  }, [userId, recipientId]);
+
+  const handleUnblockChat = async () => {
+    if (!canUnblockChat || !recipientId) return;
+    setUnblockingChat(true);
+    try {
+      await unblockUser(recipientId);
+      const blockState = await getBlockState(recipientId);
+      setChatBlocked(blockState.blocked);
+      setCanUnblockChat(blockState.canUnblock);
+      if (!blockState.blocked) window.dispatchEvent(new Event("metoyou:block-state-changed"));
+    } catch {
+      setSendError("Unable to unblock this user right now.");
+    } finally {
+      setUnblockingChat(false);
+    }
+  };
+
+  useEffect(() => {
     if (!conversationId) return;
 
     let mounted = true;
@@ -588,16 +668,25 @@ export default function Chat() {
     isUserAtBottomRef.current = true;
 
     const cachedMessages = getCachedMessages(conversationId);
+    if (import.meta.env.DEV) {
+      console.debug("[CHAT HYDRATE]", {
+        hydrationSeq: `${conversationId}:${loadVersion}`,
+        currentUserId: userId,
+        targetUserId: recipientId,
+        conversationId,
+        cacheCount: cachedMessages?.length ?? 0,
+        fetchStarted: true,
+      });
+    }
     if (cachedMessages && cachedMessages.length > 0) {
       setMessages(mergeMessages(cachedMessages));
-      setMessagesLoading(false);
     } else {
       setMessages([]);
-      setMessagesLoading(true);
     }
 
     setHasMoreMessages(false);
     setIsLoadingOlderMessages(false);
+    setMessagesLoading(true);
 
     const load = async () => {
       try {
@@ -605,7 +694,22 @@ export default function Chat() {
         if (!mounted || loadVersion !== messagesLoadVersionRef.current) return;
 
         const visibleMessages = initialPage.slice(0, pageSize);
-        const nextMessages = mergeMessages([...(cachedMessages ?? []), ...visibleMessages]);
+        const nextMessages = mergeMessages(visibleMessages);
+
+        if (import.meta.env.DEV) {
+          console.debug("[CHAT HYDRATE]", {
+            hydrationSeq: `${conversationId}:${loadVersion}`,
+            currentUserId: userId,
+            targetUserId: recipientId,
+            conversationId,
+            cacheCount: cachedMessages?.length ?? 0,
+            fetchCompleted: true,
+            dbMessageCount: initialPage.length,
+            latestDbMessageId: initialPage.at(-1)?.id ?? null,
+            latestDbMessageCreatedAt: initialPage.at(-1)?.created_at ?? null,
+            stateUpdatedFromDb: true,
+          });
+        }
 
         setMessages(nextMessages);
         setCachedMessages(conversationId, nextMessages);
@@ -613,6 +717,19 @@ export default function Chat() {
 
         if (userId) {
           void markMessagesAsRead(conversationId, userId);
+        }
+      } catch (error) {
+        console.warn("Failed to load messages from Supabase for chat", error);
+        if (import.meta.env.DEV) {
+          console.warn("[CHAT CACHE FALLBACK]", {
+            reason: "fetch failed",
+            conversationId,
+            cacheCount: cachedMessages?.length ?? 0,
+            targetUserId: recipientId,
+          });
+        }
+        if (cachedMessages && cachedMessages.length > 0) {
+          setMessages(mergeMessages(cachedMessages));
         }
       } finally {
         if (mounted) setMessagesLoading(false);
@@ -638,6 +755,13 @@ export default function Chat() {
           authBoundaryVersion: getAuthBoundaryVersion(),
         });
       }
+      if (import.meta.env.DEV) {
+        console.debug("[CHAT REALTIME]", {
+          conversationId,
+          messageId: newMessage.id,
+          event,
+        });
+      }
       if (event === "INSERT" && newMessage.sender_id !== userId && !(newMessage.metadata as any)?.deleted) {
         playMessageNotificationSound();
       }
@@ -660,10 +784,18 @@ export default function Chat() {
       // Ignore duplicate incoming messages by id. If message exists, replace it (update), otherwise insert.
       setMessages((current) => {
         const exists = current.some((m) => m.id === newMessage.id);
-        if (exists) {
-          return mergeMessages(current.map((m) => (m.id === newMessage.id ? newMessage : m)));
+        const nextMessages = exists
+          ? mergeMessages(current.map((m) => (m.id === newMessage.id ? newMessage : m)))
+          : mergeMessages([...current, newMessage]);
+        if (import.meta.env.DEV) {
+          console.debug("[CHAT STATE WRITE]", {
+            source: "realtime",
+            conversationId,
+            messageCount: nextMessages.length,
+            latestMessageId: nextMessages.at(-1)?.id ?? null,
+          });
         }
-        return mergeMessages([...current, newMessage]);
+        return nextMessages;
       });
 
       Promise.resolve().then(() => addMessageToCache(conversationId, newMessage));
@@ -683,23 +815,6 @@ export default function Chat() {
       });
     });
 
-    // presence subscription
-    if (presenceChannelRef.current) {
-      try {
-        presenceChannelRef.current.unsubscribe();
-      } catch (err) {
-        console.warn(err);
-      }
-      presenceChannelRef.current = null;
-    }
-
-    if (userId) {
-      const presenceChannel = joinPresence(conversationId, userId, (state) => {
-        setPresenceState(state);
-      }, { username: recipientName });
-      presenceChannelRef.current = presenceChannel;
-    }
-
     return () => {
       mounted = false;
       messagesLoadVersionRef.current += 1;
@@ -709,17 +824,6 @@ export default function Chat() {
         typingChannel?.unsubscribe();
       } catch (err) {
         console.warn(err);
-      }
-      if (presenceChannelRef.current) {
-        try {
-          presenceChannelRef.current.unsubscribe();
-        } catch (err) {
-          console.warn(err);
-        }
-        presenceChannelRef.current = null;
-      }
-      if (conversationId && userId) {
-        void leavePresence(conversationId, userId, presenceChannelRef.current ?? undefined);
       }
     };
   }, [conversationId, getCachedMessages, setCachedMessages, addMessageToCache, userId, recipientName]);
@@ -915,6 +1019,10 @@ export default function Chat() {
   }, [conversationId, pendingIncomingCall, clearPendingIncomingCall]);
 
   async function handleSend() {
+    if (chatBlocked) {
+      setSendError("You can't interact with this user.");
+      return;
+    }
     if ((!inputText.trim() && !selectedFile && !audioBlob)) return;
 
     if (authLoading) {
@@ -1217,6 +1325,7 @@ export default function Chat() {
   }
 
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    if (chatBlocked) return;
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -1520,7 +1629,7 @@ export default function Chat() {
 
   return (
     <>
-      {incomingCallOffer && !activeCallSession && (
+      {incomingCallOffer && !activeCallSession && !chatBlocked && (
         <IncomingCall
           senderName={incomingCallOffer.senderName}
           callType={incomingCallOffer.callType}
@@ -1586,31 +1695,30 @@ export default function Chat() {
                 ←
               </button>
 
-              <div className={`grid place-items-center w-10 h-10 rounded-[20px] ${isVibesPro ? 'bg-linear-to-r from-[#D4AF37] to-[#F0C75E] text-[#111111]' : 'bg-linear-to-r from-sky-500 via-cyan-400 to-blue-500 text-white'} font-bold text-sm`}>
-                {recipientName.charAt(0)}
-              </div>
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                <div className={`grid place-items-center w-10 h-10 rounded-[20px] ${isVibesPro ? 'bg-linear-to-r from-[#D4AF37] to-[#F0C75E] text-[#111111]' : 'bg-linear-to-r from-sky-500 via-cyan-400 to-blue-500 text-white'} font-bold text-sm`}>
+                  {recipientName.charAt(0)}
+                </div>
 
-              <div>
-                <h2 
-                  className={`font-semibold text-sm md:text-base cursor-pointer transition ${isVibesPro ? 'text-[#F7E7B2] hover:text-[#FFD98A]' : 'text-slate-800 hover:text-sky-600'}`}
-                  onClick={() => navigate(`/profile/${recipientName}`)}
-                >
-                  {recipientName}
-                </h2>
+                <div className="min-w-0 flex-1">
+                  <h2 
+                    className={`font-semibold text-sm md:text-base cursor-pointer transition ${isVibesPro ? 'text-[#F7E7B2] hover:text-[#FFD98A]' : 'text-slate-800 hover:text-sky-600'}`}
+                    onClick={() => navigate(`/profile/${recipientName}`)}
+                  >
+                    {recipientName}
+                  </h2>
 
-                <p className={`text-xs mt-1 ${headerSubtextClassName}`}>
-                  {typingUsers.includes(recipientId)
-                    ? `${recipientName} is typing...`
-                    : presenceState[recipientId]
-                      ? "🟢 Online"
-                      : "Online now"}
-                </p>
+                  <p className={`text-xs mt-1 ${headerSubtextClassName}`}>
+                    {recipientStatusText}
+                  </p>
+                </div>
               </div>
 
               {/* Call Buttons */}
               <div className="ml-auto flex items-center gap-2">
                 <button
                   onClick={handleStartAudioCall}
+                  disabled={chatBlocked}
                   title="Audio call"
                   className={`p-2 rounded-xl transition ${isVibesPro ? 'bg-white/5 text-white hover:bg-white/10' : 'bg-slate-900/10 text-slate-800 hover:bg-slate-900/20'}`}
                 >
@@ -1619,6 +1727,7 @@ export default function Chat() {
 
                 <button
                   onClick={handleStartVideoCall}
+                  disabled={chatBlocked}
                   title="Video call"
                   className={`p-2 rounded-xl transition ${isVibesPro ? 'bg-white/5 text-white hover:bg-white/10' : 'bg-slate-900/10 text-slate-800 hover:bg-slate-900/20'}`}
                 >
@@ -1627,7 +1736,7 @@ export default function Chat() {
               </div>
             </div>
 
-            <div className={`overflow-hidden transition-all duration-300 ${showSearchBar || searchQuery.trim() ? 'max-h-12 opacity-100 mt-1' : 'max-h-0 opacity-0 mt-0'}`}>
+            <div className={`overflow-hidden transition-all duration-300 ${showSearchBar || searchQuery.trim() ? 'max-h-12 opacity-100 mt-3' : 'max-h-0 opacity-0 mt-0'}`}>
               <div className={`${panelClassName}`}>
                 <input
                   value={searchQuery}
@@ -1707,7 +1816,7 @@ export default function Chat() {
       {/* Fixed Message Box at Bottom */}
       <div className={`fixed bottom-0 left-0 right-0 z-50 p-3 md:p-6 ${isVibesPro ? 'bg-[#111111]/95 border-t border-[#D4AF37]/20 shadow-[0_0_40px_rgba(212,175,55,0.10)]' : 'bg-white/70 backdrop-blur-xl border-t border-white/70 shadow-[0_-10px_35px_rgba(236,72,153,0.08)]'}`}>
         <div className="max-w-xl mx-auto">
-          {replyingTo && (
+          {chatBlocked ? <BlockedChatState canUnblock={canUnblockChat} busy={unblockingChat} onUnblock={() => void handleUnblockChat()} /> : replyingTo && (
             <div className={`mb-3 rounded-2xl border px-3 py-2 text-sm flex items-center justify-between ${isVibesPro ? 'border-white/10 bg-white/10 text-white/80' : 'border-sky-100 bg-white/90 text-slate-700 shadow-sm'}`}>
               <div className="min-w-0">
                 <div className={`text-[11px] uppercase tracking-[0.2em] ${isVibesPro ? 'text-white/50' : 'text-slate-500'}`}>Replying to</div>
@@ -1795,6 +1904,7 @@ export default function Chat() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleAttachmentClick}
+                  disabled={chatBlocked}
                   className={`h-10 w-10 rounded-full transition flex items-center justify-center shrink-0 ${isVibesPro ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-slate-900/10 text-slate-800 hover:bg-slate-900/20'}`}
                   title="Add attachment"
                 >
@@ -1804,6 +1914,7 @@ export default function Chat() {
                 {isRecording ? (
                   <button
                     onClick={stopRecording}
+                    disabled={chatBlocked}
                     className="h-10 w-10 rounded-full bg-red-500 text-white shadow-lg shadow-red-500/30 animate-pulse flex items-center justify-center shrink-0"
                     title="Stop recording"
                   >
@@ -1812,6 +1923,7 @@ export default function Chat() {
                 ) : (
                   <button
                     onClick={startRecording}
+                    disabled={chatBlocked}
                     className={`h-10 w-10 rounded-full transition flex items-center justify-center shrink-0 ${isVibesPro ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-slate-900/10 text-slate-800 hover:bg-slate-900/20'}`}
                     title="Start recording"
                   >
@@ -1833,6 +1945,7 @@ export default function Chat() {
                   value={inputText}
                   onChange={handleInputChange}
                   onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                  disabled={chatBlocked}
                   className={inputClassName}
                 />
               </div>
@@ -1840,6 +1953,7 @@ export default function Chat() {
               <div className="relative shrink-0">
                 <button
                   onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                  disabled={chatBlocked}
                   className={`h-10 w-10 rounded-full transition flex items-center justify-center ${isVibesPro ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-slate-900/10 text-slate-800 hover:bg-slate-900/20'}`}
                   title="Add emoji"
                 >
@@ -1863,7 +1977,7 @@ export default function Chat() {
 
               <button
                 onClick={handleSend}
-                disabled={isLoading || authLoading || !userId || !recipientId || !conversationId || (!inputText.trim() && !selectedFile && !audioBlob)}
+                disabled={chatBlocked || isLoading || authLoading || !userId || !recipientId || !conversationId || (!inputText.trim() && !selectedFile && !audioBlob)}
                 className={sendButtonClassName}
               >
                 {isLoading ? (

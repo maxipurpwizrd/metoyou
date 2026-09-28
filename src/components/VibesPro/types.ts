@@ -68,6 +68,15 @@ export type VibesProHeroProps = {
   followLabel?: string;
   onFollow?: () => void;
   onMessage?: () => void;
+  profileMenuOpen?: boolean;
+  onToggleProfileMenu?: () => void;
+  onCloseProfileMenu?: () => void;
+  profileMenuActions?: Array<{
+    label: string;
+    onClick: () => void;
+    tone?: "default" | "danger";
+    icon: "share" | "download" | "repost" | "report" | "block" | "close" | "edit" | "delete" | "highlight" | "link" | "message" | "status";
+  }>;
   onOpenHommiesList?: () => void;
   onGift?: () => void;
   viewingOwn?: boolean;

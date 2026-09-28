@@ -5,13 +5,13 @@ import type {
   PresenceState,
 } from "./messageApi";
 import {
-  findOrCreateConversation as findOrCreateConversationImpl,
   fetchMessagesPage as fetchMessagesPageImpl,
   sendMessage as sendMessageImpl,
   markMessagesAsRead as markMessagesAsReadImpl,
   updateConversationLastMessageTime as updateConversationLastMessageTimeImpl,
   getMessageThreads as getMessageThreadsImpl,
 } from "./messageCrud";
+import { resolveOrCreateConversation } from "./conversationResolver";
 import { subscribeToMessages as subscribeToMessagesImpl } from "./messageRealtime";
 
 export type { Conversation, Message, MessageThread, PresenceState };
@@ -24,7 +24,18 @@ export async function findOrCreateConversation(
   userId1: string,
   userId2: string
 ): Promise<Conversation | null> {
-  return findOrCreateConversationImpl(userId1, userId2);
+  if (!userId1 || !userId2) return null;
+
+  const { data: sessionData, error: sessionError } = await (await import("./supabase")).supabase.auth.getUser();
+  if (sessionError || !sessionData?.user?.id) return null;
+
+  const currentUserId = sessionData.user.id;
+  const targetUserId = userId1 === currentUserId ? userId2 : userId2 === currentUserId ? userId1 : null;
+  if (!targetUserId) return null;
+
+  const row = await resolveOrCreateConversation(targetUserId);
+  if (!row) return null;
+  return row as Conversation;
 }
 
 export async function fetchMessagesPage(

@@ -13,6 +13,33 @@ import { deletePostFromSupabase, savePostToSupabase } from "../lib/postApi";
 import { submitPostReport } from "../lib/reportApi";
 
 const PAGE_SIZE = 7;
+const FLICKS_CACHE_KEY = "metoyou-flicks-cache";
+
+type CachedFlicksState = {
+  flicks: FlickRecord[];
+  hasMore: boolean;
+};
+
+const readFlicksCache = (): CachedFlicksState => {
+  if (typeof window === "undefined") {
+    return { flicks: [], hasMore: true };
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(FLICKS_CACHE_KEY);
+    if (!raw) {
+      return { flicks: [], hasMore: true };
+    }
+
+    const parsed = JSON.parse(raw) as Partial<CachedFlicksState>;
+    return {
+      flicks: Array.isArray(parsed.flicks) ? parsed.flicks : [],
+      hasMore: parsed.hasMore !== false,
+    };
+  } catch {
+    return { flicks: [], hasMore: true };
+  }
+};
 
 function FlickSkeleton() {
   return (
@@ -36,10 +63,12 @@ export default function Flicks() {
     if (typeof window === "undefined") return "bluesky";
     return window.localStorage.getItem("metoyou-clips-theme") === "dark" ? "dark" : "bluesky";
   });
-  const [flicks, setFlicks] = useState<FlickRecord[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cachedFlicks = readFlicksCache();
+  const hasCachedFlicks = cachedFlicks.flicks.length > 0;
+  const [flicks, setFlicks] = useState<FlickRecord[]>(() => cachedFlicks.flicks);
+  const [loading, setLoading] = useState(() => cachedFlicks.flicks.length === 0);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
+  const [hasMore, setHasMore] = useState(() => cachedFlicks.hasMore);
   const [error, setError] = useState<string | null>(null);
   const [commentsFor, setCommentsFor] = useState<string | null>(null);
   const [commentsById, setCommentsById] = useState<Record<string, CommentRecord[]>>({});
@@ -119,6 +148,11 @@ export default function Flicks() {
   }, [commentsFor]);
 
   useEffect(() => {
+    const hasQueryFocus = Boolean(requestedImage || requestedPostId);
+    if (!hasQueryFocus && hasCachedFlicks) {
+      return undefined;
+    }
+
     let active = true;
     void (async () => {
       try {
@@ -165,6 +199,11 @@ export default function Flicks() {
       active = false;
     };
   }, [requestedImage, requestedPostId, user?.id]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.sessionStorage.setItem(FLICKS_CACHE_KEY, JSON.stringify({ flicks, hasMore }));
+  }, [flicks, hasMore]);
 
   const loadMore = async () => {
     if (loadingMore || !hasMore || flicks.length === 0) return;
@@ -320,7 +359,7 @@ export default function Flicks() {
 
   const reportFlick = async (flick: FlickRecord, reason: PostReportReason) => {
     if (!user) return;
-    await submitPostReport({ postId: flick.id, reporterId: user.id, reportedUserId: flick.author_id, reason });
+    await submitPostReport({ postId: flick.id, reportedUserId: flick.author_id, reason });
     window.alert("Report submitted. Thanks for helping keep MeToYou safe.");
     setReportTarget(null);
   };

@@ -4,6 +4,7 @@ import { useLanguage } from "../../contexts/LanguageContext";
 import VibesProHero from './VibesProHero';
 import VibesProPostsCarousel from './VibesProPostsCarousel';
 import type { VibesProPostType } from './types';
+import type { MediaAction } from '../MediaActionMenu';
 
 type VibesProProfilePageProps = {
   username: string;
@@ -17,6 +18,10 @@ type VibesProProfilePageProps = {
   posts?: VibesProPostType[];
   onFollow?: () => void;
   onMessage?: () => void;
+  profileMenuOpen?: boolean;
+  onToggleProfileMenu?: () => void;
+  onCloseProfileMenu?: () => void;
+  profileMenuActions?: MediaAction[];
   onOpenHommiesList?: () => void;
   viewingOwn?: boolean;
   hommiesListOpen?: boolean;
@@ -64,6 +69,10 @@ export default function VibesProProfilePage({
   posts = [],
   onFollow,
   onMessage,
+  profileMenuOpen = false,
+  onToggleProfileMenu,
+  onCloseProfileMenu,
+  profileMenuActions = [],
   onOpenHommiesList,
   viewingOwn = false,
   hommiesListOpen = false,
@@ -124,6 +133,10 @@ export default function VibesProProfilePage({
             followLabel={followLabel}
             onFollow={onFollow}
             onMessage={onMessage}
+            profileMenuOpen={profileMenuOpen}
+            onToggleProfileMenu={onToggleProfileMenu}
+            onCloseProfileMenu={onCloseProfileMenu}
+            profileMenuActions={profileMenuActions}
             onOpenHommiesList={onOpenHommiesList}
             viewingOwn={viewingOwn}
             onUploadPortrait={onUploadPortrait}

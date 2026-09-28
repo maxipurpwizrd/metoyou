@@ -16,6 +16,7 @@ import {
   UserX,
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
+import SafetyOperationsPanel from "../components/admin/SafetyOperationsPanel";
 
 type AdminDashboardStats = {
   users: number;
@@ -127,8 +128,7 @@ export default function AdminDashboard() {
     try {
       const { data: reportRows, error: reportsError } = await supabase
         .from("reports")
-        .select("id, reason, created_at, status, report_type, post_id, reporter_id, reported_user_id")
-        .eq("report_type", "post")
+        .select("id, reason, details, created_at, status, reported_post_id, reporter_user_id, reported_user_id")
         .eq("status", "pending")
         .order("created_at", { ascending: false });
 
@@ -140,8 +140,9 @@ export default function AdminDashboard() {
         id: string;
         reason: string | null;
         created_at: string;
-        post_id: string | null;
-        reporter_id: string | null;
+        details: string | null;
+        reported_post_id: string | null;
+        reporter_user_id: string | null;
         reported_user_id: string | null;
       }>;
 
@@ -150,8 +151,8 @@ export default function AdminDashboard() {
         return;
       }
 
-      const postIds = pendingReports.map((report) => report.post_id).filter(Boolean) as string[];
-      const reporterIds = pendingReports.map((report) => report.reporter_id).filter(Boolean) as string[];
+      const postIds = pendingReports.map((report) => report.reported_post_id).filter(Boolean) as string[];
+      const reporterIds = pendingReports.map((report) => report.reporter_user_id).filter(Boolean) as string[];
       const reportedUserIds = pendingReports.map((report) => report.reported_user_id).filter(Boolean) as string[];
 
       const [postsResult, reportersResult, reportedUsersResult] = await Promise.all([
@@ -181,8 +182,8 @@ export default function AdminDashboard() {
       const reportedUsersById = new Map((reportedUsersResult.data ?? []).map((profile) => [profile.id, profile]));
 
       const nextReportedPosts = pendingReports.map((report) => {
-        const post = report.post_id ? postsById.get(report.post_id) : null;
-        const reporter = report.reporter_id ? reportersById.get(report.reporter_id) : null;
+        const post = report.reported_post_id ? postsById.get(report.reported_post_id) : null;
+        const reporter = report.reporter_user_id ? reportersById.get(report.reporter_user_id) : null;
         const reportedUser = report.reported_user_id ? reportedUsersById.get(report.reported_user_id) : null;
 
         return {
@@ -191,10 +192,10 @@ export default function AdminDashboard() {
           reportDate: report.created_at,
           reporterUsername: reporter?.username ?? "Unknown reporter",
           reportedUsername: reportedUser?.username ?? "Unknown user",
-          postId: report.post_id ?? null,
+          postId: report.reported_post_id ?? null,
           postPreview: post?.text ?? "Post no longer available",
           postImageUrl: post?.image_url ?? null,
-          reporterUserId: report.reporter_id ?? null,
+          reporterUserId: report.reporter_user_id ?? null,
           reportedUserId: report.reported_user_id ?? null,
         } satisfies AdminReportedPostItem;
       });
@@ -210,6 +211,10 @@ export default function AdminDashboard() {
   };
 
   const loadReportedComments = async () => {
+    setReportedComments([]);
+    setIsLoadingReportedComments(false);
+    return;
+
     setIsLoadingReportedComments(true);
     setReportedCommentsError(null);
 
@@ -311,6 +316,10 @@ export default function AdminDashboard() {
   };
 
   const loadReportedMessages = async () => {
+    setReportedMessages([]);
+    setIsLoadingReportedMessages(false);
+    return;
+
     setIsLoadingReportedMessages(true);
     setReportedMessagesError(null);
 
@@ -389,7 +398,8 @@ export default function AdminDashboard() {
           continue;
         }
 
-        const receiverId = message.sender_id === conversation.user_1 ? conversation.user_2 : conversation.user_1;
+        const conversationRecord = conversation!;
+        const receiverId = message.sender_id === conversationRecord.user_1 ? conversationRecord.user_2 : conversationRecord.user_1;
         receiversByMessageId.set(message.id, receiverId ?? null);
       }
 
@@ -449,7 +459,7 @@ export default function AdminDashboard() {
         throw deletePostError;
       }
 
-      const { error: deleteReportsError } = await supabase.from("reports").delete().eq("post_id", item.postId);
+      const { error: deleteReportsError } = await supabase.from("reports").update({ status: "dismissed", resolved_at: new Date().toISOString() }).eq("id", item.reportId);
       if (deleteReportsError) {
         throw deleteReportsError;
       }
@@ -476,7 +486,7 @@ export default function AdminDashboard() {
         throw deleteCommentError;
       }
 
-      const { error: deleteReportsError } = await supabase.from("reports").delete().eq("comment_id", item.commentId);
+      const { error: deleteReportsError } = await supabase.from("reports").update({ status: "dismissed", resolved_at: new Date().toISOString() }).eq("id", item.reportId);
       if (deleteReportsError) {
         throw deleteReportsError;
       }
@@ -539,7 +549,7 @@ export default function AdminDashboard() {
         throw deleteMessageError;
       }
 
-      const { error: deleteReportsError } = await supabase.from("reports").delete().eq("message_id", item.messageId);
+      const { error: deleteReportsError } = await supabase.from("reports").update({ status: "dismissed", resolved_at: new Date().toISOString() }).eq("id", item.reportId);
       if (deleteReportsError) {
         throw deleteReportsError;
       }
@@ -717,11 +727,7 @@ export default function AdminDashboard() {
           return;
         }
 
-        const { data: profileData, error: profileError } = await supabase
-          .from("profiles")
-          .select("is_admin")
-          .eq("id", authData.user.id)
-          .maybeSingle();
+        const { data: isModerationAdmin, error: profileError } = await supabase.rpc("is_moderation_admin");
 
         if (!isMounted) {
           return;
@@ -731,7 +737,7 @@ export default function AdminDashboard() {
           return;
         }
 
-        setHasAdminAccess(profileData?.is_admin === true);
+        setHasAdminAccess(isModerationAdmin === true);
       } catch {
         if (isMounted) {
           setHasAdminAccess(false);
@@ -967,6 +973,8 @@ export default function AdminDashboard() {
               );
             })}
           </div>
+
+          <SafetyOperationsPanel />
 
           <div className="mt-6 grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
               <div className="rounded-2xl border border-white/60 bg-white/80 p-4 shadow-sm">

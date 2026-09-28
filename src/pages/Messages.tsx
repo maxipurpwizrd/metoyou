@@ -13,7 +13,8 @@ import { createStoryToSupabase, deleteStoryFromSupabase, fetchStoriesFromSupabas
 import { savePostToSupabase } from "../lib/postApi";
 import { formatDisplayDate } from "../lib/time";
 
-export default function Messages(_props: { embedded?: boolean } = {}) {
+export default function Messages({ embedded: _embedded = false }: { embedded?: boolean } = {}) {
+  void _embedded;
   // Prevent rendering until app initialization completes
   const { appReady } = useAppInit();
   const { profileReady } = useSession();
@@ -21,7 +22,23 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
   const currentUserId = typeof user?.id === "string" ? user.id : undefined;
   const { t } = useLanguage();
   const navigate = useNavigate();
-  const [threads, setThreads] = useState<MessageThread[]>([]);
+  const [threads, setThreads] = useState<MessageThread[]>(() => {
+    if (typeof window === "undefined") return [];
+    const userId = typeof user?.id === "string" ? user.id : "guest";
+    const cacheKey = `metoyou-threads:${userId}`;
+    try {
+      const raw = window.sessionStorage.getItem(cacheKey);
+      if (!raw) return [];
+      const cached = JSON.parse(raw) as MessageThread[];
+      return [...cached].sort((a, b) => {
+        const aTime = a.lastTime ? new Date(a.lastTime).getTime() : 0;
+        const bTime = b.lastTime ? new Date(b.lastTime).getTime() : 0;
+        return bTime - aTime;
+      });
+    } catch {
+      return [];
+    }
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [stories, setStories] = useState<StoryRecord[]>([]);
   const [storiesLoading, setStoriesLoading] = useState(false);
@@ -49,7 +66,17 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
       return [];
     }
   });
-  const [archivedThreadIds, setArchivedThreadIds] = useState<Set<string>>(new Set());
+  const [archivedThreadIds, setArchivedThreadIds] = useState<Set<string>>(() => {
+    if (typeof window === "undefined" || !user?.id) return new Set<string>();
+    try {
+      const saved = window.sessionStorage.getItem(`metoyou-archived-threads:${user.id}`);
+      if (!saved) return new Set<string>();
+      const ids = JSON.parse(saved) as string[];
+      return new Set(ids);
+    } catch {
+      return new Set<string>();
+    }
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [blockedThreadIds, setBlockedThreadIds] = useState<Set<string>>(new Set());
   const [contextMenuThreadId, setContextMenuThreadId] = useState<string | null>(null);
@@ -75,7 +102,7 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
     return () => {
       try {
         sessionStorage.setItem(scrollKey, String(window.scrollY || 0));
-      } catch (e) {
+      } catch {
         // ignore
       }
     };
@@ -83,38 +110,86 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
 
   // Cache-first load of message threads + silent background refresh
   useEffect(() => {
+    const refreshThreads = async () => {
+      const userId = typeof user?.id === "string" ? user.id : undefined;
+      if (!userId) return;
+
+      try {
+        const remote = await getMessageThreads(userId);
+        if (!mountedRef.current || !remote) return;
+
+        setThreads((prevThreads) => {
+          const byId = new Map<string, MessageThread>();
+          prevThreads.forEach((t) => byId.set(t.otherId, t));
+
+          let changed = false;
+          remote.forEach((r) => {
+            const existing = byId.get(r.otherId);
+            if (!existing) {
+              byId.set(r.otherId, r);
+              changed = true;
+              return;
+            }
+
+            const existingTime = existing.lastTime ? new Date(existing.lastTime).getTime() : 0;
+            const remoteTime = r.lastTime ? new Date(r.lastTime).getTime() : 0;
+            if (remoteTime !== existingTime || r.lastText !== existing.lastText) {
+              byId.set(r.otherId, r);
+              changed = true;
+            }
+          });
+
+          if (!changed && prevThreads.length > 0) {
+            return prevThreads;
+          }
+
+          const merged = Array.from(byId.values()).sort((a, b) => {
+            const aTime = a.lastTime ? new Date(a.lastTime).getTime() : 0;
+            const bTime = b.lastTime ? new Date(b.lastTime).getTime() : 0;
+            return bTime - aTime;
+          });
+
+          try {
+            sessionStorage.setItem(`metoyou-threads:${userId}`, JSON.stringify(merged));
+          } catch {
+            // ignore storage errors
+          }
+
+          return merged;
+        });
+      } catch (err) {
+        console.warn("Failed to refresh message threads", err);
+      }
+    };
+
+    const handleMessagesUpdated = () => {
+      void refreshThreads();
+    };
+
     mountedRef.current = true;
+    window.addEventListener('metoyou:messages-updated', handleMessagesUpdated);
+
     const userId = typeof user?.id === "string" ? user.id : undefined;
-    if (!userId) return;
+    if (!userId) {
+      return () => {
+        mountedRef.current = false;
+        window.removeEventListener('metoyou:messages-updated', handleMessagesUpdated);
+      };
+    }
 
     const cacheKey = `metoyou-threads:${userId}`;
     const lastKey = `${cacheKey}:lastFetch`;
-
-    // Try cache first
-    try {
-      const raw = sessionStorage.getItem(cacheKey);
-      if (raw) {
-        const cached = JSON.parse(raw) as MessageThread[];
-        const sorted = [...cached].sort((a, b) => {
-          const aTime = a.lastTime ? new Date(a.lastTime).getTime() : 0;
-          const bTime = b.lastTime ? new Date(b.lastTime).getTime() : 0;
-          return bTime - aTime;
-        });
-        setThreads(sorted);
-      }
-    } catch (e) {
-      // ignore parse errors
-    }
-
-    // If no cached data, show loading until first remote arrives
     const hasCache = Boolean(sessionStorage.getItem(cacheKey));
+
     if (!hasCache) setIsLoading(true);
+
+    void refreshThreads();
 
     void (async () => {
       try {
         const last = Number(sessionStorage.getItem(lastKey) || "0");
         const now = Date.now();
-        if (last && now - last < 30_000) return; // throttle background refresh
+        if (last && now - last < 30_000) return;
 
         const remote = await getMessageThreads(userId);
         if (!mountedRef.current || !remote) return;
@@ -153,7 +228,7 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
           try {
             sessionStorage.setItem(cacheKey, JSON.stringify(merged));
             sessionStorage.setItem(lastKey, String(Date.now()));
-          } catch (e) {
+          } catch {
             // ignore storage errors
           }
 
@@ -168,22 +243,9 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
 
     return () => {
       mountedRef.current = false;
+      window.removeEventListener('metoyou:messages-updated', handleMessagesUpdated);
     };
   }, [user]);
-
-  useEffect(() => {
-    if (!currentUserId) return;
-
-    try {
-      const saved = sessionStorage.getItem(`metoyou-archived-threads:${currentUserId}`);
-      if (saved) {
-        const ids = JSON.parse(saved) as string[];
-        setArchivedThreadIds(new Set(ids));
-      }
-    } catch (error) {
-      console.warn("Failed to restore archived threads", error);
-    }
-  }, [currentUserId]);
 
   useEffect(() => {
     if (!currentUserId) return;
@@ -233,7 +295,8 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
     closeContextMenu();
   };
 
-  const handleReportThread = (_threadId: string) => {
+  const handleReportThread = (threadId: string) => {
+    void threadId;
     closeContextMenu();
     window.alert(t("messages.reportConfirmation") || "This conversation has been reported. Our moderation team will review it shortly.");
   };
@@ -526,9 +589,8 @@ export default function Messages(_props: { embedded?: boolean } = {}) {
     if (!isVibesPro) return;
 
     let mounted = true;
-    setStoriesLoading(true);
-
     void (async () => {
+      setStoriesLoading(true);
       try {
         const fetchedStories = await fetchStoriesFromSupabase();
         if (!mounted) return;

@@ -1,0 +1,466 @@
+
+> metoyou@0.0.0 lint
+> eslint .
+
+
+C:\Users\WiZrd\metoyou\src\components\calls\AudioCall.tsx
+  25:18  warning  The ref value 'audioRef.current' will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by React, copy 'audioRef.current' to a variable inside the effect, and use that variable in the cleanup function  react-hooks/exhaustive-deps
+
+C:\Users\WiZrd\metoyou\src\contexts\AppInitContext.tsx
+  28:17  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+C:\Users\WiZrd\metoyou\src\contexts\ChatContext.tsx
+  128:17  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+C:\Users\WiZrd\metoyou\src\contexts\FeedContext.tsx
+  109:17  error    Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               react-refresh/only-export-components
+  171:55  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     @typescript-eslint/no-explicit-any
+  192:5   error    Error: Cannot access variable before it is declared
+
+`setPosts` is accessed before it is declared, which prevents the earlier access from updating when this value changes over time.
+
+C:\Users\WiZrd\metoyou\src\contexts\FeedContext.tsx:192:5
+  190 |     return hydratePostLikeState(mapped, currentUserId);
+  191 |   };  const syncPosts = (nextPosts: Post[]) => {
+> 192 |     setPosts(nextPosts);
+      |     ^^^^^^^^ `setPosts` accessed before it is declared
+  193 |   };
+  194 |
+  195 |   const normalizeId = (id: string | number) => String(id);
+
+C:\Users\WiZrd\metoyou\src\contexts\FeedContext.tsx:498:3
+  496 |   };
+  497 |
+> 498 |   const setPosts = (updater: SetStateAction<Post[]>) => {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 499 |     setPostsState((prev) => {
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 500 |       const next = typeof updater === "function" ? (updater as any)(prev) : updater;
+      ΓÇª
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 518 |     });
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 519 |   };
+      | ^^^^^ `setPosts` is declared here
+  520 |
+  521 |   useEffect(() => {
+  522 |     if (!user || authLoading) return;  react-hooks/immutability
+  300:40  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     @typescript-eslint/no-explicit-any
+  300:57  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     @typescript-eslint/no-explicit-any
+  394:6   warning  React Hook useEffect has a missing dependency: 'loadPostsPage'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             react-hooks/exhaustive-deps
+  403:9   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\WiZrd\metoyou\src\contexts\FeedContext.tsx:403:9
+  401 |       if (cachedFeed && cachedFeed.posts.length > 0) {
+  402 |         syncPosts(cachedFeed.posts);
+> 403 |         setLastFetchTime(Date.now());
+      |         ^^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  404 |       }
+  405 |
+  406 |       // Only load remote posts once auth is established                                                                                          react-hooks/set-state-in-effect
+  433:6   warning  React Hook useEffect has a missing dependency: 'loadPostsPage'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             react-hooks/exhaustive-deps
+  435:9   warning  The 'handleProfileRefresh' function makes the dependencies of useEffect Hook (at line 449) change on every render. Move it inside the useEffect callback. Alternatively, wrap the definition of 'handleProfileRefresh' in its own useCallback() Hook                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         react-hooks/exhaustive-deps
+  500:64  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     @typescript-eslint/no-explicit-any
+  516:16  error    'e' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                @typescript-eslint/no-unused-vars
+  516:19  error    Empty block statement                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        no-empty
+
+C:\Users\WiZrd\metoyou\src\contexts\GlobalCallContext.tsx
+   36:5   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\WiZrd\metoyou\src\contexts\GlobalCallContext.tsx:36:5
+  34 |   useEffect(() => {
+  35 |     const recipientId = new URLSearchParams(location.search).get("recipient");
+> 36 |     setIsChatOpenForCaller(location.pathname === "/chat" && recipientId === pendingIncomingCall?.senderId);
+     |     ^^^^^^^^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  37 |   }, [location.pathname, location.search, pendingIncomingCall?.senderId]);
+  38 |
+  39 |   useEffect(() => {  react-hooks/set-state-in-effect
+   65:7   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\WiZrd\metoyou\src\contexts\GlobalCallContext.tsx:65:7
+  63 |     if (!user?.id) {
+  64 |       pendingIncomingCallRef.current = null;
+> 65 |       setPendingIncomingCall(null);
+     |       ^^^^^^^^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  66 |       return;
+  67 |     }
+  68 |                                                                                                                                                                                    react-hooks/set-state-in-effect
+  190:7   warning  React Hook useMemo has a missing dependency: 'clearPendingIncomingCall'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       react-hooks/exhaustive-deps
+  207:17  error    Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  react-refresh/only-export-components
+
+C:\Users\WiZrd\metoyou\src\contexts\LanguageContext.tsx
+  37:17  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+C:\Users\WiZrd\metoyou\src\contexts\ProfileContext.tsx
+  12:17  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  27:17  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+C:\Users\WiZrd\metoyou\src\contexts\SessionContext.tsx
+  110:17  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              react-refresh/only-export-components
+  168:7   error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\WiZrd\metoyou\src\contexts\SessionContext.tsx:168:7
+  166 |   useEffect(() => {
+  167 |     if (!user?.id) {
+> 168 |       setProfileState(null);
+      |       ^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  169 |       setProfileReady(false);
+  170 |       setIsLoadingSession(false);
+  171 |       writeSessionCache(null, languageRef.current);  react-hooks/set-state-in-effect
+  316:7   error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\WiZrd\metoyou\src\contexts\SessionContext.tsx:316:7
+  314 |
+  315 |     if (authLoading) {
+> 316 |       setIsLoadingSession(true);
+      |       ^^^^^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  317 |       setProfileReady(false);
+  318 |       return;
+  319 |     }                                                                              react-hooks/set-state-in-effect
+  376:17  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              react-refresh/only-export-components
+
+C:\Users\WiZrd\metoyou\src\contexts\VideoContext.tsx
+  21:17  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+C:\Users\WiZrd\metoyou\src\hooks\useAudioTrim.ts
+  12:64  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  26:64  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\WiZrd\metoyou\src\hooks\useAuth.tsx
+  102:16  error  'e' is defined but never used                                                                                                   @typescript-eslint/no-unused-vars
+  102:19  error  Empty block statement                                                                                                           no-empty
+  109:17  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+C:\Users\WiZrd\metoyou\src\hooks\useChatCall.ts
+   93:35  error    Unexpected any. Specify a different type                                                                                   @typescript-eslint/no-explicit-any
+  111:36  error    Unexpected any. Specify a different type                                                                                   @typescript-eslint/no-explicit-any
+  119:42  error    Unexpected any. Specify a different type                                                                                   @typescript-eslint/no-explicit-any
+  218:6   warning  React Hook useCallback has an unnecessary dependency: 'addIceCandidate'. Either exclude it or remove the dependency array  react-hooks/exhaustive-deps
+  323:6   warning  React Hook useCallback has an unnecessary dependency: 'isUserOnline'. Either exclude it or remove the dependency array     react-hooks/exhaustive-deps
+
+C:\Users\WiZrd\metoyou\src\hooks\useConversationCall.ts
+   8:23  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   9:24  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  10:30  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  22:47  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  28:47  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  34:47  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\WiZrd\metoyou\src\hooks\useConversationMessages.ts
+   62:34  error  Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   @typescript-eslint/no-explicit-any
+  153:16  error  '_' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              @typescript-eslint/no-unused-vars
+  153:19  error  Empty block statement                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      no-empty
+  157:16  error  '_' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              @typescript-eslint/no-unused-vars
+  157:19  error  Empty block statement                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      no-empty
+  158:35  error  Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   @typescript-eslint/no-explicit-any
+  303:7   error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\WiZrd\metoyou\src\hooks\useConversationMessages.ts:303:7
+  301 |   useEffect(() => {
+  302 |     if (!recipientId || !userId) {
+> 303 |       setConversationIdState(null);
+      |       ^^^^^^^^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  304 |       setMessages([]);
+  305 |       setHasMore(false);
+  306 |       return;      react-hooks/set-state-in-effect
+  315:10  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\WiZrd\metoyou\src\hooks\useConversationMessages.ts:315:10
+  313 |     if (!conversationId) return;
+  314 |     subscribe(conversationId);
+> 315 |     void loadMessages(conversationId);
+      |          ^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  316 |   }, [conversationId, loadMessages, subscribe]);
+  317 |
+  318 |   return {  react-hooks/set-state-in-effect
+
+C:\Users\WiZrd\metoyou\src\hooks\useConversationTyping.ts
+  55:7  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\WiZrd\metoyou\src\hooks\useConversationTyping.ts:55:7
+  53 |   useEffect(() => {
+  54 |     if (!conversationId || !userId) {
+> 55 |       setTypingUsers([]);
+     |       ^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  56 |       return;
+  57 |     }
+  58 |  react-hooks/set-state-in-effect
+
+C:\Users\WiZrd\metoyou\src\hooks\useFeedStories.ts
+   23:42  error    Unexpected any. Specify a different type                                                                            @typescript-eslint/no-explicit-any
+   25:54  error    Unexpected any. Specify a different type                                                                            @typescript-eslint/no-explicit-any
+   64:44  error    Empty block statement                                                                                               no-empty
+   99:49  error    Unexpected any. Specify a different type                                                                            @typescript-eslint/no-explicit-any
+  111:6   warning  React Hook useCallback has a missing dependency: 'selectedStory'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  113:48  error    Unexpected any. Specify a different type                                                                            @typescript-eslint/no-explicit-any
+  119:97  error    Empty block statement                                                                                               no-empty
+  125:56  error    Unexpected any. Specify a different type                                                                            @typescript-eslint/no-explicit-any
+
+C:\Users\WiZrd\metoyou\src\hooks\usePeerCall.ts
+   6:42  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   9:34  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  66:57  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  93:66  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\WiZrd\metoyou\src\hooks\useProfileStatus.ts
+  22:26  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\WiZrd\metoyou\src\hooks\useProfileStatus.ts:22:26
+  20 |   }, []);
+  21 |
+> 22 |   useEffect(() => { void refresh(); }, [refresh]);
+     |                          ^^^^^^^ Avoid calling setState() directly within an effect
+  23 |
+  24 |   return { status, loading, error, refresh };
+  25 | }  react-hooks/set-state-in-effect
+
+C:\Users\WiZrd\metoyou\src\lib\ScrollRestoration.tsx
+  26:16  error  'e' is defined but never used             @typescript-eslint/no-unused-vars
+  26:19  error  Empty block statement                     no-empty
+  47:17  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  47:53  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  48:36  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  54:17  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  54:56  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  55:39  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  70:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  71:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\WiZrd\metoyou\src\lib\backgroundSubscriptions.ts
+  7:85  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\WiZrd\metoyou\src\lib\commentApi.ts
+  151:12  error  'e' is defined but never used  @typescript-eslint/no-unused-vars
+
+C:\Users\WiZrd\metoyou\src\lib\messageApi.ts
+  471:3   error  '_role' is defined but never used         @typescript-eslint/no-unused-vars
+  673:67  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\WiZrd\metoyou\src\lib\messagePresence.ts
+  32:67  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\WiZrd\metoyou\src\lib\messageRealtime.ts
+  161:17  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  163:30  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  164:27  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\WiZrd\metoyou\src\lib\notificationApi.ts
+  168:43  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  181:42  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  196:66  error  Unnecessary escape character: \s          no-useless-escape
+  196:71  error  Unnecessary escape character: \-          no-useless-escape
+  196:77  error  Unnecessary escape character: \s          no-useless-escape
+  201:37  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\WiZrd\metoyou\src\lib\notificationSound.ts
+  28:3  error  The value assigned to 'unlockInstalled' is not used in subsequent statements  no-useless-assignment
+
+C:\Users\WiZrd\metoyou\src\lib\profileApi.ts
+  84:40  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\WiZrd\metoyou\src\lib\userPrefs.ts
+  31:11  error  Empty block statement  no-empty
+
+C:\Users\WiZrd\metoyou\src\pages\AdminDashboard.tsx
+  820:54  error    Unexpected any. Specify a different type                                                                                 @typescript-eslint/no-explicit-any
+  826:57  error    Unexpected any. Specify a different type                                                                                 @typescript-eslint/no-explicit-any
+  832:54  error    Unexpected any. Specify a different type                                                                                 @typescript-eslint/no-explicit-any
+  850:31  error    Unexpected any. Specify a different type                                                                                 @typescript-eslint/no-explicit-any
+  881:6   warning  React Hook useEffect has a missing dependency: 'loadReportedMessages'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\WiZrd\metoyou\src\pages\AdminPosts.tsx
+  128:23  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\WiZrd\metoyou\src\pages\AdminUsers.tsx
+  93:33  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\WiZrd\metoyou\src\pages\ArchivedMessages.tsx
+  16:20  error  React Hook "useAuth" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               react-hooks/rules-of-hooks
+  17:17  error  React Hook "useLanguage" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           react-hooks/rules-of-hooks
+  18:33  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              react-hooks/rules-of-hooks
+  19:37  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              react-hooks/rules-of-hooks
+  20:23  error  React Hook "useSession" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            react-hooks/rules-of-hooks
+  23:3   error  React Hook "useEffect" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             react-hooks/rules-of-hooks
+  24:29  error  Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                @typescript-eslint/no-explicit-any
+  28:5   error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\WiZrd\metoyou\src\pages\ArchivedMessages.tsx:28:5
+  26 |
+  27 |     let mounted = true;
+> 28 |     setIsLoading(true);
+     |     ^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  29 |
+  30 |     void (async () => {
+  31 |       try {  react-hooks/set-state-in-effect
+
+C:\Users\WiZrd\metoyou\src\pages\CallHistory.tsx
+  25:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\WiZrd\metoyou\src\pages\CallHistory.tsx:25:5
+  23 |
+  24 |     let mounted = true;
+> 25 |     setIsLoading(true);
+     |     ^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  26 |
+  27 |     void (async () => {
+  28 |       const records = await getCallHistory(user.id);  react-hooks/set-state-in-effect
+
+C:\Users\WiZrd\metoyou\src\pages\Chat.tsx
+   205:7   error    The value assigned to 'videoTransceiver' is not used in subsequent statements                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              no-useless-assignment
+   581:9   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\WiZrd\metoyou\src\pages\Chat.tsx:581:9
+  579 |     if (!userId || !recipientId) {
+  580 |       if (conversationId !== null) {
+> 581 |         setConversationId(null);
+      |         ^^^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  582 |       }
+  583 |       return;
+  584 |     }                                                                                                                                                               react-hooks/set-state-in-effect
+   617:6   warning  React Hook useEffect has a missing dependency: 'conversationId'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          react-hooks/exhaustive-deps
+   641:6   warning  React Hook useEffect has a missing dependency: 'clearRecording'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          react-hooks/exhaustive-deps
+   681:7   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\WiZrd\metoyou\src\pages\Chat.tsx:681:7
+  679 |     }
+  680 |     if (cachedMessages && cachedMessages.length > 0) {
+> 681 |       setMessages(mergeMessages(cachedMessages));
+      |       ^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  682 |     } else {
+  683 |       setMessages([]);
+  684 |     }                                                                                                                                                   react-hooks/set-state-in-effect
+   764:93  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   @typescript-eslint/no-explicit-any
+   769:35  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   @typescript-eslint/no-explicit-any
+   828:6   warning  React Hook useEffect has a missing dependency: 'recipientId'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             react-hooks/exhaustive-deps
+  1005:6   warning  React Hook useEffect has missing dependencies: 'activeCallSession', 'audioStream', 'cameraStream', 'recipientName', 'resetCallState', 'sendCallSignal', and 'videoStream'. Either include them or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              react-hooks/exhaustive-deps
+  1010:5   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\WiZrd\metoyou\src\pages\Chat.tsx:1010:5
+  1008 |     if (!conversationId || !pendingIncomingCall || pendingIncomingCall.conversationId !== conversationId) return;
+  1009 |
+> 1010 |     setIncomingCallOffer({
+       |     ^^^^^^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  1011 |       senderId: pendingIncomingCall.senderId,
+  1012 |       senderName: pendingIncomingCall.senderName,
+  1013 |       callType: pendingIncomingCall.callType,  react-hooks/set-state-in-effect
+
+C:\Users\WiZrd\metoyou\src\pages\Clips.tsx
+  527:6  warning  React Hook useEffect has a missing dependency: 'hasCachedClips'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\WiZrd\metoyou\src\pages\Flicks.tsx
+  201:6  warning  React Hook useEffect has a missing dependency: 'hasCachedFlicks'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  241:6  warning  React Hook useEffect has a missing dependency: 'loadMore'. Either include it or remove the dependency array         react-hooks/exhaustive-deps
+
+C:\Users\WiZrd\metoyou\src\pages\Messages.tsx
+  184:20  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\WiZrd\metoyou\src\pages\Messages.tsx:184:20
+  182 |     const hasCache = Boolean(sessionStorage.getItem(cacheKey));
+  183 |
+> 184 |     if (!hasCache) setIsLoading(true);
+      |                    ^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  185 |
+  186 |     void refreshThreads();
+  187 |  react-hooks/set-state-in-effect
+
+C:\Users\WiZrd\metoyou\src\pages\Tracks.tsx
+  202:6   warning  React Hook useEffect has missing dependencies: 'next', 'play', and 'previous'. Either include them or remove the dependency array                                                                                                                                react-hooks/exhaustive-deps
+  226:16  warning  The ref value 'audioRef.current' will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by React, copy 'audioRef.current' to a variable inside the effect, and use that variable in the cleanup function  react-hooks/exhaustive-deps
+  228:6   warning  React Hook useEffect has a missing dependency: 'hasCachedTracks'. Either include it or remove the dependency array                                                                                                                                               react-hooks/exhaustive-deps
+  250:6   warning  React Hook useEffect has missing dependencies: 'currentTrack' and 'isPlaying'. Either include them or remove the dependency array                                                                                                                                react-hooks/exhaustive-deps
+
+C:\Users\WiZrd\metoyou\src\pages\VibesProSuccess.tsx
+  37:6  warning  React Hook useEffect has a missing dependency: 'setProfile'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+Γ£û 127 problems (106 errors, 21 warnings)
+

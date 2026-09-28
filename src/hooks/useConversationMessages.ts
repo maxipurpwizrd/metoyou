@@ -94,8 +94,7 @@ export function useConversationMessages({ recipientId, initialConversationId, on
 
     const cached = getCachedMessages(conversationIdToLoad);
     if (cached && cached.length > 0) {
-      setMessages((currentMessages) => mergeMessages([...currentMessages, ...cached]));
-      setLoading(false);
+      setMessages(mergeMessages(cached));
       setHasMore(true);
     }
 
@@ -106,14 +105,18 @@ export function useConversationMessages({ recipientId, initialConversationId, on
       }
 
       const visible = page.slice(0, 30);
-      setMessages((currentMessages) => mergeMessages([...currentMessages, ...visible]));
+      const nextMessages = mergeMessages(visible);
+      setMessages(nextMessages);
       setHasMore(page.length > 30);
-      setCachedMessages(conversationIdToLoad, visible);
+      setCachedMessages(conversationIdToLoad, nextMessages);
       if (userId) {
         await markMessagesAsRead(conversationIdToLoad, userId);
       }
     } catch (error) {
       console.error("useConversationMessages loadMessages error", error);
+      if (cached && cached.length > 0) {
+        setMessages(mergeMessages(cached));
+      }
     } finally {
       if (isMountedRef.current && isCurrentAuthUser(currentUserIdRef.current, boundaryVersion)) {
         setLoading(false);

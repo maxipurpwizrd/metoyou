@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import type { VibesProMessageProps } from '../types';
 import scrollImage from '../assets/scroll.png';
 
-const MAX_WIDTH = '75vw';
+const MAX_WIDTH = 'min(75vw, 24rem)';
 
 export default function VibesProMessage({ message, isOwn }: VibesProMessageProps) {
   const measureRef = useRef<HTMLDivElement | null>(null);
@@ -11,9 +11,9 @@ export default function VibesProMessage({ message, isOwn }: VibesProMessageProps
   const text = message?.text ?? '';
 
   return (
-    <div style={{ display: 'flex', justifyContent: isOwn ? 'flex-end' : 'flex-start', marginBottom: 12 }}>
-      <div style={{ position: 'relative', minWidth: 'fit-content', maxWidth: MAX_WIDTH }}>
-        <div ref={measureRef} style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none', maxWidth: MAX_WIDTH, minWidth: 'fit-content', padding: '22px 24px 28px', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'Georgia, serif', color: '#4b2e1c', lineHeight: 1.45 }}>
+    <div style={{ display: 'flex', justifyContent: isOwn ? 'flex-end' : 'flex-start', marginBottom: 12, width: '100%' }}>
+      <div style={{ position: 'relative', width: 'fit-content', minWidth: 0, maxWidth: MAX_WIDTH }}>
+        <div ref={measureRef} style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none', maxWidth: MAX_WIDTH, minWidth: 0, padding: '22px 24px 28px', whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'anywhere', fontFamily: 'Georgia, serif', color: '#4b2e1c', lineHeight: 1.45 }}>
           {text}
         </div>
 
@@ -21,16 +21,16 @@ export default function VibesProMessage({ message, isOwn }: VibesProMessageProps
           initial={{ height: 0, opacity: 0 }}
           animate={{ height: 'auto', opacity: 1 }}
           transition={{ duration: 0.24, ease: 'easeOut' }}
-          style={{ position: 'relative', width: 'auto', minWidth: 140 }}
+          style={{ position: 'relative', width: 'auto', minWidth: 140, maxWidth: MAX_WIDTH }}
         >
           <img src={scrollImage} alt="" style={{ width: '100%', height: 'auto', display: 'block' }} />
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.4, duration: 0.2 }}
-            style={{ position: 'absolute', inset: 0, padding: '22px 24px 28px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', color: '#4b2e1c', fontFamily: 'Georgia, serif', lineHeight: 1.45, maxWidth: MAX_WIDTH }}
+            style={{ position: 'absolute', inset: 0, padding: '22px 24px 28px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', color: '#4b2e1c', fontFamily: 'Georgia, serif', lineHeight: 1.45, maxWidth: MAX_WIDTH, minWidth: 0, wordBreak: 'break-word', overflowWrap: 'anywhere' }}
           >
-            <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{text}</div>
+            <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{text}</div>
             {message?.createdAt ? <div style={{ fontSize: 12, opacity: 0.7 }}>{message.createdAt}</div> : null}
           </motion.div>
         </motion.div>

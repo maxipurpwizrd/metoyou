@@ -2,8 +2,12 @@ import { supabase } from "./supabase";
 import { normalizeTimestamp } from "./time";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import type { Conversation, Message, MessageThread, PresenceState } from "../types/message";
+import { resolveOrCreateConversation } from "./conversationResolver";
 
 export type { Conversation, Message, MessageThread, PresenceState } from "../types/message";
+
+const messageCallbacksByChannel = new Map<string, Set<(message: Message, event?: "INSERT" | "UPDATE" | "DELETE") => void>>();
+const messageChannelsByConversation = new Map<string, RealtimeChannel>();
 
 export async function getMessageThreads(
   userId: string
@@ -112,108 +116,25 @@ export async function findOrCreateConversation(
   userId2: string
 ): Promise<Conversation | null> {
   try {
-    // Diagnostic: log the auth user and the requested participants
-    try {
-      const { data: sessionData } = await supabase.auth.getUser();
-      const authUserId = sessionData?.user?.id ?? null;
-      console.debug("[messageApi] findOrCreateConversation inputs", { userId1, userId2, authUserId });
-    } catch (e) {
-      console.debug("[messageApi] findOrCreateConversation unable to read auth session", e);
-    }
-    // Normalize user IDs for consistent ordering to prevent duplicates
-    const [minId, maxId] = userId1 < userId2 ? [userId1, userId2] : [userId2, userId1];
-    console.debug("[messageApi] findOrCreateConversation normalized", { minId, maxId });
-
-    // Defensive checks: ensure auth user matches one of the participants and inputs are present
-    const { data: sessionData } = await supabase.auth.getUser();
-    const authUserId = sessionData?.user?.id ?? null;
-    if (!minId || !maxId) {
-      console.error("[messageApi] findOrCreateConversation missing participant ids", { userId1, userId2 });
+    if (!userId1 || !userId2) {
       return null;
     }
 
-    if (!authUserId) {
-      console.error("[messageApi] findOrCreateConversation no auth session available", { userId1, userId2 });
+    const { data: sessionData, error: sessionError } = await supabase.auth.getUser();
+    if (sessionError || !sessionData?.user?.id) {
+      console.error("[messageApi] findOrCreateConversation auth session missing", sessionError);
       return null;
     }
 
-    if (authUserId !== userId1 && authUserId !== userId2) {
-      console.error("[messageApi] findOrCreateConversation auth user is not a participant", { authUserId, userId1, userId2 });
+    const currentUserId = sessionData.user.id;
+    const targetUserId = userId1 === currentUserId ? userId2 : userId2 === currentUserId ? userId1 : null;
+    if (!targetUserId) {
+      console.error("[messageApi] findOrCreateConversation auth user is not a participant", { currentUserId, userId1, userId2 });
       return null;
     }
 
-    // Search for conversation with BOTH possible orderings (in case of legacy duplicates)
-    const { data: existing, error: selectError } = await supabase
-      .from("conversations")
-      .select("*")
-      .eq("user_1", minId)
-      .eq("user_2", maxId)
-      .limit(1);
-
-    if (selectError) throw selectError;
-    
-    // If found with normalized ordering, return immediately
-    if (existing && existing.length > 0) {
-      return existing[0];
-    }
-
-    // Also check reverse ordering (for legacy conversations before normalization)
-    const { data: legacyExisting, error: legacyError } = await supabase
-      .from("conversations")
-      .select("*")
-      .eq("user_1", maxId)
-      .eq("user_2", minId)
-      .limit(1);
-
-    if (legacyError) throw legacyError;
-
-    // If found with reverse ordering, return it (don't normalize existing data)
-    if (legacyExisting && legacyExisting.length > 0) {
-      return legacyExisting[0];
-    }
-
-    // No conversation exists - create with normalized ordering
-    const { data, error } = await supabase
-      .from("conversations")
-      .insert({
-        user_1: minId,
-        user_2: maxId,
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error("[messageApi] conversation insert error", error, { minId, maxId });
-      // Handle race condition: another request already created it
-      if (error.code === "23505" || error.message?.includes("unique")) {
-        // Retry search - should find it now
-        const { data: raceConditionExisting } = await supabase
-          .from("conversations")
-          .select("*")
-          .eq("user_1", minId)
-          .eq("user_2", maxId)
-          .limit(1);
-        
-        if (raceConditionExisting && raceConditionExisting.length > 0) {
-          return raceConditionExisting[0];
-        }
-
-        // Also check reverse ordering
-        const { data: raceConditionLegacy } = await supabase
-          .from("conversations")
-          .select("*")
-          .eq("user_1", maxId)
-          .eq("user_2", minId)
-          .limit(1);
-        
-        if (raceConditionLegacy && raceConditionLegacy.length > 0) {
-          return raceConditionLegacy[0];
-        }
-      }
-      throw error;
-    }
-
-    return data;
+    const row = await resolveOrCreateConversation(targetUserId);
+    return row as Conversation | null;
   } catch (e) {
     console.error("findOrCreateConversation error", e);
     return null;
@@ -237,11 +158,22 @@ export function mergeMessages(messages: Message[]): Message[] {
     }
   }
 
-  return Array.from(unique.values()).sort((a, b) => {
+  const merged = Array.from(unique.values()).sort((a, b) => {
     const aTime = new Date(a.created_at).getTime();
     const bTime = new Date(b.created_at).getTime();
     return aTime - bTime;
   });
+
+  if (import.meta.env.DEV) {
+    console.debug("[MESSAGE MERGE]", {
+      inputCount: messages.length,
+      outputCount: merged.length,
+      latestMessageId: merged.at(-1)?.id ?? null,
+      oldestMessageId: merged[0]?.id ?? null,
+    });
+  }
+
+  return merged;
 }
 
 export async function fetchMessages(
@@ -329,7 +261,19 @@ export async function fetchMessagesPage(
       throw error;
     }
 
-    return mergeMessages(data ?? []);
+    const merged = mergeMessages(data ?? []);
+    if (import.meta.env.DEV) {
+      console.debug("[MESSAGE FETCH PAGE]", {
+        conversationId,
+        beforeCreatedAt: beforeCreatedAt ?? null,
+        limit,
+        dbCount: data?.length ?? 0,
+        mergedCount: merged.length,
+        latestDbMessageId: data?.slice().sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).at(-1)?.id ?? null,
+        latestMergedMessageId: merged.at(-1)?.id ?? null,
+      });
+    }
+    return merged;
   } catch (e) {
     console.error("fetchMessagesPage error", e);
     return [];
@@ -391,7 +335,6 @@ export async function sendMessage({
       message_type: messageType ?? null,
       metadata: metadata ?? null,
       status: "sent",
-      created_at: normalizeTimestamp(new Date()) ?? new Date().toISOString(),
     };
 
     const payloads: Array<Record<string, unknown>> = [basePayload];
@@ -445,9 +388,27 @@ export function subscribeToMessages(
   _role?: string
 ): RealtimeChannel {
   const channelName = `messages:${conversationId}`;
+
+  const existingChannel = messageChannelsByConversation.get(channelName);
+  const callbackSet = messageCallbacksByChannel.get(channelName) ?? new Set();
+  if (!callbackSet.has(callback)) {
+    callbackSet.add(callback);
+    messageCallbacksByChannel.set(channelName, callbackSet);
+  }
+
+  if (existingChannel) {
+    return existingChannel;
+  }
+
   const channel = supabase.channel(channelName);
   if (import.meta.env.DEV) console.debug("[RealtimeLifecycle] create", { channelName, feature: "messages", conversationId });
-  
+
+  const notifyCallbacks = (message: Message, event?: "INSERT" | "UPDATE" | "DELETE") => {
+    for (const registeredCallback of messageCallbacksByChannel.get(channelName) ?? []) {
+      registeredCallback(message, event);
+    }
+  };
+
   // Subscribe to both INSERT and UPDATE events in one channel
   channel.on(
     "postgres_changes",
@@ -461,7 +422,7 @@ export function subscribeToMessages(
       const message = payload.new as Message;
       if (message && message.id) {
         if (import.meta.env.DEV) console.debug("[Realtime][messages] event received", { channelName, event: "INSERT", messageId: message.id });
-        callback(message, "INSERT");
+        notifyCallbacks(message, "INSERT");
       }
     }
   );
@@ -478,7 +439,7 @@ export function subscribeToMessages(
       const message = payload.new as Message;
       if (message && message.id) {
         if (import.meta.env.DEV) console.debug("[Realtime][messages] event received", { channelName, event: "UPDATE", messageId: message.id });
-        callback(message, "UPDATE");
+        notifyCallbacks(message, "UPDATE");
       }
     }
   );
@@ -492,11 +453,9 @@ export function subscribeToMessages(
       filter: `conversation_id=eq.${conversationId}`,
     },
     (payload) => {
-      // Broadcast delete event with a special marker
       const deletedMessage = payload.old as Message;
       if (deletedMessage && deletedMessage.id) {
         if (import.meta.env.DEV) console.debug("[Realtime][messages] event received", { channelName, event: "DELETE", messageId: deletedMessage.id });
-        // Create a delete marker message
         const deleteMarker: Message = {
           ...deletedMessage,
           id: deletedMessage.id,
@@ -506,7 +465,7 @@ export function subscribeToMessages(
           video_url: undefined,
           metadata: { deleted: true },
         };
-        callback(deleteMarker, "DELETE");
+        notifyCallbacks(deleteMarker, "DELETE");
       }
     }
   );
@@ -517,9 +476,12 @@ export function subscribeToMessages(
       console.debug(`Subscribed to messages for conversation ${conversationId}`);
     } else if (status === "CLOSED") {
       console.debug(`Unsubscribed from messages for conversation ${conversationId}`);
+      messageChannelsByConversation.delete(channelName);
+      messageCallbacksByChannel.delete(channelName);
     }
   });
 
+  messageChannelsByConversation.set(channelName, channel);
   return channel;
 }
 export async function sendTypingIndicator(
@@ -697,36 +659,33 @@ export async function markMessagesAsRead(
   currentUserId: string
 ): Promise<boolean> {
   try {
-    // Find all unread incoming messages in this conversation
     const { data: unreadMessages, error: fetchError } = await supabase
       .from("messages")
       .select("id")
       .eq("conversation_id", conversationId)
       .neq("sender_id", currentUserId)
-      .or(`status.is.null,status.neq.read`);
+      .is("read_at", null);
 
     if (fetchError) {
       console.error("markMessagesAsRead fetch error", fetchError);
       return false;
     }
 
-    if (!unreadMessages || unreadMessages.length === 0) {
+    const messageIds = (unreadMessages ?? []).map((message) => message.id);
+    if (messageIds.length === 0) {
       return true;
     }
 
-    // Mark all unread incoming messages as read
-    const messageIds = unreadMessages.map((m) => m.id);
-    const { error: updateError } = await supabase
-      .from("messages")
-      .update({ status: "read" })
-      .in("id", messageIds);
+    const { error: rpcError } = await supabase.rpc("mark_messages_read", {
+      p_message_ids: messageIds,
+    });
 
-    if (updateError) {
-      console.error("markMessagesAsRead update error", updateError);
+    if (rpcError) {
+      console.error("markMessagesAsRead RPC error", rpcError);
       return false;
     }
 
-    console.debug(`Marked ${messageIds.length} messages as read`);
+    console.debug(`Marked ${messageIds.length} incoming messages as read via read_at`);
     return true;
   } catch (e) {
     console.error("markMessagesAsRead error", e);

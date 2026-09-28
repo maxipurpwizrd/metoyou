@@ -52,6 +52,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         timestamp: Date.now(),
       });
       messageCacheRef.current = newCache;
+      if (import.meta.env.DEV) {
+        console.debug("[CHAT CACHE WRITE]", {
+          source: "setCachedMessages",
+          conversationId,
+          count: messages.length,
+          latestMessageId: messages.at(-1)?.id ?? null,
+        });
+      }
       return newCache;
     });
   }, []);
@@ -63,15 +71,32 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
       if (cached) {
         const exists = cached.messages.some((msg) => msg.id === message.id);
+        const nextMessages = exists ? cached.messages : [...cached.messages, message];
         newCache.set(conversationId, {
-          messages: exists ? cached.messages : [...cached.messages, message],
+          messages: nextMessages,
           timestamp: Date.now(),
         });
+        if (import.meta.env.DEV) {
+          console.debug("[CHAT CACHE WRITE]", {
+            source: "addMessageToCache",
+            conversationId,
+            count: nextMessages.length,
+            latestMessageId: nextMessages.at(-1)?.id ?? null,
+          });
+        }
       } else {
         newCache.set(conversationId, {
           messages: [message],
           timestamp: Date.now(),
         });
+        if (import.meta.env.DEV) {
+          console.debug("[CHAT CACHE WRITE]", {
+            source: "addMessageToCache:new",
+            conversationId,
+            count: 1,
+            latestMessageId: message.id,
+          });
+        }
       }
 
       messageCacheRef.current = newCache;

@@ -3,19 +3,19 @@ import type { PostReportReason } from "../components/ReportReasonModal";
 
 export async function submitPostReport({
   postId,
-  reporterId,
   reportedUserId,
   reason,
 }: {
   postId: string;
-  reporterId: string;
   reportedUserId: string;
   reason: PostReportReason;
 }) {
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || !authData.user) throw authError ?? new Error("Authentication is required to report this post.");
+
   const { error } = await supabase.from("reports").insert({
-    report_type: "post",
-    post_id: postId,
-    reporter_id: reporterId,
+    reported_post_id: postId,
+    reporter_user_id: authData.user.id,
     reported_user_id: reportedUserId,
     reason,
     status: "pending",

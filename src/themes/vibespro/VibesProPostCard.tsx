@@ -49,7 +49,7 @@ export const VibesProPostCard: React.FC<VibesProPostCardProps> = ({
   const timeString = createdAt ? formatDisplayDateTime(createdAt) : '2m ago';
 
   return (
-    <div className="px-4 py-3">
+    <div className="px-4 py-0">
       <PremiumCard className="overflow-hidden">
         {/* Card Header */}
         <div className="px-6 pt-6 flex items-center justify-between">

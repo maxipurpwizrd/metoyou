@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
-export const POST_REPORT_REASONS = [
+const POST_REPORT_REASONS = [
   "Bullying or abuse",
   "Adult Content",
   "Fraud or Scam",

@@ -24,6 +24,7 @@ import { type ProfileData, DEFAULT_PROFILE } from "../utils/profileStorage";
 import { useSession } from "../contexts/SessionContext";
 import { fetchProfileByUsername, upsertProfileToSupabase, uploadFreeTierProfileImage, uploadProfileImage } from "../lib/profileApi";
 import { logout } from "../lib/auth";
+import { Ban } from "lucide-react";
 
 export default function Settings() {
   const { profile: profileFromContext, refreshSession } = useSession();
@@ -31,6 +32,10 @@ export default function Settings() {
   const navigate = useNavigate();
 
   const initialProfile = profileFromContext ?? DEFAULT_PROFILE;
+  const isVibesPro = Boolean(profileFromContext?.is_vibes_pro ?? profileFromContext?.vibes_pro);
+  const settingsSectionClassName = isVibesPro
+    ? "bg-[#181818]/90 backdrop-blur-3xl border border-[#D4AF37]/30 rounded-[32px] shadow-[0_0_40px_rgba(212,175,55,0.12)] p-6"
+    : "bg-white/20 backdrop-blur-3xl border border-white/30 rounded-[32px] shadow-2xl p-6";
   
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [activeModal, setActiveModal] = useState<"name" | "username" | "picture" | "language" | "logout" | null>(null);
@@ -304,17 +309,17 @@ export default function Settings() {
   };
 
   return (
-    <div className="app-screen bg-gradient-to-br from-sky-100 via-white to-cyan-100 p-6 pb-24">
+    <div className={`app-screen p-6 pb-24 ${isVibesPro ? "settings-vibespro bg-[#0B0B0B] text-white" : "bg-gradient-to-br from-sky-100 via-white to-cyan-100"}`}>
       <div className="max-w-6xl mx-auto">
         <div className="flex flex-col gap-4 mb-8">
-          <div className="inline-flex items-center gap-3 rounded-full bg-white/30 backdrop-blur-2xl border border-white/50 px-4 py-2 shadow-xl text-sm font-semibold text-slate-700">
+          <div className={`inline-flex items-center gap-3 rounded-full backdrop-blur-2xl px-4 py-2 text-sm font-semibold ${isVibesPro ? "border border-[#D4AF37]/40 bg-[#181818] text-[#F0C75E] shadow-[0_0_24px_rgba(212,175,55,0.12)]" : "bg-white/30 border border-white/50 text-slate-700 shadow-xl"}`}>
             <Sparkles className="w-4 h-4" />
             {t("settings.premiumBanner")}
           </div>
 
           <div className="grid gap-4">
             <div>
-              <h1 className="text-4xl sm:text-5xl font-black tracking-tight text-slate-950">{t("settings.title")} <span aria-hidden>⚙️</span></h1>
+              <h1 className={`text-4xl sm:text-5xl font-black tracking-tight ${isVibesPro ? "text-[#F7E7B2]" : "text-slate-950"}`}>{t("settings.title")} <span aria-hidden>⚙️</span></h1>
             </div>
 
             {!((profileFromContext?.is_vibes_pro ?? profileFromContext?.vibes_pro ?? false)) && (
@@ -342,7 +347,7 @@ export default function Settings() {
         </div>
 
         <div className="grid gap-6">
-          <section className="bg-white/20 backdrop-blur-3xl border border-white/30 rounded-[32px] shadow-2xl p-6">
+          <section className={settingsSectionClassName}>
             <div className="flex items-center justify-between gap-3 mb-6">
               <div className="flex items-center gap-3">
                 <div className="grid place-items-center w-12 h-12 rounded-3xl bg-sky-500/15 text-sky-600">
@@ -408,6 +413,20 @@ export default function Settings() {
               </button>
             </div>
           </section>
+
+          <button type="button" onClick={() => navigate("/settings/blocked-users")} className="w-full flex items-center justify-between gap-4 rounded-[32px] border border-white/30 bg-white/20 p-6 text-left shadow-2xl backdrop-blur-3xl transition hover:bg-white/30">
+            <div className="flex items-center gap-3">
+              <div className="grid place-items-center w-12 h-12 rounded-3xl bg-rose-500/15 text-rose-700">
+                <Ban className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Privacy</p>
+                <h2 className="text-2xl font-bold text-slate-900">Blocked users</h2>
+                <p className="mt-1 text-sm text-slate-500">View and unblock people you have blocked</p>
+              </div>
+            </div>
+            <ArrowRight className="w-5 h-5 text-slate-500" />
+          </button>
 
           <section className="bg-white/20 backdrop-blur-3xl border border-white/30 rounded-[32px] shadow-2xl p-6">
             <div className="flex items-center justify-between gap-3 mb-6">
@@ -477,6 +496,7 @@ export default function Settings() {
             </div>
           </section>
 
+          {profileFromContext?.is_vibes_pro && (
           <section className="bg-white/20 backdrop-blur-3xl border border-white/30 rounded-[32px] shadow-2xl p-6">
             <div className="flex items-center justify-between gap-3 mb-6">
               <div className="flex items-center gap-3">
@@ -497,6 +517,7 @@ export default function Settings() {
               </p>
             </div>
           </section>
+          )}
 
           <section className="bg-white/20 backdrop-blur-3xl border border-white/30 rounded-[32px] shadow-2xl p-6">
             <div className="flex items-center justify-between gap-3 mb-6">
@@ -531,6 +552,7 @@ export default function Settings() {
             </button>
           </section>
 
+          {profileFromContext?.is_vibes_pro && (
           <section className="bg-white/20 backdrop-blur-3xl border border-white/30 rounded-[32px] shadow-2xl p-6">
             <div className="flex items-center justify-between gap-3 mb-6">
               <div className="flex items-center gap-3">
@@ -551,7 +573,7 @@ export default function Settings() {
                   <p className="text-sm text-slate-500">Current selected appearance</p>
                 </div>
                 <span className="rounded-full bg-slate-950/10 px-4 py-2 text-sm font-semibold text-slate-900 uppercase tracking-[0.15em]">
-                  {selectedTheme === "black-ice" ? "Black Ice" : "Sky Liquid Glass Glow"}
+                  {selectedTheme === "black-ice" ? "BlackGold" : "BlueSky"}
                 </span>
               </div>
 
@@ -578,12 +600,13 @@ export default function Settings() {
                       : "border-white/40 bg-white/10 hover:bg-white/20"
                   }`}
                 >
-                  <p className="font-semibold text-slate-900">Sky Liquid Glass Glow</p>
+                  <p className="font-semibold text-slate-900">BlueSky</p>
                   <p className="text-sm text-slate-500 mt-1">Light theme preview</p>
                 </button>
               </div>
             </div>
           </section>
+          )}
 
           <section className="bg-white/20 backdrop-blur-3xl border border-white/30 rounded-[32px] shadow-2xl p-6">
             <div className="flex items-center justify-between gap-3 mb-6">
@@ -845,25 +868,34 @@ export default function Settings() {
       {activeModal === "logout" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
           <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm" onClick={() => setActiveModal(null)}></div>
-          <div className="relative w-full max-w-md rounded-[32px] border border-white/30 bg-white/95 p-6 shadow-2xl backdrop-blur-2xl">
+          <div className={`relative w-full max-w-md rounded-[32px] border p-6 backdrop-blur-2xl ${isVibesPro
+            ? "border-[#D4AF37]/35 bg-[#111111]/95 text-white shadow-[0_0_40px_rgba(212,175,55,0.18)]"
+            : "border-white/30 bg-white/95 text-slate-900 shadow-2xl"
+          }`}>
             <div className="mb-5">
-              <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Confirm Logout</p>
-              <h3 className="mt-3 text-3xl font-bold text-slate-950">Are you sure you want to logout?</h3>
+              <p className={`text-sm uppercase tracking-[0.3em] ${isVibesPro ? "text-[#D4AF37]" : "text-slate-500"}`}>Confirm Logout</p>
+              <h3 className={`mt-3 text-3xl font-bold ${isVibesPro ? "text-[#F7F3E8]" : "text-slate-950"}`}>Are you sure you want to logout?</h3>
             </div>
-            <p className="text-slate-600 leading-7">Logging out will close your session and return you to the login screen.</p>
+            <p className={`leading-7 ${isVibesPro ? "text-[#D6D6D6]" : "text-slate-600"}`}>Logging out will close your session and return you to the login screen.</p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row justify-end">
               <button
                 type="button"
                 onClick={() => setActiveModal(null)}
-                className="rounded-3xl border border-slate-300 px-5 py-3 text-slate-700 transition hover:bg-slate-100"
+                className={`rounded-3xl border px-5 py-3 transition ${isVibesPro
+                  ? "border-[#D4AF37]/30 bg-[#181818] text-[#F7F3E8] hover:bg-[#1F1F1F]"
+                  : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                }`}
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleLogout}
-                className="rounded-3xl bg-red-500 text-white px-5 py-3 font-semibold shadow-lg transition hover:bg-red-600"
+                className={`rounded-3xl px-5 py-3 font-semibold shadow-lg transition ${isVibesPro
+                  ? "bg-linear-to-r from-[#D4AF37] to-[#F0C75E] text-[#0B0B0B] hover:brightness-110"
+                  : "bg-red-500 text-white hover:bg-red-600"
+                }`}
               >
                 Logout
               </button>

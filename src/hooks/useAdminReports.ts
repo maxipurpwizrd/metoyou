@@ -41,9 +41,9 @@ export function useAdminReports(service: AdminReportsService = adminReports) {
   const [reportSummaryError, setReportSummaryError] = useState<string | null>(null);
 
   const wrapAction = useCallback(
-    async <T extends (...args: any[]) => Promise<any>>(
-      action: T,
-      onSuccess: (value: Awaited<ReturnType<T>>) => void,
+    async <T>(
+      action: () => Promise<T>,
+      onSuccess: (value: T) => void,
       onError: (message: string) => void
     ) => {
       try {
@@ -122,9 +122,9 @@ export function useAdminReports(service: AdminReportsService = adminReports) {
   }, [service, wrapAction]);
 
   const wrapServiceAction = useCallback(
-    async <T extends (...args: any[]) => Promise<ServiceActionResult>>(
-      action: T,
-      ...args: Parameters<T>
+    async <TArgs extends unknown[]>(
+      action: (...args: TArgs) => Promise<ServiceActionResult>,
+      ...args: TArgs
     ) => {
       try {
         return await action(...args);

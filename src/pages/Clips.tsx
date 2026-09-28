@@ -15,6 +15,35 @@ import ReportReasonModal, { type PostReportReason } from "../components/ReportRe
 import { submitPostReport } from "../lib/reportApi";
 
 const PAGE_SIZE = 8;
+const CLIPS_CACHE_KEY = "metoyou-clips-cache";
+
+type CachedClipsState = {
+  clips: ClipRecord[];
+  activeId: string | null;
+  hasMore: boolean;
+};
+
+const readClipsCache = (): CachedClipsState => {
+  if (typeof window === "undefined") {
+    return { clips: [], activeId: null, hasMore: true };
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(CLIPS_CACHE_KEY);
+    if (!raw) {
+      return { clips: [], activeId: null, hasMore: true };
+    }
+
+    const parsed = JSON.parse(raw) as Partial<CachedClipsState>;
+    return {
+      clips: Array.isArray(parsed.clips) ? parsed.clips : [],
+      activeId: typeof parsed.activeId === "string" ? parsed.activeId : null,
+      hasMore: parsed.hasMore !== false,
+    };
+  } catch {
+    return { clips: [], activeId: null, hasMore: true };
+  }
+};
 
 function ClipSkeleton() {
   return (
@@ -78,7 +107,6 @@ function ClipCard({
       void video.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
     } else {
       video.pause();
-      setIsPlaying(false);
     }
   }, [isActive, isMuted]);
 
@@ -226,7 +254,7 @@ function ClipCard({
 
   const reportClip = async (reason: PostReportReason) => {
     if (!userId) return;
-    await submitPostReport({ postId: clip.id, reporterId: userId, reportedUserId: clip.author_id, reason });
+    await submitPostReport({ postId: clip.id, reportedUserId: clip.author_id, reason });
     window.alert("Report submitted. Thanks for helping keep MeToYou safe.");
     setIsReportModalOpen(false);
   };
@@ -428,14 +456,17 @@ export default function Clips() {
     if (typeof window === "undefined") return "bluesky";
     return window.localStorage.getItem("metoyou-clips-theme") === "dark" ? "dark" : "bluesky";
   });
-  const [clips, setClips] = useState<ClipRecord[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const cachedClips = readClipsCache();
+  const hasCachedClips = cachedClips.clips.length > 0;
+  const [clips, setClips] = useState<ClipRecord[]>(() => cachedClips.clips);
+  const [activeId, setActiveId] = useState<string | null>(() => cachedClips.activeId ?? cachedClips.clips[0]?.id ?? null);
+  const [loading, setLoading] = useState(() => cachedClips.clips.length === 0);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
+  const [hasMore, setHasMore] = useState(() => cachedClips.hasMore);
   const [error, setError] = useState<string | null>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const cardNodesRef = useRef(new Map<string, HTMLDivElement>());
+  const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
   const handleTouchStart = (event: TouchEvent<HTMLElement>) => {
@@ -465,32 +496,41 @@ export default function Clips() {
   }, [theme]);
 
   useEffect(() => {
-    if (!profile?.is_vibes_pro) {
-      setLoading(false);
+    if (!profile?.is_vibes_pro || hasCachedClips) {
       return;
     }
 
     let active = true;
-    setLoading(true);
-    void fetchClipsPage(PAGE_SIZE)
-      .then(async (rows) => {
+
+    const loadInitialClips = async () => {
+      setLoading(true);
+      try {
+        const rows = await fetchClipsPage(PAGE_SIZE);
         if (!active) return;
-        setClips(await hydrateSurfacePostInteractions(rows, user?.id));
-        setActiveId(rows[0]?.id ?? null);
+        const hydratedRows = await hydrateSurfacePostInteractions(rows, user?.id);
+        setClips(hydratedRows);
+        setActiveId(hydratedRows[0]?.id ?? null);
         setHasMore(rows.length === PAGE_SIZE);
-      })
-      .catch(() => {
+      } catch {
         if (active) setError("Unable to load Clips right now.");
-      })
-      .finally(() => {
+      } finally {
         if (active) setLoading(false);
-      });
+      }
+    };
+
+    void loadInitialClips();
 
     return () => {
       active = false;
       observerRef.current?.disconnect();
     };
   }, [profile?.is_vibes_pro, user?.id]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!profile?.is_vibes_pro) return;
+    window.sessionStorage.setItem(CLIPS_CACHE_KEY, JSON.stringify({ clips, activeId, hasMore }));
+  }, [activeId, clips, hasMore, profile?.is_vibes_pro]);
 
   useEffect(() => {
     observerRef.current?.disconnect();
@@ -511,24 +551,39 @@ export default function Clips() {
     return () => observerRef.current?.disconnect();
   }, [clips.length]);
 
-  const loadMore = async () => {
-    if (loadingMore || !hasMore || clips.length === 0) return;
-    setLoadingMore(true);
-    setError(null);
-    try {
-      const rows = await fetchClipsPage(PAGE_SIZE, clips[clips.length - 1].created_at);
-      const hydratedRows = await hydrateSurfacePostInteractions(rows, user?.id);
-      setClips((current) => {
-        const seen = new Set(current.map((clip) => clip.id));
-        return [...current, ...hydratedRows.filter((clip) => !seen.has(clip.id))];
-      });
-      setHasMore(rows.length === PAGE_SIZE);
-    } catch {
-      setError("Unable to load more Clips. Please try again.");
-    } finally {
-      setLoadingMore(false);
-    }
-  };
+  useEffect(() => {
+    const sentinel = loadMoreSentinelRef.current;
+    if (!sentinel || !hasMore || loading || loadingMore || clips.length === 0) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) return;
+        if (loadingMore || !hasMore || clips.length === 0) return;
+
+        void (async () => {
+          setLoadingMore(true);
+          setError(null);
+          try {
+            const rows = await fetchClipsPage(PAGE_SIZE, clips[clips.length - 1].created_at);
+            const hydratedRows = await hydrateSurfacePostInteractions(rows, user?.id);
+            setClips((current) => {
+              const seen = new Set(current.map((clip) => clip.id));
+              return [...current, ...hydratedRows.filter((clip) => !seen.has(clip.id))];
+            });
+            setHasMore(rows.length === PAGE_SIZE);
+          } catch {
+            setError("Unable to load more Clips. Please try again.");
+          } finally {
+            setLoadingMore(false);
+          }
+        })();
+      },
+      { rootMargin: "0px 0px 600px 0px" }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [clips, hasMore, loading, loadingMore, user?.id]);
 
   if (!profile?.is_vibes_pro) {
     return <RequireVibesPro>{null}</RequireVibesPro>;
@@ -601,9 +656,12 @@ export default function Clips() {
       </div>
 
       {!loading && hasMore && clips.length > 0 && (
-        <button type="button" onClick={() => void loadMore()} className="mx-auto mt-5 block rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50" disabled={loadingMore}>
-          {loadingMore ? "Loading..." : "Load more"}
-        </button>
+        <div ref={loadMoreSentinelRef} className="h-1" aria-hidden="true" />
+      )}
+      {loadingMore && (
+        <div className="mt-4 text-center text-sm font-medium text-slate-500">
+          Loading more clips...
+        </div>
       )}
       <SurfaceDock />
     </main>

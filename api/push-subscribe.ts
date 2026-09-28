@@ -15,12 +15,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { user, client } = await getAuthenticatedUser(req);
     if (!user) return res.status(401).json({ error: 'Authentication required' });
 
-    const payload = {
+    type PushSubscriptionPayload = {
+      user_id: string;
+      endpoint: string;
+      keys: Record<string, string> | null;
+      expiration_time: number | null;
+    };
+
+    const payload: PushSubscriptionPayload = {
       user_id: user.id,
       endpoint: subscription.endpoint,
       keys: subscription.keys ?? null,
       expiration_time: subscription.expirationTime ?? null,
-    } as any;
+    };
 
     const { data, error } = await client.from('push_subscriptions').upsert(payload, { onConflict: ['endpoint'] }).select().single();
 
@@ -29,8 +36,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     return res.status(200).json({ ok: true, data });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('push-subscribe error', err);
-    return res.status(500).json({ error: err?.message ?? String(err) });
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
 }

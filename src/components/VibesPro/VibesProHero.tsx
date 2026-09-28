@@ -3,6 +3,7 @@ import { useRef } from 'react';
 import { useLanguage } from "../../contexts/LanguageContext";
 import type { VibesProHeroProps } from './types';
 import FollowButton from '../social/FollowButton';
+import MediaActionMenu from '../MediaActionMenu';
 import throneTemplate from './assets/throne-template.png';
 
 export default function VibesProHero({
@@ -15,6 +16,10 @@ export default function VibesProHero({
   followLabel,
   onFollow,
   onMessage,
+  profileMenuOpen = false,
+  onToggleProfileMenu,
+  onCloseProfileMenu,
+  profileMenuActions = [],
   onOpenHommiesList,
   viewingOwn = false,
   onUploadPortrait,
@@ -251,14 +256,38 @@ export default function VibesProHero({
         >
           ←
         </button>
-        {viewingOwn && (
-          <Link
-            to="/settings"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/30 text-lg text-white shadow-lg backdrop-blur-sm"
-            aria-label={t("settings.open") || 'Open settings'}
-          >
-            ⚙
-          </Link>
+
+        {viewingOwn ? (
+          <>
+            <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+              <div className="pointer-events-auto">
+                <MediaActionMenu
+                  open={profileMenuOpen}
+                  isDark={true}
+                  onToggle={onToggleProfileMenu ?? (() => {})}
+                  onClose={onCloseProfileMenu ?? (() => {})}
+                  actions={profileMenuActions}
+                />
+              </div>
+            </div>
+            <Link
+              to="/settings"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/30 text-lg text-white shadow-lg backdrop-blur-sm"
+              aria-label={t("settings.open") || 'Open settings'}
+            >
+              ⚙
+            </Link>
+          </>
+        ) : (
+          <div className="flex items-center gap-2">
+            <MediaActionMenu
+              open={profileMenuOpen}
+              isDark={true}
+              onToggle={onToggleProfileMenu ?? (() => {})}
+              onClose={onCloseProfileMenu ?? (() => {})}
+              actions={profileMenuActions}
+            />
+          </div>
         )}
       </div>
 

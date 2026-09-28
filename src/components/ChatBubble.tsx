@@ -16,13 +16,11 @@ function formatMessageTime(dateString?: string) {
   return formatDisplayTime(dateString);
 }
 
-function getStatusIcon(status?: string) {
-  switch (status) {
-    case "read":
-      return "👀";
-    default:
-      return "📨";
+function getStatusIcon(message: Message) {
+  if (message.read_at || message.status === "read") {
+    return "👀";
   }
+  return "📨";
 }
 
 function formatDuration(seconds: number) {
@@ -230,7 +228,9 @@ export default function ChatBubble({ message, mine = false, onEdit, onDelete, on
     if (!audioRef.current) return;
 
     if (!audioCtxRef.current) {
-      audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const AudioContextCtor = window.AudioContext ?? (window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextCtor) return;
+      audioCtxRef.current = new AudioContextCtor();
     }
 
     if (!sourceRef.current && audioRef.current && audioCtxRef.current) {
@@ -451,7 +451,7 @@ export default function ChatBubble({ message, mine = false, onEdit, onDelete, on
             <span>{timestamp}</span>
             {isEdited && <span className="italic">(edited)</span>}
             {mine && (
-              <span className="ml-1 text-sm">{getStatusIcon(message.status ?? undefined)}</span>
+              <span className="ml-1 text-sm">{getStatusIcon(message)}</span>
             )}
           </div>
         </div>

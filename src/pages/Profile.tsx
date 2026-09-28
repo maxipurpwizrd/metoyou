@@ -16,9 +16,14 @@ import PostCard from "../components/PostCard";
 import VibesProProfilePage from "../components/VibesPro/VibesProProfilePage";
 import { ProfileSkeleton } from "../components/skeletons/Skeletons";
 import { Settings2 } from "lucide-react";
+import MediaActionMenu, { type MediaAction } from "../components/MediaActionMenu";
+import ReportProblemModal from "../components/support/ReportProblemModal";
+import ReportUserModal from "../components/moderation/ReportUserModal";
+import BlockSuccessModal from "../components/moderation/BlockSuccessModal";
 import { useAppInit } from "../contexts/AppInitContext";
 import { isVibesProEnabled } from "../lib/vibesPro";
 import { formatDisplayDateTime } from "../lib/time";
+import { blockUser } from "../lib/moderationApi";
 
 type ProfileComment = {
   id: string | number;
@@ -80,6 +85,10 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
   console.debug("[Profile] Session user:", sessionProfile?.id ?? "none");
   console.debug("[Profile] isOwnProfile:", isOwnProfile);
   const [profilePictureMenuOpen, setProfilePictureMenuOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [reportProblemOpen, setReportProblemOpen] = useState(false);
+  const [reportUserOpen, setReportUserOpen] = useState(false);
+  const [blockSuccessOpen, setBlockSuccessOpen] = useState(false);
   const [selectedPostId, setSelectedPostId] = useState<string | number | null>(null);
   const [, setLoadingCommentsByPost] = useState<Record<string, boolean>>({});
   const suppressAutoCloseRef = useRef(false);
@@ -790,9 +799,9 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
 
     const postsKey = `metoyou-profile-posts:${profile.id}`;
     const postsLastKey = `${postsKey}:lastFetch`;
-    setMyPosts([]);
 
     void (async () => {
+      setMyPosts([]);
       try {
         const last = Number(sessionStorage.getItem(postsLastKey) || "0");
         const now = Date.now();
@@ -944,366 +953,419 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
     navigate(`/chat?recipient=${profile.id}&username=${encodeURIComponent(profile.username)}`);
   };
 
-  return appReady ? (profileLoading ? <ProfileSkeleton /> : (
-    <div className={`${isVibesPro ? 'fixed inset-0 z-0 overflow-hidden bg-[#0B0B0B]' : 'app-screen bg-linear-to-br from-sky-100 via-white to-cyan-100 p-3 md:p-6 pt-24 md:pt-32 pb-20 md:pb-24'}`}>
-      <div className={`mx-auto ${isVibesPro ? 'w-full max-w-none' : 'max-w-2xl'}`}>
-        {!isVibesPro && (
-          <div className="flex items-center justify-center pt-4 md:pt-6 mb-6 md:mb-8">
-            <h1 className="text-2xl md:text-4xl font-black bg-linear-to-r from-sky-600 via-cyan-500 to-blue-600 bg-clip-text text-transparent">
-              MeToYou 💜
-            </h1>
-          </div>
-        )}
+  const handleBlockUser = useCallback(async () => {
+    if (!profile?.id || viewingOwn) return;
 
-        {isVibesPro ? (
-          <div className="w-full">
-            <VibesProProfilePage
-              username={profile.username}
-              portraitUrl={profile.vibes_pro_portrait ?? profile.profilePic ?? "/default-avatar.png"}
-              badgeLabel="Vibes Pro"
-              subtitle={bio ?? 'Live like royalty, share your brightest moments.'}
-              posts={myPosts.map((post) => ({
-                id: post.id,
-                title: post.text.slice(0, 40),
-                description: post.text,
-                mediaUrl: post.image,
-                mediaType: post.image ? 'image' : undefined,
-                badgeLabel: post.highlighted ? 'Highlight' : 'Snapshot',
-                likes: (post.like_count ?? post.likes) ?? 0,
-                comments: (post.comment_count ?? post.comments) ?? 0,
-              }))}
-              hommiesCount={hommiesCount}
-              isOnline={true}
-              isFollowing={isFollowing}
-              followLabel={followLabel}
-              viewingOwn={viewingOwn}
-              onFollow={handleFollowToggle}
-              onMessage={handleMessage}
-              onOpenHommiesList={() => void openHommiesList("mutual")}
-              hommiesListOpen={hommiesListOpen}
-              onCloseHommiesList={closeHommiesList}
-              hommiesListLoading={hommiesListLoading}
-              hommiesSearch={hommiesSearch}
-              onHommiesSearchChange={setHommiesSearch}
-              mutualConnections={mutualConnections}
-              filteredMutualConnections={filteredMutualConnections}
-              recentFollowerIds={recentFollowerIds}
-              onSelectHommie={(connection) => {
-                setHommiesListOpen(false);
-                navigate(`/profile/${encodeURIComponent(connection.username)}`);
-              }}
-              onUploadPortrait={handleVibesProPortraitFileChange}
-              onRequestPortraitUpload={handleRequestPortraitChange}
-              onConfirmPortraitUpload={handleConfirmPortraitChange}
-              onCancelPortraitUpload={handleCancelPortraitChange}
-              onChooseCropPortrait={handleCropChoice}
-              onSavePortrait={handleSaveVibesProPortrait}
-              onCancelPortrait={handleCancelVibesProPortrait}
-              onAdjustPortraitPosition={handleAdjustVibesProPortraitPosition}
-              onApplyCropPreview={handleApplyCropPreview}
-              onCancelCropPreview={handleCancelCropPreview}
-              onCropZoomChange={setCropZoom}
-              onCropOffsetXChange={setCropOffsetX}
-              onCropOffsetYChange={setCropOffsetY}
-              portraitPosition={portraitPosition}
-              isUploadingPortrait={isUploadingPortrait}
-              previewPortraitActive={previewPortraitActive}
-              showPortraitConfirm={showPortraitConfirm}
-              showCropConfirm={showCropConfirm}
-              showCropPreview={showCropPreview}
-              cropPreviewUrl={cropPreviewUrl}
-              cropZoom={cropZoom}
-              cropOffsetX={cropOffsetX}
-              cropOffsetY={cropOffsetY}
-            />
-          </div>
-        ) : (
-          <>
-            <div className="bg-white/20 backdrop-blur-3xl rounded-3xl md:rounded-4xl p-4 md:p-8 shadow-2xl border border-white/30">
-              {viewingOwn && (
-                <div className="flex items-center justify-end gap-2 md:gap-4 mb-4 md:mb-6">
-                  <Link
-                    to="/settings"
-                    className="inline-flex items-center gap-1 md:gap-2 rounded-full border border-white/60 bg-white/40 px-2 md:px-4 py-1 md:py-2 text-xs md:text-sm font-semibold text-slate-900 shadow-xl backdrop-blur-2xl transition hover:scale-[1.02]"
+    try {
+      await blockUser(profile.id);
+      setProfileMenuOpen(false);
+      setBlockSuccessOpen(true);
+    } catch {
+      window.alert("Unable to block this user right now.");
+    }
+  }, [profile?.id, viewingOwn]);
+
+  const shareProfile = async () => {
+    const profileUrl = window.location.href;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: `${profile.username}'s profile`, url: profileUrl });
+      } else {
+        await navigator.clipboard.writeText(profileUrl);
+      }
+    } catch {
+      // Sharing can be cancelled by the user.
+    }
+  };
+
+  const profileMenuActions: MediaAction[] = viewingOwn
+    ? [
+        { label: "Profile status", icon: "status", onClick: () => { setProfileMenuOpen(false); navigate("/profile/status"); } },
+        { label: "Share", icon: "share", onClick: () => { setProfileMenuOpen(false); void shareProfile(); } },
+        { label: "Upgrade", icon: "highlight", onClick: () => { setProfileMenuOpen(false); navigate("/settings/vibes-pro"); }, disabled: Boolean(profile?.is_vibes_pro ?? profile?.vibes_pro) },
+        { label: "Report a problem", icon: "report", onClick: () => { setProfileMenuOpen(false); setReportProblemOpen(true); } },
+      ]
+    : [
+        { label: "Message", icon: "message", onClick: () => { setProfileMenuOpen(false); handleMessage(); } },
+        { label: "Share", icon: "share", onClick: () => { setProfileMenuOpen(false); void shareProfile(); } },
+        { label: "Report", icon: "report", onClick: () => { setProfileMenuOpen(false); setReportUserOpen(true); } },
+        { label: "Block", icon: "block", tone: "danger", onClick: () => { void handleBlockUser(); } },
+      ];
+
+  return appReady ? (profileLoading ? <ProfileSkeleton /> : (
+    <>
+      <ReportProblemModal open={reportProblemOpen} onClose={() => setReportProblemOpen(false)} />
+      <ReportUserModal open={reportUserOpen} userId={profile?.id ?? ""} onClose={() => setReportUserOpen(false)} />
+      <BlockSuccessModal open={blockSuccessOpen} onClose={() => setBlockSuccessOpen(false)} />
+      <div className={`${isVibesPro ? 'fixed inset-0 z-0 overflow-hidden bg-[#0B0B0B]' : 'app-screen bg-linear-to-br from-sky-100 via-white to-cyan-100 p-3 md:p-6 pt-24 md:pt-32 pb-20 md:pb-24'}`}>
+        <div className={`mx-auto ${isVibesPro ? 'w-full max-w-none' : 'max-w-2xl'}`}>
+          {!isVibesPro && (
+            <div className="flex items-center justify-center pt-4 md:pt-6 mb-6 md:mb-8">
+              <h1 className="text-2xl md:text-4xl font-black bg-linear-to-r from-sky-600 via-cyan-500 to-blue-600 bg-clip-text text-transparent">
+                MeToYou 💜
+              </h1>
+            </div>
+          )}
+
+          {isVibesPro ? (
+            <div className="w-full">
+              <VibesProProfilePage
+                username={profile.username}
+                portraitUrl={profile.vibes_pro_portrait ?? profile.profilePic ?? "/default-avatar.png"}
+                badgeLabel="Vibes Pro"
+                subtitle={bio ?? 'Live like royalty, share your brightest moments.'}
+                posts={myPosts.map((post) => ({
+                  id: post.id,
+                  title: post.text.slice(0, 40),
+                  description: post.text,
+                  mediaUrl: post.image,
+                  mediaType: post.image ? 'image' : undefined,
+                  badgeLabel: post.highlighted ? 'Highlight' : 'Snapshot',
+                  likes: (post.like_count ?? post.likes) ?? 0,
+                  comments: (post.comment_count ?? post.comments) ?? 0,
+                }))}
+                hommiesCount={hommiesCount}
+                isOnline={true}
+                isFollowing={isFollowing}
+                followLabel={followLabel}
+                viewingOwn={viewingOwn}
+                onFollow={handleFollowToggle}
+                onMessage={handleMessage}
+                profileMenuOpen={profileMenuOpen}
+                onToggleProfileMenu={() => setProfileMenuOpen((open) => !open)}
+                onCloseProfileMenu={() => setProfileMenuOpen(false)}
+                profileMenuActions={profileMenuActions}
+                onOpenHommiesList={() => void openHommiesList("mutual")}
+                hommiesListOpen={hommiesListOpen}
+                onCloseHommiesList={closeHommiesList}
+                hommiesListLoading={hommiesListLoading}
+                hommiesSearch={hommiesSearch}
+                onHommiesSearchChange={setHommiesSearch}
+                mutualConnections={mutualConnections}
+                filteredMutualConnections={filteredMutualConnections}
+                recentFollowerIds={recentFollowerIds}
+                onSelectHommie={(connection) => {
+                  setHommiesListOpen(false);
+                  navigate(`/profile/${encodeURIComponent(connection.username)}`);
+                }}
+                onUploadPortrait={handleVibesProPortraitFileChange}
+                onRequestPortraitUpload={handleRequestPortraitChange}
+                onConfirmPortraitUpload={handleConfirmPortraitChange}
+                onCancelPortraitUpload={handleCancelPortraitChange}
+                onChooseCropPortrait={handleCropChoice}
+                onSavePortrait={handleSaveVibesProPortrait}
+                onCancelPortrait={handleCancelVibesProPortrait}
+                onAdjustPortraitPosition={handleAdjustVibesProPortraitPosition}
+                onApplyCropPreview={handleApplyCropPreview}
+                onCancelCropPreview={handleCancelCropPreview}
+                onCropZoomChange={setCropZoom}
+                onCropOffsetXChange={setCropOffsetX}
+                onCropOffsetYChange={setCropOffsetY}
+                portraitPosition={portraitPosition}
+                isUploadingPortrait={isUploadingPortrait}
+                previewPortraitActive={previewPortraitActive}
+                showPortraitConfirm={showPortraitConfirm}
+                showCropConfirm={showCropConfirm}
+                showCropPreview={showCropPreview}
+                cropPreviewUrl={cropPreviewUrl}
+                cropZoom={cropZoom}
+                cropOffsetX={cropOffsetX}
+                cropOffsetY={cropOffsetY}
+              />
+            </div>
+          ) : (
+            <>
+              <div className="bg-white/20 backdrop-blur-3xl rounded-3xl md:rounded-4xl p-4 md:p-8 shadow-2xl border border-white/30">
+                <div className={`flex items-center ${viewingOwn ? "justify-between" : "justify-end"} gap-2 md:gap-4 mb-4 md:mb-6`}>
+                  <MediaActionMenu
+                    open={profileMenuOpen}
+                    isDark={false}
+                    onToggle={() => setProfileMenuOpen((open) => !open)}
+                    onClose={() => setProfileMenuOpen(false)}
+                    actions={profileMenuActions}
+                  />
+                  {viewingOwn && (
+                    <Link
+                      to="/settings"
+                      className="inline-flex items-center gap-1 md:gap-2 rounded-full border border-white/60 bg-white/40 px-2 md:px-4 py-1 md:py-2 text-xs md:text-sm font-semibold text-slate-900 shadow-xl backdrop-blur-2xl transition hover:scale-[1.02]"
+                    >
+                      <Settings2 className="w-3 h-3 md:w-4 md:h-4" />
+                      {t("profile.settings")}
+                    </Link>
+                  )}
+                </div>
+
+                <div className="flex justify-center relative w-full">
+                  <button
+                    type="button"
+                    onClick={handleProfilePicClick}
+                    className="w-32 h-32 md:w-40 md:h-40 rounded-full bg-linear-to-r from-sky-500 via-cyan-400 to-blue-500 p-1 shadow-2xl focus:outline-none"
                   >
-                    <Settings2 className="w-3 h-3 md:w-4 md:h-4" />
-                    {t("profile.settings")}
+                    <div className="w-full h-full rounded-full bg-white flex items-center justify-center text-4xl md:text-6xl overflow-hidden">
+                      {profilePic ? (
+                        <img src={profilePic} alt="profile picture" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-4xl md:text-6xl">😎</div>
+                      )}
+                    </div>
+                  </button>
+
+                  {profilePictureMenuOpen && (
+                    <div className="absolute top-full mt-3 w-56 md:w-64 rounded-3xl bg-white/95 border border-white/80 shadow-xl py-3 text-left z-20">
+                      <button
+                        type="button"
+                        onClick={openProfilePictureViewer}
+                        className="w-full text-left px-3 md:px-4 py-3 text-sm md:text-base hover:bg-slate-100 transition"
+                      >
+                        {t("profile.viewPicture")}
+                      </button>
+                      {viewingOwn && (
+                        <button
+                          type="button"
+                          onClick={handleUploadProfilePicture}
+                          className="w-full text-left px-3 md:px-4 py-3 text-sm md:text-base hover:bg-slate-100 transition"
+                        >
+                          {isUploading ? t("profile.uploadingProfilePicture") : t("profile.updatePicture")}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleProfileFileChange}
+                className="hidden"
+              />
+
+              {isUploading && (
+                <div className="mt-6 md:mt-8 rounded-3xl border border-white/70 bg-white/70 p-4 shadow-lg backdrop-blur-xl">
+                  <div className="flex items-center justify-between text-sm font-semibold text-slate-700">
+                    <span>Uploading profile picture</span>
+                    <span>{uploadProgress}%</span>
+                  </div>
+                  <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-slate-200">
+                    <div
+                      className="h-full rounded-full bg-linear-to-r from-sky-500 via-cyan-400 to-blue-500 transition-all duration-300"
+                      style={{ width: `${Math.min(uploadProgress, 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {showUploadSuccess && (
+                <div className="mt-4 rounded-3xl border border-emerald-200 bg-emerald-50/90 px-4 py-3 text-sm font-semibold text-emerald-700 shadow-lg backdrop-blur">
+                  {t("profile.uploadSuccess")}
+                </div>
+              )}
+
+              <div className="mt-6 md:mt-8 text-center">
+                <p className="uppercase text-xs md:text-sm tracking-[0.3em] text-slate-500">@{(username ?? "").toLowerCase().replace(/\s+/g, "")}</p>
+                <h2 className="text-2xl md:text-3xl font-black mt-2">{username}</h2>
+                <p className="text-xs md:text-sm text-slate-600 mt-2">{email}</p>
+              </div>
+
+              {!viewingOwn && (
+                <div className="mt-4 md:mt-6 flex items-center justify-between gap-2 md:gap-3 bg-white/20 backdrop-blur-3xl rounded-3xl p-3 md:p-4 border border-white/30">
+                  <FollowButton
+                    label={followLoading ? t("profile.working") : followLabel}
+                    isFollowing={isFollowing}
+                    loading={followLoading}
+                    onClick={handleFollowToggle}
+                    disabled={false}
+                  />
+
+                  <Link
+                    to={`/chat?recipient=${profile.id}&username=${encodeURIComponent(profile.username)}`}
+                    className="inline-flex items-center justify-center w-10 h-10 md:w-12 md:h-12 rounded-2xl bg-white shadow-lg border border-white/60 text-slate-900 text-lg md:text-xl transition hover:scale-105 shrink-0"
+                    aria-label={t("profile.messageUser")}
+                  >
+                    💬
                   </Link>
                 </div>
               )}
 
-              <div className="flex justify-center relative w-full">
+              <div className="grid grid-cols-3 gap-2 md:gap-4 mt-6 md:mt-8">
                 <button
                   type="button"
-                  onClick={handleProfilePicClick}
-                  className="w-32 h-32 md:w-40 md:h-40 rounded-full bg-linear-to-r from-sky-500 via-cyan-400 to-blue-500 p-1 shadow-2xl focus:outline-none"
+                  onClick={() => void openHommiesList("mutual")}
+                  className="bg-white/30 rounded-2xl p-3 md:p-4 text-center shadow-lg transition hover:scale-[1.01]"
                 >
-                  <div className="w-full h-full rounded-full bg-white flex items-center justify-center text-4xl md:text-6xl overflow-hidden">
-                    {profilePic ? (
-                      <img src={profilePic} alt="profile picture" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-4xl md:text-6xl">😎</div>
-                    )}
-                  </div>
+                  <h2 className="font-black text-2xl md:text-3xl text-slate-900">{hommiesCount}</h2>
+                  <p className="text-slate-700 text-xs md:text-sm mt-2">{t("profile.hommies")}</p>
                 </button>
+                <div className="bg-white/30 rounded-2xl p-3 md:p-4 text-center shadow-lg">
+                  <h2 className="font-black text-2xl md:text-3xl text-slate-900">{snapshotsCount}</h2>
+                  <p className="text-slate-700 text-xs md:text-sm mt-2">{t("profile.snapshots")}</p>
+                </div>
+                <div className="bg-white/30 rounded-2xl p-3 md:p-4 text-center shadow-lg">
+                  <h2 className="font-black text-2xl md:text-3xl text-slate-900">{vibesCount}</h2>
+                  <p className="text-slate-700 text-xs md:text-sm mt-2">{t("profile.vibes")}</p>
+                </div>
+              </div>
 
-                {profilePictureMenuOpen && (
-                  <div className="absolute top-full mt-3 w-56 md:w-64 rounded-3xl bg-white/95 border border-white/80 shadow-xl py-3 text-left z-20">
-                    <button
-                      type="button"
-                      onClick={openProfilePictureViewer}
-                      className="w-full text-left px-3 md:px-4 py-3 text-sm md:text-base hover:bg-slate-100 transition"
-                    >
-                      {t("profile.viewPicture")}
-                    </button>
-                    {viewingOwn && (
-                      <button
-                        type="button"
-                        onClick={handleUploadProfilePicture}
-                        className="w-full text-left px-3 md:px-4 py-3 text-sm md:text-base hover:bg-slate-100 transition"
-                      >
-                        {isUploading ? t("profile.uploadingProfilePicture") : t("profile.updatePicture")}
+              {hommiesListOpen && (
+                <div className="fixed inset-0 z-70 flex items-center justify-center bg-slate-900/70 px-4 py-6" onClick={closeHommiesList}>
+                  <div className="w-full max-w-md rounded-3xl border border-white/70 bg-white/95 p-4 shadow-2xl backdrop-blur-xl" onClick={(event) => event.stopPropagation()}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-lg font-black text-slate-900">{t("profile.hommiesList.title")}</h3>
+                        <p className="text-sm text-slate-600">{t("profile.hommies")}</p>
+                      </div>
+                      <button type="button" onClick={closeHommiesList} className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">
+                        ✕
                       </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleProfileFileChange}
-              className="hidden"
-            />
-
-            {isUploading && (
-              <div className="mt-6 md:mt-8 rounded-3xl border border-white/70 bg-white/70 p-4 shadow-lg backdrop-blur-xl">
-                <div className="flex items-center justify-between text-sm font-semibold text-slate-700">
-                  <span>Uploading profile picture</span>
-                  <span>{uploadProgress}%</span>
-                </div>
-                <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-slate-200">
-                  <div
-                    className="h-full rounded-full bg-linear-to-r from-sky-500 via-cyan-400 to-blue-500 transition-all duration-300"
-                    style={{ width: `${Math.min(uploadProgress, 100)}%` }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {showUploadSuccess && (
-              <div className="mt-4 rounded-3xl border border-emerald-200 bg-emerald-50/90 px-4 py-3 text-sm font-semibold text-emerald-700 shadow-lg backdrop-blur">
-                {t("profile.uploadSuccess")}
-              </div>
-            )}
-
-            <div className="mt-6 md:mt-8 text-center">
-              <p className="uppercase text-xs md:text-sm tracking-[0.3em] text-slate-500">@{(username ?? "").toLowerCase().replace(/\s+/g, "")}</p>
-              <h2 className="text-2xl md:text-3xl font-black mt-2">{username}</h2>
-              <p className="text-xs md:text-sm text-slate-600 mt-2">{email}</p>
-            </div>
-
-            {!viewingOwn && (
-              <div className="mt-4 md:mt-6 flex items-center justify-between gap-2 md:gap-3 bg-white/20 backdrop-blur-3xl rounded-3xl p-3 md:p-4 border border-white/30">
-                <FollowButton
-                  label={followLoading ? t("profile.working") : followLabel}
-                  isFollowing={isFollowing}
-                  loading={followLoading}
-                  onClick={handleFollowToggle}
-                  disabled={false}
-                />
-
-                <Link
-                  to={`/chat?recipient=${profile.id}&username=${encodeURIComponent(profile.username)}`}
-                  className="inline-flex items-center justify-center w-10 h-10 md:w-12 md:h-12 rounded-2xl bg-white shadow-lg border border-white/60 text-slate-900 text-lg md:text-xl transition hover:scale-105 shrink-0"
-                  aria-label={t("profile.messageUser")}
-                >
-                  💬
-                </Link>
-              </div>
-            )}
-
-            <div className="grid grid-cols-3 gap-2 md:gap-4 mt-6 md:mt-8">
-              <button
-                type="button"
-                onClick={() => void openHommiesList("mutual")}
-                className="bg-white/30 rounded-2xl p-3 md:p-4 text-center shadow-lg transition hover:scale-[1.01]"
-              >
-                <h2 className="font-black text-2xl md:text-3xl text-slate-900">{hommiesCount}</h2>
-                <p className="text-slate-700 text-xs md:text-sm mt-2">{t("profile.hommies")}</p>
-              </button>
-              <div className="bg-white/30 rounded-2xl p-3 md:p-4 text-center shadow-lg">
-                <h2 className="font-black text-2xl md:text-3xl text-slate-900">{snapshotsCount}</h2>
-                <p className="text-slate-700 text-xs md:text-sm mt-2">{t("profile.snapshots")}</p>
-              </div>
-              <div className="bg-white/30 rounded-2xl p-3 md:p-4 text-center shadow-lg">
-                <h2 className="font-black text-2xl md:text-3xl text-slate-900">{vibesCount}</h2>
-                <p className="text-slate-700 text-xs md:text-sm mt-2">{t("profile.vibes")}</p>
-              </div>
-            </div>
-
-            {hommiesListOpen && (
-              <div className="fixed inset-0 z-70 flex items-center justify-center bg-slate-900/70 px-4 py-6" onClick={closeHommiesList}>
-                <div className="w-full max-w-md rounded-3xl border border-white/70 bg-white/95 p-4 shadow-2xl backdrop-blur-xl" onClick={(event) => event.stopPropagation()}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-lg font-black text-slate-900">{t("profile.hommiesList.title")}</h3>
-                      <p className="text-sm text-slate-600">{t("profile.hommies")}</p>
                     </div>
-                    <button type="button" onClick={closeHommiesList} className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">
-                      ✕
-                    </button>
-                  </div>
 
-                  <div className="mt-4">
-                    <label className="mb-3 flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                      <span>🔎</span>
-                      <input
-                        type="text"
-                        value={hommiesSearch}
-                        onChange={(event) => setHommiesSearch(event.target.value)}
-                        placeholder={t("profile.hommiesList.searchPlaceholder")}
-                        className="w-full border-0 bg-transparent outline-none"
-                      />
-                    </label>
+                    <div className="mt-4">
+                      <label className="mb-3 flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                        <span>🔎</span>
+                        <input
+                          type="text"
+                          value={hommiesSearch}
+                          onChange={(event) => setHommiesSearch(event.target.value)}
+                          placeholder={t("profile.hommiesList.searchPlaceholder")}
+                          className="w-full border-0 bg-transparent outline-none"
+                        />
+                      </label>
 
-                    <div className="max-h-[min(55vh,28rem)] overflow-y-auto pr-1">
-                      {hommiesListLoading ? (
-                        <div className="rounded-2xl bg-slate-50 px-4 py-6 text-center text-sm text-slate-600">
-                          {t("profile.hommiesList.loading")}
-                        </div>
-                      ) : filteredMutualConnections.length === 0 ? (
-                        <div className="rounded-2xl bg-slate-50 px-4 py-6 text-center text-sm text-slate-600">
-                          {hommiesSearch.trim()
-                            ? t("profile.hommiesList.noSearchResults")
-                            : t("profile.hommiesList.empty")}
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          {filteredMutualConnections.map((connection) => (
-                          <button
-                            key={connection.id}
-                            type="button"
-                            onClick={() => {
-                              closeHommiesList();
-                              navigate(`/profile/${encodeURIComponent(connection.username)}`);
-                            }}
-                            className={`relative flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left shadow-sm transition hover:bg-slate-50 ${isHighlightedHommie(connection) ? 'border-sky-400 bg-sky-50 shadow-[0_0_0_2px_rgba(14,165,233,0.16)]' : 'border-slate-200 bg-white'}`}
-                          >
-                            <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-linear-to-br from-sky-500 via-cyan-400 to-blue-500 text-sm font-semibold text-white">
-                              {connection.profilePic ? (
-                                <img src={connection.profilePic} alt={connection.username} className="h-full w-full object-cover" />
-                              ) : (
-                                connection.username.charAt(0).toUpperCase()
-                              )}
-                            </div>
-                            <div>
-                              <p className="font-semibold text-slate-900">{connection.username}</p>
-                              <p className="text-xs text-slate-500">{t("profile.homie")}</p>
-                            </div>
-                            {recentFollowerIds.includes(connection.id) ? (
-                              <span className="ml-auto h-2.5 w-2.5 rounded-full bg-red-500 shadow-[0_0_0_4px_rgba(239,68,68,0.16)]" aria-label="recent follower" />
-                            ) : null}
-                          </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {bio && (
-              <div className="mt-6 md:mt-8 bg-white/30 rounded-3xl p-4 md:p-6 shadow-lg">
-                <h2 className="font-bold text-xl md:text-2xl mb-3 text-slate-900">{t("profile.aboutMe")}</h2>
-                <p className="text-slate-700 text-sm md:text-base leading-relaxed">{bio}</p>
-              </div>
-            )}
-
-            <div className="flex flex-wrap justify-center gap-2 md:gap-3 mt-6 md:mt-8">
-              {selectedInterests.map((interest: string) => (
-                <span key={interest} className="bg-white/40 backdrop-blur-2xl border border-white/50 px-3 md:px-4 py-2 rounded-full text-xs md:text-sm text-slate-900 shadow-lg">
-                  {interest}
-                </span>
-              ))}
-            </div>
-
-            <div className="mt-6 md:mt-8">
-              <h2 className="font-bold text-xl md:text-2xl mb-3 md:mb-4">{t("profile.highlights")}</h2>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3">
-                {myPosts.filter((post) => post.highlighted).length > 0 ? (
-                  myPosts
-                    .filter((post) => post.highlighted)
-                    .map((post) => (
-                      <div key={post.id} className="rounded-3xl overflow-hidden bg-white/80 border border-white/70 shadow-md">
-                        {post.image ? (
-                          <img src={post.image} alt={post.text} className="w-full h-32 md:h-40 object-cover" />
+                      <div className="max-h-[min(55vh,28rem)] overflow-y-auto pr-1">
+                        {hommiesListLoading ? (
+                          <div className="rounded-2xl bg-slate-50 px-4 py-6 text-center text-sm text-slate-600">
+                            {t("profile.hommiesList.loading")}
+                          </div>
+                        ) : filteredMutualConnections.length === 0 ? (
+                          <div className="rounded-2xl bg-slate-50 px-4 py-6 text-center text-sm text-slate-600">
+                            {hommiesSearch.trim()
+                              ? t("profile.hommiesList.noSearchResults")
+                              : t("profile.hommiesList.empty")}
+                          </div>
                         ) : (
-                          <div className="h-32 md:h-40 flex items-center justify-center bg-sky-100 text-slate-700 px-3 md:px-4 text-xs md:text-sm text-center">
-                            {post.text}
+                          <div className="space-y-2">
+                            {filteredMutualConnections.map((connection) => (
+                              <button
+                                key={connection.id}
+                                type="button"
+                                onClick={() => {
+                                  closeHommiesList();
+                                  navigate(`/profile/${encodeURIComponent(connection.username)}`);
+                                }}
+                                className={`relative flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left shadow-sm transition hover:bg-slate-50 ${isHighlightedHommie(connection) ? 'border-sky-400 bg-sky-50 shadow-[0_0_0_2px_rgba(14,165,233,0.16)]' : 'border-slate-200 bg-white'}`}
+                              >
+                                <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-linear-to-br from-sky-500 via-cyan-400 to-blue-500 text-sm font-semibold text-white">
+                                  {connection.profilePic ? (
+                                    <img src={connection.profilePic} alt={connection.username} className="h-full w-full object-cover" />
+                                  ) : (
+                                    connection.username.charAt(0).toUpperCase()
+                                  )}
+                                </div>
+                                <div>
+                                  <p className="font-semibold text-slate-900">{connection.username}</p>
+                                  <p className="text-xs text-slate-500">{t("profile.homie")}</p>
+                                </div>
+                                {recentFollowerIds.includes(connection.id) ? (
+                                  <span className="ml-auto h-2.5 w-2.5 rounded-full bg-red-500 shadow-[0_0_0_4px_rgba(239,68,68,0.16)]" aria-label="recent follower" />
+                                ) : null}
+                              </button>
+                            ))}
                           </div>
                         )}
-                        <div className="p-2 md:p-4">
-                          <p className="font-semibold text-slate-800 text-xs md:text-sm line-clamp-2">{post.text}</p>
-                          <p className="text-xs text-slate-500 mt-1 md:mt-2">{post.time}</p>
-                        </div>
                       </div>
-                    ))
-                ) : (
-                  <div className="col-span-full rounded-3xl bg-white/60 border border-dashed border-slate-300 p-6 text-center text-slate-500">
-                    {t("profile.noHighlights")}
+                    </div>
                   </div>
-                )}
+                </div>
+              )}
+
+              {bio && (
+                <div className="mt-6 md:mt-8 bg-white/30 rounded-3xl p-4 md:p-6 shadow-lg">
+                  <h2 className="font-bold text-xl md:text-2xl mb-3 text-slate-900">{t("profile.aboutMe")}</h2>
+                  <p className="text-slate-700 text-sm md:text-base leading-relaxed">{bio}</p>
+                </div>
+              )}
+
+              <div className="flex flex-wrap justify-center gap-2 md:gap-3 mt-6 md:mt-8">
+                {selectedInterests.map((interest: string) => (
+                  <span key={interest} className="bg-white/40 backdrop-blur-2xl border border-white/50 px-3 md:px-4 py-2 rounded-full text-xs md:text-sm text-slate-900 shadow-lg">
+                    {interest}
+                  </span>
+                ))}
               </div>
-            </div>
 
-            <div className="mt-6 md:mt-8">
-              <h2 className="font-bold text-xl md:text-2xl mb-3 md:mb-4">{t(viewingOwn ? "profile.mySnapshots" : "profile.snapshots")}</h2>
-              <div className="space-y-4">
-                {myPosts.map((post) => {
-                  const isPostVibesPro = isVibesProEnabled(post.author ?? profile);
-
-                  return (
-                    <PostCard
-                      key={post.id}
-                      author={post.author ?? { id: profile.id, username: profile.username, is_vibes_pro: profile.is_vibes_pro }}
-                      authorId={post.author?.id ?? profile.id}
-                      isVibesPro={isPostVibesPro}
-                      variant={isPostVibesPro ? "gold" : "default"}
-                      postId={post.id}
-                    time={post.time ?? ""}
-                    text={post.text}
-                    image={post.image}
-                    imageOriginal={post.imageOriginal}
-                    comments={((post.commentList ?? []) as Array<{ id: string | number; user: { id: string; username: string }; text?: string; voice?: string; likes?: number }>).map((comment) => ({
-                      ...comment,
-                      likes: comment.likes ?? 0,
-                    }))}
-                    likes={post.likes ?? 0}
-                    liked={Boolean(post.liked)}
-                    isSelected={selectedPostId === post.id}
-                    onToggleLike={() => void handleProfilePostLikeToggle(post)}
-                    onSelectPost={() => void handleProfilePostSelect(post)}
-                    onClosePost={() => {
-                      if (selectedPostId === post.id) setSelectedPostId(null);
-                    }}
-                      onInteractionActivity={setAutoCloseSuppressed}
-                      onAddComment={(comment) => void handleProfilePostAddComment(post, comment)}
-                      onDeleteComment={(commentId) => void handleProfileCommentDelete(post, commentId)}
-                      onEditComment={(commentId, newText) => void handleProfileCommentEdit(post, commentId, newText)}
-                    />
-                  );
-                })}
+              <div className="mt-6 md:mt-8">
+                <h2 className="font-bold text-xl md:text-2xl mb-3 md:mb-4">{t("profile.highlights")}</h2>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3">
+                  {myPosts.filter((post) => post.highlighted).length > 0 ? (
+                    myPosts
+                      .filter((post) => post.highlighted)
+                      .map((post) => (
+                        <div key={post.id} className="rounded-3xl overflow-hidden bg-white/80 border border-white/70 shadow-md">
+                          {post.image ? (
+                            <img src={post.image} alt={post.text} className="w-full h-32 md:h-40 object-cover" />
+                          ) : (
+                            <div className="h-32 md:h-40 flex items-center justify-center bg-sky-100 text-slate-700 px-3 md:px-4 text-xs md:text-sm text-center">
+                              {post.text}
+                            </div>
+                          )}
+                          <div className="p-2 md:p-4">
+                            <p className="font-semibold text-slate-800 text-xs md:text-sm line-clamp-2">{post.text}</p>
+                            <p className="text-xs text-slate-500 mt-1 md:mt-2">{post.time}</p>
+                          </div>
+                        </div>
+                      ))
+                  ) : (
+                    <div className="col-span-full rounded-3xl bg-white/60 border border-dashed border-slate-300 p-6 text-center text-slate-500">
+                      {t("profile.noHighlights")}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
 
-            {/* The conditional logic container is now clean and within the fragment branch boundary */}
-          </>
-        )}
+              <div className="mt-6 md:mt-8">
+                <h2 className="font-bold text-xl md:text-2xl mb-3 md:mb-4">{t(viewingOwn ? "profile.mySnapshots" : "profile.snapshots")}</h2>
+                <div className="space-y-4">
+                  {myPosts.map((post) => {
+                    const isPostVibesPro = isVibesProEnabled(post.author ?? profile);
+
+                    return (
+                      <PostCard
+                        key={post.id}
+                        author={post.author ?? { id: profile.id, username: profile.username, is_vibes_pro: profile.is_vibes_pro }}
+                        authorId={post.author?.id ?? profile.id}
+                        isVibesPro={isPostVibesPro}
+                        variant={isPostVibesPro ? "gold" : "default"}
+                        postId={post.id}
+                        time={post.time ?? ""}
+                        text={post.text}
+                        image={post.image}
+                        imageOriginal={post.imageOriginal}
+                        comments={((post.commentList ?? []) as Array<{ id: string | number; user: { id: string; username: string }; text?: string; voice?: string; likes?: number }>).map((comment) => ({
+                          ...comment,
+                          likes: comment.likes ?? 0,
+                        }))}
+                        likes={post.likes ?? 0}
+                        liked={Boolean(post.liked)}
+                        isSelected={selectedPostId === post.id}
+                        onToggleLike={() => void handleProfilePostLikeToggle(post)}
+                        onSelectPost={() => void handleProfilePostSelect(post)}
+                        onClosePost={() => {
+                          if (selectedPostId === post.id) setSelectedPostId(null);
+                        }}
+                        onInteractionActivity={setAutoCloseSuppressed}
+                        onAddComment={(comment) => void handleProfilePostAddComment(post, comment)}
+                        onDeleteComment={(commentId) => void handleProfileCommentDelete(post, commentId)}
+                        onEditComment={(commentId, newText) => void handleProfileCommentEdit(post, commentId, newText)}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       </div>
-    </div>
+    </>
   )) : null;
 }

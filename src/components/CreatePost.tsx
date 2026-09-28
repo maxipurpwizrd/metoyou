@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { Mic, Square } from "lucide-react";
 import { useSession } from "../contexts/SessionContext";
 import { uploadVideo, type UploadProgress } from "../lib/videoApi";
 import { optimizeImageFile } from "../lib/imageUtils";
-import { getSupportedAudioRecorderOptions, optimizeVoiceNote } from "../lib/mediaOptimizer";
+import { optimizeVoiceNote } from "../lib/mediaOptimizer";
 
 
 
@@ -21,111 +20,42 @@ export default function CreatePost({ onPost }: Props) {
   const [text, setText] = useState("");
 
   const [image, setImage] = useState<string | undefined>();
+
   const [originalImage, setOriginalImage] = useState<string | undefined>();
-
   const [video, setVideo] = useState<string | undefined>();
-
   const [audio, setAudio] = useState<string | undefined>();
-
-  const [isRecording, setIsRecording] = useState(false);
-
-  const [recordingDuration, setRecordingDuration] = useState(0);
-
   const [isUploading, setIsUploading] = useState(false);
-
   const [uploadProgress, setUploadProgress] = useState(0);
-
   const [isPosting, setIsPosting] = useState(false);
-
-  const [postStatus, setPostStatus] = useState<"" | "uploading" | "posting" | "success">(
-
-    ""
-
-  );
-
+  const [postStatus, setPostStatus] = useState<"" | "uploading" | "posting" | "success">("");
+  const [composerNotice, setComposerNotice] = useState<{ type: "error" | "info"; message: string } | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
-
   const fileInputRef = useRef<HTMLInputElement>(null);
-
   const videoInputRef = useRef<HTMLInputElement>(null);
-
   const audioInputRef = useRef<HTMLInputElement>(null);
-
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-
-  const mediaStreamRef = useRef<MediaStream | null>(null);
-
-  const audioChunksRef = useRef<Blob[]>([]);
-
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const waveCanvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  const audioContextRef = useRef<AudioContext | null>(null);
-
-  const analyserRef = useRef<AnalyserNode | null>(null);
-
-  const animationFrameRef = useRef<number | null>(null);
-
-  const recordingTimerRef = useRef<number | null>(null);
-
-
-
-  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-
-    setText(e.target.value);
-
-
-
+  const handleTextChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setText(event.target.value);
+    setComposerNotice(null);
     if (textareaRef.current) {
-
       textareaRef.current.style.height = "auto";
-
-      textareaRef.current.style.height =
-
-        textareaRef.current.scrollHeight + "px";
-
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
     }
-
   };
 
-
-
-  const handleImage = (
-
-    e: React.ChangeEvent<HTMLInputElement>
-
-  ) => {
-
-    const file = e.target.files?.[0];
-
-
-
+  const handleImage = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
     if (!file) return;
-
-
-
-    // Validate file size (max 5MB)
-
     if (file.size > 5 * 1024 * 1024) {
-
-      alert("Image must be less than 5MB");
-
+      setComposerNotice({ type: "error", message: "Image must be less than 5MB" });
       return;
-
     }
-
-
-
-    // Validate file type
-
     if (!file.type.startsWith("image/")) {
-
-      alert("Please select a valid image file");
-
+      setComposerNotice({ type: "error", message: "Please select a valid image file" });
       return;
-
     }
+
     void (async () => {
       try {
         const optimized = await optimizeImageFile(file, 1080, 0.8, 300 * 1024);
@@ -142,143 +72,55 @@ export default function CreatePost({ onPost }: Props) {
         setImage(optimizedDataUrl);
         setOriginalImage(originalDataUrl);
         setVideo(undefined);
-      } catch (err) {
-        console.warn("Image optimization failed", err);
-        alert("Image could not be compressed to the allowed size. Please choose a smaller image.");
+      } catch (error) {
+        console.warn("Image optimization failed", error);
+        setComposerNotice({ type: "error", message: "Image could not be compressed. Please choose a smaller image." });
       }
     })();
-};
-
-
-
-  const handleVideo = async (
-
-    e: React.ChangeEvent<HTMLInputElement>
-
-  ) => {
-
-    const file = e.target.files?.[0];
-
-
-
-    if (!file) return;
-
-
-
-    // Clear image when adding video
-
-    setImage(undefined);
-
-
-
-    setIsUploading(true);
-
-    setPostStatus("uploading");
-
-    const videoUrl = await uploadVideo(file, (progress: UploadProgress) => {
-
-      setUploadProgress(Math.round(progress.percent));
-
-    });
-
-
-
-    setIsUploading(false);
-
-    setUploadProgress(0);
-
-    setPostStatus("");
-
-
-
-    if (videoUrl) {
-
-      setVideo(videoUrl);
-
-    }
-
   };
 
-
+  const handleVideo = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setImage(undefined);
+    setIsUploading(true);
+    setPostStatus("uploading");
+    const videoUrl = await uploadVideo(file, (progress: UploadProgress) => {
+      setUploadProgress(Math.round(progress.percent));
+    });
+    setIsUploading(false);
+    setUploadProgress(0);
+    setPostStatus("");
+    if (videoUrl) setVideo(videoUrl);
+  };
 
   const handlePost = async () => {
-
     if (!text.trim() && !image && !video) return;
-
-
-
     setIsPosting(true);
-
     setPostStatus("posting");
-
-
-
-    // Call the onPost callback
-
     const success = await onPost(text, image, video, undefined, (percent) => {
       setUploadProgress(Math.max(0, Math.min(100, percent)));
     }, originalImage);
-  setOriginalImage(undefined);
-
+    setOriginalImage(undefined);
     if (!success) {
       setPostStatus("");
       setIsPosting(false);
       return;
     }
-
-
-
-    // Simulate brief delay for post creation to be visible
-
     await new Promise((resolve) => setTimeout(resolve, 500));
-
-
-
     setPostStatus("success");
-
-
-
-    // Reset form
-
     setText("");
-
     setImage(undefined);
-
     setVideo(undefined);
-
     setAudio(undefined);
-
     setUploadProgress(0);
-
-    if (fileInputRef.current) {
-
-      fileInputRef.current.value = "";
-
-    }
-
-    if (videoInputRef.current) {
-
-      videoInputRef.current.value = "";
-
-    }
-
-
-
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (videoInputRef.current) videoInputRef.current.value = "";
     setIsPosting(false);
-
-
-
-    // Show success for 1 second, then close
-
     await new Promise((resolve) => setTimeout(resolve, 1000));
-
     setPostStatus("");
-
     closeComposer();
-
   };
-
-
 
   void handlePost;
 
@@ -315,18 +157,18 @@ export default function CreatePost({ onPost }: Props) {
     if (!file) return;
 
     if (audio) {
-      alert("Only one audio attachment is allowed per post.");
+      setComposerNotice({ type: "error", message: "Only one audio attachment is allowed per post." });
       e.target.value = "";
       return;
     }
 
     if (file.size > 10 * 1024 * 1024) {
-      alert("Audio must be less than 10MB");
+      setComposerNotice({ type: "error", message: "Audio must be less than 10MB" });
       return;
     }
 
     if (!file.type.startsWith("audio/")) {
-      alert("Please select a valid audio file");
+      setComposerNotice({ type: "error", message: "Please select a valid audio file" });
       return;
     }
 
@@ -339,180 +181,14 @@ export default function CreatePost({ onPost }: Props) {
           setVideo(undefined);
         };
         reader.onerror = () => {
-          alert("Failed to read audio file");
+          setComposerNotice({ type: "error", message: "Failed to read audio file" });
         };
         reader.readAsDataURL(optimized);
       } catch (err) {
         console.warn("Audio optimization failed", err);
-        alert("Voice note could not be compressed to the allowed size. Please choose a smaller recording.");
+        setComposerNotice({ type: "error", message: "Voice note could not be compressed. Please choose a smaller recording." });
       }
     })();
-
-  };
-
-  const stopWaveformVisualization = () => {
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
-
-    if (audioContextRef.current) {
-      void audioContextRef.current.close().catch(() => undefined);
-      audioContextRef.current = null;
-    }
-
-    analyserRef.current = null;
-
-    if (waveCanvasRef.current) {
-      const canvasCtx = waveCanvasRef.current.getContext("2d");
-      if (canvasCtx) {
-        canvasCtx.clearRect(0, 0, waveCanvasRef.current.width, waveCanvasRef.current.height);
-      }
-    }
-  };
-
-  const startWaveformVisualization = (stream: MediaStream) => {
-    const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-
-    if (!AudioContextCtor) {
-      return;
-    }
-
-    const audioContext = new AudioContextCtor();
-    const analyser = audioContext.createAnalyser();
-    analyser.fftSize = 256;
-
-    const source = audioContext.createMediaStreamSource(stream);
-    source.connect(analyser);
-
-    audioContextRef.current = audioContext;
-    analyserRef.current = analyser;
-
-    const drawWaveform = () => {
-      const canvas = waveCanvasRef.current;
-      const currentAnalyser = analyserRef.current;
-
-      if (!canvas || !currentAnalyser) {
-        return;
-      }
-
-      const canvasCtx = canvas.getContext("2d");
-      if (!canvasCtx) {
-        return;
-      }
-
-      const width = (canvas.width = canvas.clientWidth || 240);
-      const height = (canvas.height = 48);
-      const dataArray = new Uint8Array(currentAnalyser.frequencyBinCount);
-
-      currentAnalyser.getByteFrequencyData(dataArray);
-
-      canvasCtx.clearRect(0, 0, width, height);
-      
-      // Create gradient for vibrant colors
-      const gradient = canvasCtx.createLinearGradient(0, 0, width, 0);
-      gradient.addColorStop(0, "#ec4899");
-      gradient.addColorStop(0.5, "#a855f7");
-      gradient.addColorStop(1, "#3b82f6");
-      
-      canvasCtx.fillStyle = gradient;
-      canvasCtx.shadowColor = "rgba(236, 72, 153, 0.4)";
-      canvasCtx.shadowBlur = 8;
-      canvasCtx.lineWidth = 2;
-      canvasCtx.beginPath();
-
-      const step = Math.max(1, Math.floor(dataArray.length / width));
-      for (let i = 0; i < width; i += 1) {
-        const value = dataArray[i * step] ?? 0;
-        const barHeight = Math.max(3, (value / 255) * (height - 8));
-        const x = i;
-        const y = height / 2 - barHeight / 2;
-        canvasCtx.fillRect(x, y, 1, barHeight);
-      }
-
-      canvasCtx.stroke();
-      animationFrameRef.current = window.requestAnimationFrame(drawWaveform);
-    };
-
-    drawWaveform();
-  };
-
-  const startRecording = async (replaceExisting = false) => {
-
-    if (!replaceExisting && audio) {
-      alert("Only one audio attachment is allowed per post.");
-      return;
-    }
-
-    try {
-
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-      const { mimeType, audioBitsPerSecond } = getSupportedAudioRecorderOptions();
-      const recorder = new MediaRecorder(stream, mimeType ? { mimeType, audioBitsPerSecond } : undefined);
-
-      mediaRecorderRef.current = recorder;
-      mediaStreamRef.current = stream;
-      audioChunksRef.current = [];
-
-      recorder.ondataavailable = (e) => {
-
-        audioChunksRef.current.push(e.data);
-
-      };
-
-      recorder.onstop = async () => {
-        try {
-          const sourceMimeType = audioChunksRef.current[0]?.type || "audio/webm";
-          const audioBlob = new Blob(audioChunksRef.current, { type: sourceMimeType });
-          const optimizedBlob = await optimizeVoiceNote(audioBlob, 5 * 1024 * 1024);
-          const audioUrl = URL.createObjectURL(optimizedBlob);
-          setAudio(audioUrl);
-        } catch (err) {
-          console.error("Voice optimization failed", err);
-          const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-          const audioUrl = URL.createObjectURL(audioBlob);
-          setAudio(audioUrl);
-        }
-      };
-
-      if (recordingTimerRef.current) {
-        window.clearInterval(recordingTimerRef.current);
-      }
-
-      setRecordingDuration(0);
-      recordingTimerRef.current = window.setInterval(() => {
-        setRecordingDuration((current) => current + 1);
-      }, 1000);
-
-      recorder.start();
-      startWaveformVisualization(stream);
-      setIsRecording(true);
-
-    } catch (err) {
-
-      alert("Microphone access denied. Please allow microphone permission.");
-
-    }
-
-  };
-
-  const stopRecording = () => {
-
-    if (mediaRecorderRef.current && isRecording) {
-
-      mediaRecorderRef.current.stop();
-
-      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
-      mediaStreamRef.current = null;
-      if (recordingTimerRef.current) {
-        window.clearInterval(recordingTimerRef.current);
-        recordingTimerRef.current = null;
-      }
-      stopWaveformVisualization();
-      setIsRecording(false);
-
-    }
 
   };
 
@@ -529,32 +205,6 @@ export default function CreatePost({ onPost }: Props) {
   };
 
 
-
-  const retryRecording = async () => {
-    if (isRecording) return;
-
-    removeAudio();
-    await startRecording(true);
-  };
-
-  const formatRecordingDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60)
-      .toString()
-      .padStart(2, "0");
-    const secs = (seconds % 60).toString().padStart(2, "0");
-    return `${mins}:${secs}`;
-  };
-
-  useEffect(() => {
-    return () => {
-      if (recordingTimerRef.current) {
-        window.clearInterval(recordingTimerRef.current);
-      }
-      stopWaveformVisualization();
-      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
-      mediaStreamRef.current = null;
-    };
-  }, []);
 
   useEffect(() => {
     if (!isExpanded) return;
@@ -709,6 +359,11 @@ export default function CreatePost({ onPost }: Props) {
       {/* Expanded composer card */}
 
       <div className="fixed inset-4 md:inset-12 lg:inset-24 z-101 flex max-h-[90vh] flex-col overflow-y-auto rounded-4xl border border-white/30 bg-white/20 p-6 shadow-2xl backdrop-blur-3xl">
+        {composerNotice ? (
+          <div className={`mb-4 rounded-2xl border px-3 py-2 text-sm font-medium ${composerNotice.type === "error" ? "border-rose-200 bg-rose-50 text-rose-700" : "border-sky-200 bg-sky-50 text-sky-700"}`}>
+            {composerNotice.message}
+          </div>
+        ) : null}
 
         {/* Header with close button */}
 
@@ -765,20 +420,6 @@ export default function CreatePost({ onPost }: Props) {
             <span>🎵</span>
 
             <audio src={audio} controls className="flex-1 h-8" />
-
-            <button
-
-              type="button"
-
-              onClick={retryRecording}
-
-              className="rounded-full border border-sky-300 bg-white/80 px-2.5 py-1 text-xs font-semibold text-sky-600 shadow-sm transition hover:bg-sky-50"
-
-            >
-
-              Retry
-
-            </button>
 
             <button
 
@@ -944,46 +585,6 @@ export default function CreatePost({ onPost }: Props) {
 
         )}
 
-        {isRecording && (
-
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-2xl">
-
-            <div className="flex items-center justify-between gap-3">
-
-              <div className="flex items-center gap-2">
-
-                <span className="inline-flex h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
-
-                <p className="text-sm font-semibold text-red-700">Recording in progress...</p>
-
-                <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
-                  {formatRecordingDuration(recordingDuration)}
-                </span>
-
-              </div>
-
-              <button
-
-                type="button"
-
-                onClick={stopRecording}
-
-                className="rounded-full bg-red-500 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-600"
-
-              >
-
-                ⏹ Stop
-
-              </button>
-
-            </div>
-
-            <canvas ref={waveCanvasRef} className="mt-3 h-10 w-full rounded-xl bg-slate-900/90" />
-
-          </div>
-
-        )}
-
         {/* Upload Progress */}
 
         {isUploading && (
@@ -1076,40 +677,8 @@ export default function CreatePost({ onPost }: Props) {
 
 
 
-            <button
-
-              type="button"
-
-              onClick={() => {
-                if (isRecording) {
-                  stopRecording();
-                } else {
-                  void startRecording();
-                }
-              }}
-
-              disabled={Boolean(audio) && !isRecording}
-
-              className={`h-11 w-11 rounded-full shadow-md flex items-center justify-center shrink-0 transition ${
-
-                isRecording
-
-                  ? "bg-red-500 text-white shadow-lg shadow-red-500/40 animate-pulse scale-105"
-
-                  : "bg-blue-500 text-white hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/30 active:scale-95"
-
-              } ${Boolean(audio) && !isRecording ? "opacity-50 cursor-not-allowed" : ""}`}
-
-              title={isRecording ? "Stop recording" : "Record voice"}
-
-            >
-
-              {isRecording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-
-            </button>
-
             <label
-              className={`w-11 h-11 rounded-xl bg-white shadow-md flex items-center justify-center text-xl hover:scale-105 transition ${Boolean(audio) ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+              className={`w-11 h-11 rounded-xl bg-white shadow-md flex items-center justify-center text-xl hover:scale-105 transition ${audio ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
               title={audio ? "Audio already selected" : "Upload audio"}
               onClick={(e) => {
                 if (audio) {
@@ -1131,7 +700,7 @@ export default function CreatePost({ onPost }: Props) {
 
                 onChange={handleAudio}
 
-                disabled={isUploading || isRecording || Boolean(audio)}
+                disabled={isUploading || Boolean(audio)}
 
                 className="hidden"
 
@@ -1189,7 +758,7 @@ export default function CreatePost({ onPost }: Props) {
 
               onClick={handlePostWithAudio}
 
-              disabled={(!text.trim() && !image && !video && !audio) || isUploading || isPosting || isRecording}
+              disabled={(!text.trim() && !image && !video && !audio) || isUploading || isPosting}
 
               className="flex-1 md:flex-none bg-linear-to-r from-sky-500 to-cyan-500 text-white px-6 py-3 rounded-2xl font-bold shadow-md hover:scale-105 transition disabled:opacity-50 disabled:cursor-not-allowed"
 

@@ -28,8 +28,8 @@ export const VibesProCreatePost: React.FC<VibesProCreatePostProps> = ({
   };
 
   return (
-    <div className="px-4 py-6">
-      <PremiumCard className="p-6">
+    <div className="px-4 py-0">
+      <PremiumCard className="p-4">
         {/* Header with Avatar */}
         <div className="flex items-center gap-4 mb-4">
           {/* Premium Avatar */}

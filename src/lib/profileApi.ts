@@ -62,11 +62,6 @@ export async function upsertProfileToSupabase(profile: ProfileData): Promise<Pro
     const existingProfile = (existingProfileRow as DbProfile | null) ?? null;
     const normalizedLanguage = normalizeLanguage(profile.language ?? existingProfile?.language ?? undefined);
     const { profilePic } = profile;
-    const vibesProValue = typeof profile.is_vibes_pro === "boolean"
-      ? profile.is_vibes_pro
-      : typeof profile.vibes_pro === "boolean"
-        ? profile.vibes_pro
-        : Boolean(existingProfile?.is_vibes_pro ?? existingProfile?.vibes_pro ?? false);
     const dbProfile = {
       id: profile.id,
       username: profile.username ?? existingProfile?.username ?? "",
@@ -74,11 +69,7 @@ export async function upsertProfileToSupabase(profile: ProfileData): Promise<Pro
       email: profile.email ?? existingProfile?.email ?? "",
       profile_pic: profilePic ?? profile.vibes_pro_portrait ?? existingProfile?.profile_pic ?? null,
       profile_original_pic: profile.profile_original_pic ?? existingProfile?.profile_original_pic ?? null,
-      is_vibes_pro: vibesProValue,
       vibes_pro_portrait: profile.vibes_pro_portrait ?? existingProfile?.vibes_pro_portrait ?? null,
-      vibes_pro_until: profile.vibes_pro_until ?? existingProfile?.vibes_pro_until ?? null,
-      stripe_customer_id: profile.stripe_customer_id ?? existingProfile?.stripe_customer_id ?? null,
-      stripe_subscription_id: profile.stripe_subscription_id ?? existingProfile?.stripe_subscription_id ?? null,
       interests: profile.interests ?? existingProfile?.interests ?? [],
       language: normalizedLanguage,
       hommies_count: profile.hommies_count ?? existingProfile?.hommies_count ?? 0,
@@ -91,7 +82,6 @@ export async function upsertProfileToSupabase(profile: ProfileData): Promise<Pro
       payload: dbProfile,
       hasId: Boolean(dbProfile.id),
       hasUserId: Boolean((dbProfile as any).user_id),
-      isVibesPro: dbProfile.vibes_pro,
       language: dbProfile.language,
     });
 

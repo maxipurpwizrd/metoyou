@@ -5,9 +5,10 @@ import type { VibesProPostType } from './types';
 type VibesProPostsCarouselProps = {
   posts: VibesProPostType[];
   onPostSelect?: (post: VibesProPostType) => void;
+  viewingOwn?: boolean;
 };
 
-export default function VibesProPostsCarousel({ posts, onPostSelect }: VibesProPostsCarouselProps) {
+export default function VibesProPostsCarousel({ posts, onPostSelect, viewingOwn = false }: VibesProPostsCarouselProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const { t } = useLanguage();
@@ -108,7 +109,7 @@ export default function VibesProPostsCarousel({ posts, onPostSelect }: VibesProP
 
         <div className="text-center">
           <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-amber-300">{t("vibespro.title")}</p>
-          <p className="text-[11px] text-white/70">{t("vibespro.premiumUser")}</p>
+          <p className="text-[11px] text-white/70">{t(viewingOwn ? "vibespro.ownPremiumUser" : "vibespro.premiumUser")}</p>
         </div>
       </div>
     </section>

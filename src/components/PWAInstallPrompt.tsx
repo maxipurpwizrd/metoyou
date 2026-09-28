@@ -27,12 +27,6 @@ export default function PWAInstallPrompt() {
     };
   }, []);
 
-  useEffect(() => {
-    if (deferredPrompt && !isInstalled) {
-      setShowPrompt(true);
-    }
-  }, [deferredPrompt, isInstalled]);
-
   if (!deferredPrompt || isInstalled || !showPrompt) {
     return null;
   }

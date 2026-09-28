@@ -1,5 +1,5 @@
 import Navbar from "../components/Navbar";
-import { useMemo, useState, useEffect, useRef, useCallback, useLayoutEffect } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback, useLayoutEffect, type CSSProperties } from "react";
 import { AutoSizer, CellMeasurer, CellMeasurerCache, List, WindowScroller } from "react-virtualized";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useFeed, type Post as FeedPost } from "../contexts/FeedContext";
@@ -17,6 +17,7 @@ import { FreeFeedSkeleton, VibesProFeedSkeleton } from "../components/skeletons/
 import { savePostToSupabase, deletePostFromSupabase, updatePostInSupabase, uploadAudioToSupabase, uploadImageVariantsToSupabase, fetchPostByIdFromSupabase } from "../lib/postApi";
 import { addComment, editComment, deleteComment } from "../lib/commentApi";
 import { likePost, unlikePost, getPostLikes } from "../lib/likeApi";
+import { blockUser } from "../lib/moderationApi";
 import {
   createStoryToSupabase,
   deleteStoryFromSupabase,
@@ -63,7 +64,8 @@ const mapStoryRecord = (story: StoryRecord): Story => ({
   createdAt: story.created_at,
 });
 
-export default function Feed(_props: { embedded?: boolean } = {}) {
+export default function Feed(props: { embedded?: boolean } = {}) {
+  void props;
   const { appReady } = useAppInit();
   const { profileReady } = useSession();
   const feedInitializing = !appReady || !profileReady;
@@ -105,7 +107,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
     const saved = localStorage.getItem("metoyou-saved-posts");
     return saved ? (JSON.parse(saved) as string[]) : [];
   });
-  const listRef = useRef<any>(null);
+  const listRef = useRef<{ recomputeRowHeights: (startIndex?: number) => void } | null>(null);
   const previousFilteredIdsRef = useRef<string[]>([]);
   const previousLayoutSignatureRef = useRef("");
   const cache = useRef(
@@ -170,8 +172,12 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
 
   useEffect(() => {
     if (!selectedStory) {
-      setStoryMenuOpen(false);
+      const timer = window.setTimeout(() => {
+        setStoryMenuOpen(false);
+      }, 0);
+      return () => window.clearTimeout(timer);
     }
+    return undefined;
   }, [selectedStory]);
 
   const [storyEditorOpen, setStoryEditorOpen] = useState<boolean>(false);
@@ -229,9 +235,11 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
 
   useEffect(() => {
     if (!requestedPostId) {
-      setFocusedPost(null);
-      setSelectedPostId(null);
-      return;
+      const timeout = window.setTimeout(() => {
+        setFocusedPost(null);
+        setSelectedPostId(null);
+      }, 0);
+      return () => window.clearTimeout(timeout);
     }
 
     let active = true;
@@ -261,7 +269,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
           id: record.author_id,
           username: record.profiles?.username ?? record.author_id,
           avatar: record.profiles?.profile_pic ?? undefined,
-          is_vibes_pro: isVibesProEnabled(record.profiles as any),
+          is_vibes_pro: isVibesProEnabled(record.profiles as { is_vibes_pro?: boolean } | null),
         },
         authorId: record.author_id,
         author_id: record.author_id,
@@ -293,6 +301,11 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
   }, [posts, requestedPostId, setSelectedPostId]);
 
   const suppressAutoCloseRef = useRef(false);
+  const fastScrollCloseRef = useRef<{
+    postId: string | number;
+    direction: 1 | -1;
+    timer: number | null;
+  } | null>(null);
 
   const handleShareStory = async () => {
     if (!selectedStory) return;
@@ -494,17 +507,22 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
     if (!selectedStory || selectedStoryIndex === null) return;
 
     if (selectedStory.voice) {
-      showStoryNotice("Coming Soon");
+      const noticeTimer = window.setTimeout(() => {
+        showStoryNotice("Coming Soon");
+      }, 0);
       const delayTimer = window.setTimeout(() => {
         goToNextStory();
       }, 3000);
 
       return () => {
+        window.clearTimeout(noticeTimer);
         window.clearTimeout(delayTimer);
       };
     }
 
-    setStoryProgress(0);
+    const resetTimer = window.setTimeout(() => {
+      setStoryProgress(0);
+    }, 0);
     const progressInterval = window.setInterval(() => {
       setStoryProgress((prev) => {
         const next = prev + 100 / 50;
@@ -519,26 +537,93 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
     return () => {
       window.clearInterval(progressInterval);
       window.clearTimeout(advanceTimer);
+      window.clearTimeout(resetTimer);
     };
   }, [selectedStory?.id, selectedStoryIndex]);
 
   useEffect(() => {
-    const handleScroll = () => {
+    if (!selectedPostId) return;
+
+    let lastScrollY = window.scrollY || 0;
+
+    const closeIfAtEdge = () => {
       if (suppressAutoCloseRef.current) return;
-      setSelectedPostId(null);
+
+      const selectedNode = document.querySelector(
+        `[data-post-id="${String(selectedPostId).replace(/"/g, '\\"')}"]`
+      );
+
+      if (!selectedNode) return;
+
+      const rect = selectedNode.getBoundingClientRect();
+      const currentScrollY = window.scrollY || 0;
+      const deltaY = currentScrollY - lastScrollY;
+      const navbarHeight = 72;
+      const bottomBarHeight = 88;
+      const edgePadding = 20;
+
+      const shouldCloseAtTop = deltaY > 0 && rect.top <= navbarHeight + edgePadding;
+      const shouldCloseAtBottom = deltaY < 0 && rect.bottom >= window.innerHeight - bottomBarHeight - edgePadding;
+
+      if (shouldCloseAtTop || shouldCloseAtBottom) {
+        const direction = deltaY > 0 ? 1 : -1;
+        const pendingClose = fastScrollCloseRef.current;
+
+        if (!pendingClose || pendingClose.postId !== selectedPostId) {
+          const timer = window.setTimeout(() => {
+            fastScrollCloseRef.current = null;
+            setSelectedPostId(null);
+          }, 180);
+
+          fastScrollCloseRef.current = {
+            postId: selectedPostId,
+            direction,
+            timer,
+          };
+          lastScrollY = currentScrollY;
+          return;
+        }
+
+        if (pendingClose.direction !== direction) {
+          if (pendingClose.timer !== null) {
+            window.clearTimeout(pendingClose.timer);
+          }
+          fastScrollCloseRef.current = null;
+          lastScrollY = currentScrollY;
+          return;
+        }
+
+        lastScrollY = currentScrollY;
+        return;
+      }
+
+      if (fastScrollCloseRef.current?.postId === selectedPostId) {
+        if (fastScrollCloseRef.current.timer !== null) {
+          window.clearTimeout(fastScrollCloseRef.current.timer);
+        }
+        fastScrollCloseRef.current = null;
+      }
+
+      lastScrollY = currentScrollY;
     };
 
-    window.addEventListener("scroll", handleScroll, { passive: true });
+    closeIfAtEdge();
+    window.addEventListener("scroll", closeIfAtEdge, { passive: true });
+
     return () => {
-      window.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("scroll", closeIfAtEdge);
       if (autoCloseTimeoutRef.current) {
         window.clearTimeout(autoCloseTimeoutRef.current);
       }
+      if (fastScrollCloseRef.current?.timer) {
+        window.clearTimeout(fastScrollCloseRef.current.timer);
+      }
+      fastScrollCloseRef.current = null;
     };
-  }, [setSelectedPostId]);
+  }, [selectedPostId, setSelectedPostId]);
 
   const updatePostById = (postId: string | number, patch: Partial<Post>) => {
-    const idStr = (x: any) => String(x);
+    const idStr = (x: unknown) => String(x);
 
     setPosts((prev) => {
       // If the patch includes a new `id` (server-assigned), we must ensure
@@ -1062,8 +1147,8 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
           <div className={`rounded-[32px] border p-2 shadow-2xl backdrop-blur-md ${isVibesPro ? 'border-[#D4AF37]/20 bg-[#181818]' : 'border-white/40 bg-white/70'}`}>
             <PostCard
               author={focusedPost.author}
-              isVibesPro={isVibesProEnabled(focusedPost.author as any)}
-              variant={isVibesProEnabled(focusedPost.author as any) ? "gold" : "default"}
+              isVibesPro={isVibesProEnabled(focusedPost.author as { is_vibes_pro?: boolean } | null)}
+              variant={isVibesProEnabled(focusedPost.author as { is_vibes_pro?: boolean } | null) ? "gold" : "default"}
               postId={focusedPost.id}
               authorId={focusedPost.authorId ?? focusedPost.author.id}
               time={focusedPost.time}
@@ -1101,9 +1186,9 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
   // Normal feed content that can be wrapped by VibesProFeed theme
   const feedContent = (
     <div onTouchStart={handleFeedTouchStart} onTouchEnd={handleFeedTouchEnd} className={`app-screen ${isVibesPro ? 'bg-[#0B0B0B]' : 'bg-linear-to-br from-sky-100 via-white to-cyan-100'} px-4 sm:px-6`}>
-      {!shouldFocusOnPost && !isVibesPro && <Navbar />}
+      {!shouldFocusOnPost && !isVibesPro && selectedPostId === null && <Navbar />}
 
-      <div className={`max-w-md mx-auto pb-24 space-y-5 ${shouldFocusOnPost ? 'pt-4' : isVibesPro ? 'pt-8' : 'pt-28'}`}>
+      <div className={`max-w-md mx-auto pb-24 space-y-5 ${shouldFocusOnPost || selectedPostId !== null ? 'pt-4' : isVibesPro ? 'pt-8' : 'pt-28'}`}>
         <input
           ref={fileInputRef}
           type="file"
@@ -1220,7 +1305,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
         {/* Dynamic Post Interaction Container */}
         <div
           onClick={() => selectedPostId !== null && setSelectedPostId(null)}
-          className={`space-y-4 transition-all duration-300 ${selectedPostId !== null ? "relative z-10" : ""}`}
+          className={`space-y-2 transition-all duration-300 ${selectedPostId !== null ? "relative z-10" : ""}`}
         >
           {selectedPostId !== null && (
             <div className="fixed inset-0 bg-black/5 z-0 pointer-events-none backdrop-blur-xs"></div>
@@ -1234,9 +1319,9 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
             )
           ) : (
             <WindowScroller>
-              {({ height, isScrolling, onChildScroll, scrollTop }: any) => (
+              {({ height, isScrolling, onChildScroll, scrollTop }: { height: number; isScrolling: boolean; onChildScroll: (params: { scrollTop: number }) => void; scrollTop: number }) => (
                 <AutoSizer disableHeight>
-                  {({ width }: any) => (
+                  {({ width }: { width: number }) => (
                     <List
                       autoHeight
                       width={width}
@@ -1245,7 +1330,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                       rowHeight={cache.current.rowHeight}
                       deferredMeasurementCache={cache.current}
                       overscanRowCount={8}
-                      rowRenderer={({ index, parent, style }: any) => {
+                      rowRenderer={({ index, parent, style }: { index: number; parent: unknown; style: CSSProperties }) => {
                         const post = filteredPosts[index];
                         const isSelected = selectedPostId === post.id;
 
@@ -1257,11 +1342,11 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                             parent={parent}
                             rowIndex={index}
                           >
-                            {({ registerChild }: any) => (
+                            {({ registerChild }: { registerChild: (node: Element | null) => void }) => (
                               <div
                                 ref={registerChild}
                                 style={{ ...style, width: "100%" }}
-                                className="mb-4 px-1 sm:px-2"
+                                className="mb-2 px-1 sm:px-2"
                                 data-post-id={String(post.id)}
                               >
                                 <div
@@ -1280,8 +1365,8 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                                 >
                                   <PostCard
                                     author={post.author}
-                                    isVibesPro={isVibesProEnabled(post.author as any)}
-                                    variant={isVibesProEnabled(post.author as any) ? "gold" : "default"}
+                                    isVibesPro={isVibesProEnabled(post.author as { is_vibes_pro?: boolean } | null)}
+                                    variant={isVibesProEnabled(post.author as { is_vibes_pro?: boolean } | null) ? "gold" : "default"}
                                     postId={post.id}
                                     authorId={post.authorId ?? post.author.id}
                                     time={post.time}
@@ -1409,12 +1494,17 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                                     highlighted={Boolean(post.highlighted)}
                                     uploadState={post.uploadState}
                                     uploadProgress={post.uploadProgress}
-                                    onMuteUser={() => {
-                                      setMutedUsers((prev) =>
-                                        prev.includes(post.author.id) ? prev : [...prev, post.author.id]
-                                      );
-                                      if (selectedPostId === post.id) setSelectedPostId(null);
-                                      alert("User muted");
+                                    onBlockUser={async () => {
+                                      try {
+                                        await blockUser(post.author.id);
+                                        setMutedUsers((prev) =>
+                                          prev.includes(post.author.id) ? prev : [...prev, post.author.id]
+                                        );
+                                        if (selectedPostId === post.id) setSelectedPostId(null);
+                                        alert("User blocked");
+                                      } catch {
+                                        alert("Unable to block this user right now.");
+                                      }
                                     }}
                                     onAddComment={async (comment) => {
                                       const profile = currentUserProfile;
@@ -1493,7 +1583,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
                           </CellMeasurer>
                         );
                       }}
-                      onRowsRendered={({ stopIndex }: any) => {
+                      onRowsRendered={({ stopIndex }: { stopIndex: number }) => {
                         if (hasMore && stopIndex >= filteredPosts.length - 3) {
                           void loadMorePosts();
                         }
@@ -2100,7 +2190,7 @@ export default function Feed(_props: { embedded?: boolean } = {}) {
   // Wrap with VibesProFeed if user is premium, otherwise return normal feed
   if (isVibesPro) {
     return (
-      <VibesProFeed hideNavbar={Boolean(selectedStory)}>
+      <VibesProFeed hideNavbar={Boolean(selectedStory || selectedPostId !== null)}>
         {feedContent}
       </VibesProFeed>
     );
