@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { supabase } from './supabase';
-import { subscribeToMessages } from './messageApi';
+import { reactToMessage, subscribeToMessages } from './messageApi';
 import { resolveOrCreateConversation } from './conversationResolver';
 
 vi.mock('./supabase', () => {
@@ -45,6 +45,28 @@ describe('subscribeToMessages', () => {
 
     expect(supabase.channel).toHaveBeenCalledTimes(1);
     expect(firstChannel).toBe(secondChannel);
+  });
+});
+
+describe('reactToMessage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('calls the secure backend reaction RPC with canonical inputs', async () => {
+    vi.mocked(supabase.rpc).mockResolvedValue({
+      data: [{ id: 'message-1', reactions: { '❤️': ['user-a', 'user-b'] } }],
+      error: null,
+    });
+
+    const result = await reactToMessage('message-1', '❤️', 'add');
+
+    expect(supabase.rpc).toHaveBeenCalledWith('react_to_message', {
+      p_message_id: 'message-1',
+      p_emoji: '❤️',
+      p_action: 'add',
+    });
+    expect(result).toEqual({ id: 'message-1', reactions: { '❤️': ['user-a', 'user-b'] } });
   });
 });
 

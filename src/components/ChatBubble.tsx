@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { MoreVertical, Edit2, Trash2, Reply } from "lucide-react";
 import type { Message } from "../lib/messageApi";
-import { updateMessageReactions } from "../lib/messageApi";
+import { reactToMessage } from "../lib/messageApi";
+import { supabase } from "../lib/supabase";
 import { formatDisplayTime } from "../lib/time";
 
 type Props = {
@@ -57,8 +58,25 @@ export default function ChatBubble({ message, mine = false, onEdit, onDelete, on
   const [currentTime, setCurrentTime] = useState(0);
   const [showReactions, setShowReactions] = useState(false);
   const [reactions, setReactions] = useState<Record<string, string[]>>(message.reactions ?? {});
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [showMenu, setShowMenu] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    supabase.auth.getUser().then(({ data, error }) => {
+      if (!active) return;
+      setCurrentUserId(error ? null : data.user?.id ?? null);
+    }).catch(() => {
+      if (active) {
+        setCurrentUserId(null);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
   const [editText, setEditText] = useState(message.text ?? "");
   const bubbleWrapperRef = useRef<HTMLDivElement | null>(null);
   const reactionTrayRef = useRef<HTMLDivElement | null>(null);
@@ -190,36 +208,38 @@ export default function ChatBubble({ message, mine = false, onEdit, onDelete, on
     }
   }
 
-  function handleReact(emoji: string) {
+  async function handleReact(emoji: string) {
     cancelReactionHold();
-    setReactions((prev) => {
-      const next: Record<string, string[]> = {};
-      let currentReaction: string | null = null;
 
-      Object.entries(prev).forEach(([key, list]) => {
-        if (list.includes("me")) {
-          currentReaction = key;
-        }
-        const filtered = list.filter((item) => item !== "me");
-        if (filtered.length > 0) {
-          next[key] = filtered;
-        }
-      });
+    if (!currentUserId) {
+      return;
+    }
 
-      if (currentReaction === emoji) {
-        return next;
+    const previous = { ...reactions };
+    const existingUsers = previous[emoji] ?? [];
+    const currentUserHasReaction = existingUsers.includes(currentUserId);
+
+    const optimistic: Record<string, string[]> = { ...previous };
+
+    if (currentUserHasReaction) {
+      const remaining = existingUsers.filter((userId) => userId !== currentUserId);
+      if (remaining.length > 0) {
+        optimistic[emoji] = remaining;
+      } else {
+        delete optimistic[emoji];
       }
+    } else {
+      optimistic[emoji] = [...new Set([...existingUsers, currentUserId])];
+    }
 
-      const list = next[emoji] ?? [];
-      next[emoji] = [...list, "me"];
-      return next;
-    });
+    setReactions(optimistic);
+    const result = await reactToMessage(message.id, emoji, currentUserHasReaction ? "remove" : "add");
 
-    // Save reactions to database and broadcast to other users
-    setReactions((updated) => {
-      void updateMessageReactions(message.id, updated);
-      return updated;
-    });
+    if (result?.reactions) {
+      setReactions(result.reactions);
+    } else {
+      setReactions(previous);
+    }
 
     setShowReactions(false);
   }
@@ -258,7 +278,7 @@ export default function ChatBubble({ message, mine = false, onEdit, onDelete, on
 
   return (
     <div className={`flex w-full ${mine ? "justify-end" : "justify-start"} group`}>
-      <div className={`w-full max-w-[min(85%,28rem)] min-w-0 mb-2 text-sm ${mine ? "text-right" : "text-left"}`}>
+      <div className={`w-full max-w-[min(85%,28rem)] min-w-0 mb-1 text-sm ${mine ? "text-right" : "text-left"}`}>
         {/* Menu button - appears on hover for own messages */}
         {mine && (
           <div className="flex items-center justify-end gap-1 mb-1 opacity-0 group-hover:opacity-100 transition-opacity">

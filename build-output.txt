@@ -2,42 +2,27 @@
 > metoyou@0.0.0 build
 > tsc -b && vite build
 
-src/hooks/useChatMessageActions.ts(46,9): error TS2353: Object literal may only specify known properties, and 'metadata' does not exist in type 'SendMessageParams'.
-src/hooks/useChatNotifications.ts(5,3): error TS2305: Module '"../lib/notificationPush"' has no exported member 'sendPushSubscriptionToServer'.
-src/lib/backgroundSubscriptions.ts(26,59): error TS2554: Expected 2 arguments, but got 3.
-src/lib/messageRealtime.ts(1,25): error TS2307: Cannot find module '@/config/backend' or its corresponding type declarations.
-src/lib/messageRealtime.ts(9,8): error TS2307: Cannot find module '@/services/mock/realtimeHub' or its corresponding type declarations.
-src/services/auth/authService.ts(1,25): error TS2307: Cannot find module '@/config/backend' or its corresponding type declarations.
-src/services/auth/authService.ts(2,1): error TS6192: All imports in import declaration are unused.
-src/services/auth/supabaseAuth.ts(1,26): error TS2307: Cannot find module '@/lib/supabase' or its corresponding type declarations.
-src/services/auth/supabaseAuth.ts(89,63): error TS7006: Parameter '_event' implicitly has an 'any' type.
-src/services/auth/supabaseAuth.ts(89,71): error TS7006: Parameter 'session' implicitly has an 'any' type.
-src/services/index.ts(1,25): error TS2307: Cannot find module '@/config/backend' or its corresponding type declarations.
-src/services/interfaces/chat.ts(2,38): error TS6196: 'MessageThread' is declared but never used.
-src/services/mock/auth.ts(150,37): error TS2554: Expected 0 arguments, but got 1.
-src/services/mock/chat.ts(4,15): error TS6196: 'ChatService' is declared but never used.
-src/services/mock/chat.ts(13,7): error TS6133: 'STORAGE_USERS_KEY' is declared but its value is never read.
-src/services/mock/chat.ts(17,7): error TS6133: 'STORAGE_TYPING_KEY' is declared but its value is never read.
-src/services/mock/chat.ts(161,10): error TS6133: 'loadPresence' is declared but its value is never read.
-src/services/mock/chat.ts(165,10): error TS6133: 'savePresence' is declared but its value is never read.
-src/services/mock/chat.ts(181,54): error TS2554: Expected 0 arguments, but got 1.
-src/services/mock/chat.ts(379,41): error TS2339: Property 'conversationId' does not exist on type 'never'.
-src/services/mock/chat.ts(497,45): error TS6133: 'path' is declared but its value is never read.
-src/services/mock/chat.ts(547,62): error TS7006: Parameter 'channel' implicitly has an 'any' type.
-src/services/mock/chat.ts(562,3): error TS1117: An object literal cannot have multiple properties with the same name.
-src/services/mock/presence.ts(80,12): error TS2304: Cannot find name 'MockPresenceChannel'.
-src/services/mock/presence.ts(100,22): error TS2304: Cannot find name 'MockPresenceChannel'.
-src/services/mock/presence.ts(150,3): error TS6133: 'userId' is declared but its value is never read.
-src/services/mock/presence.ts(151,13): error TS2304: Cannot find name 'MockPresenceChannel'.
-src/services/mock/realtimeHub.ts(58,10): error TS6133: 'broadcastMessage' is declared but its value is never read.
-src/services/supabase/chat.ts(5,3): error TS6196: 'Message' is declared but never used.
-src/services/supabase/chat.ts(6,3): error TS6196: 'MessageThread' is declared but never used.
-src/services/supabase/chat.ts(12,3): error TS6196: 'ChatMessagePayload' is declared but never used.
-src/services/supabase/chat.ts(14,3): error TS6196: 'TypingPayload' is declared but never used.
-src/services/supabase/chat.ts(17,24): error TS6133: 'getMessageThreadsImpl' is declared but its value is never read.
-src/services/supabase/chat.ts(82,28): error TS6133: 'conversationId' is declared but its value is never read.
-src/services/supabase/chat.ts(125,26): error TS2339: Property 'error' does not exist on type '{ data: { publicUrl: string; }; }'.
-src/services/supabase/chat.ts(166,3): error TS2322: Type '(conversationId: string, senderId: string, typing: boolean) => Promise<boolean>' is not assignable to type '(conversationId: string, senderId: string) => Promise<boolean>'.
-  Target signature provides too few arguments. Expected 3 or more, but got 2.
-src/services/supabase/chat.ts(176,3): error TS2322: Type '(conversationId: string, callback: (state: PresenceState) => void) => Promise<RealtimeChannel>' is not assignable to type '(conversationId: string, callback: (state: PresenceState) => void) => RealtimeChannel'.
-  Type 'Promise<RealtimeChannel>' is missing the following properties from type 'RealtimeChannel': topic, params, socket, bindings, and 21 more.
+[36mvite v8.0.16 [32mbuilding client environment for production...[36m[39m
+[2K
+transforming...Γ£ô 2053 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                               0.97 kB Γöé gzip:   0.52 kB
+dist/assets/throne-template-ChITsTUb.png     30.55 kB
+dist/assets/index-Y9F-gB_d.css              158.55 kB Γöé gzip:  21.61 kB
+dist/assets/index-Cg_lIWRm.js             1,128.97 kB Γöé gzip: 284.00 kB
+
+[INEFFECTIVE_DYNAMIC_IMPORT] src/lib/imageUtils.ts is dynamically imported by src/pages/Chat.tsx but also statically imported by src/components/CreatePost.tsx, src/lib/postApi.ts, src/lib/profileApi.ts, dynamic import will not move module into another chunk.
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+[PLUGIN_TIMINGS] Your build spent significant time in plugins. Here is a breakdown:
+  - @tailwindcss/vite:generate:build (41%)
+  - vite:asset (38%)
+  - rolldown:vite-resolve (15%)
+See https://rolldown.rs/options/checks#plugintimings for more details.
+
+[32mΓ£ô built in 36.85s[39m

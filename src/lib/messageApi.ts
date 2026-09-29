@@ -694,26 +694,43 @@ export async function markMessagesAsRead(
 }
 
 // Reaction helpers
-export async function updateMessageReactions(
+export async function reactToMessage(
   messageId: string,
-  reactions: Record<string, string[]>
-): Promise<boolean> {
+  emoji: string,
+  action: "add" | "remove"
+): Promise<{ id: string; reactions: Record<string, string[]> } | null> {
   try {
-    const { error } = await supabase
-      .from("messages")
-      .update({ reactions })
-      .eq("id", messageId);
-
-    if (error) {
-      console.error("updateMessageReactions error", error);
-      return false;
+    const normalizedEmoji = emoji?.trim();
+    if (!messageId || !normalizedEmoji || (action !== "add" && action !== "remove")) {
+      console.error("reactToMessage invalid input", { messageId, emoji: normalizedEmoji, action });
+      return null;
     }
 
-    console.debug(`Updated reactions for message ${messageId}`);
-    return true;
+    const { data, error } = await supabase.rpc("react_to_message", {
+      p_message_id: messageId,
+      p_emoji: normalizedEmoji,
+      p_action: action,
+    });
+
+    if (error) {
+      console.error("reactToMessage RPC error", error);
+      return null;
+    }
+
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row?.id) {
+      return null;
+    }
+
+    const reactions = row.reactions && typeof row.reactions === "object"
+      ? (row.reactions as Record<string, string[]>)
+      : {};
+
+    console.debug(`Reaction RPC succeeded for message ${messageId} (${action})`);
+    return { id: row.id, reactions };
   } catch (e) {
-    console.error("updateMessageReactions error", e);
-    return false;
+    console.error("reactToMessage error", e);
+    return null;
   }
 }
 

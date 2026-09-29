@@ -19,7 +19,7 @@ import { createPeerConnection } from "../lib/webrtc";
 import { createCallHistory, updateCallHistory } from "../lib/callHistoryApi";
 import { getAuthBoundaryVersion } from "../lib/authBoundary";
 import { getBlockState, unblockUser } from "../lib/moderationApi";
-import { getPresenceLabel, isPresenceOnline } from "../lib/presenceStatus";
+import { getPresenceLabel } from "../lib/presenceStatus";
 import BlockedChatState from "../components/moderation/BlockedChatState";
 import { acquireRealtimeChannel, hasTrackedRealtimeChannel, releaseRealtimeChannel } from "../lib/realtimeChannelRegistry";
 import type { CallSession } from "../types/call";

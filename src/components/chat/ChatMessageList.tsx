@@ -36,7 +36,7 @@ export function ChatMessageList({
     <div className="relative z-10 flex-1 overflow-y-auto overflow-x-hidden pt-28 md:pt-32 pb-28 md:pb-32 px-3 md:px-6 bg-transparent">
       <div className="max-w-xl mx-auto">
         {recipientId ? (
-          <div className="space-y-4">
+          <div className="space-y-2">
             {loadingMore && (
               <div className="text-center text-white/50 text-sm py-2">Loading older messages…</div>
             )}
