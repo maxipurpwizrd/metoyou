@@ -51,7 +51,7 @@ export default function Signup() {
       setLanguage(language);
       window.dispatchEvent(new Event("metoyou:signup-welcome"));
     } catch (error) {
-      setSignupError("SignUp Failed, Please Try Again");
+      setSignupError(t("auth.signupFailed"));
       console.error(error);
     } finally {
       setLoading(false);
@@ -76,14 +76,14 @@ export default function Signup() {
                 <circle cx="12" cy="16.5" r="1" fill="currentColor" stroke="none" />
               </svg>
             </div>
-            <h2 className="mt-4 text-xl font-black text-sky-950">SignUp Failed</h2>
-            <p className="mt-2 text-sm font-medium text-sky-800/75">Please Try Again</p>
+            <h2 className="mt-4 text-xl font-black text-sky-950">{t("auth.signupFailedTitle")}</h2>
+            <p className="mt-2 text-sm font-medium text-sky-800/75">{signupError}</p>
             <button
               type="button"
               onClick={() => setSignupError(null)}
               className="mt-5 w-full rounded-2xl bg-linear-to-r from-sky-500 to-cyan-400 px-4 py-3 font-bold text-white shadow-lg shadow-sky-400/25 transition hover:-translate-y-0.5"
             >
-              Try Again
+              {t("auth.tryAgain")}
             </button>
           </div>
         </div>
@@ -102,8 +102,8 @@ export default function Signup() {
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-linear-to-br from-sky-500 to-cyan-400 text-white shadow-lg shadow-sky-400/30">
               <CloudSun className="h-9 w-9" aria-hidden="true" />
             </div>
-            <h1 className="text-4xl font-black tracking-tight text-sky-950">Join And Shine</h1>
-            <p className="mt-2 text-sky-800/70">A little space for your people and your moments.</p>
+            <h1 className="text-4xl font-black tracking-tight text-sky-950">{t("signup.heroTitle")}</h1>
+            <p className="mt-2 text-sky-800/70">{t("signup.heroDescription")}</p>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -168,18 +168,18 @@ export default function Signup() {
 
           <div className="my-5 flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.2em] text-sky-700/55">
             <span className="h-px flex-1 bg-sky-200" />
-            <span>or</span>
+            <span>{t("auth.or")}</span>
             <span className="h-px flex-1 bg-sky-200" />
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
             <button type="button" onClick={() => void handleOAuthSignup("google")} disabled={loading} className="flex items-center justify-center gap-2 rounded-2xl border border-sky-200 bg-white/90 px-4 py-3 font-semibold text-sky-950 transition hover:bg-white disabled:opacity-60">
               <GoogleIcon />
-              {oauthComingSoon === "Google" ? "Coming soon" : "Google"}
+              {oauthComingSoon === "Google" ? t("auth.comingSoon") : "Google"}
             </button>
             <button type="button" onClick={() => void handleOAuthSignup("apple")} disabled={loading} className="flex items-center justify-center gap-2 rounded-2xl border border-sky-200 bg-white/90 px-4 py-3 font-semibold text-sky-950 transition hover:bg-white disabled:opacity-60">
               <AppleIcon />
-              {oauthComingSoon === "Apple" ? "Coming soon" : "Apple"}
+              {oauthComingSoon === "Apple" ? t("auth.comingSoon") : "Apple"}
             </button>
           </div>
 

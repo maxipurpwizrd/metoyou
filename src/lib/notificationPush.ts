@@ -127,3 +127,15 @@ export async function sendPushSubscriptionToServer(
     return false;
   }
 }
+
+export async function syncGrantedPushSubscription(userId: string): Promise<boolean> {
+  if (!userId || !isPushSupported() || Notification.permission !== "granted") {
+    return false;
+  }
+
+  const registration = await registerNotificationsServiceWorker();
+  if (!registration) return false;
+
+  const subscription = await subscribeToPushNotifications(registration);
+  return sendPushSubscriptionToServer(subscription, userId);
+}

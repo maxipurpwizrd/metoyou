@@ -1,4 +1,5 @@
 import ChatBubble from "../ChatBubble";
+import { useLanguage } from "../../contexts/LanguageContext";
 import type { Message } from "../../lib/messageApi";
 
 interface ChatMessageListProps {
@@ -28,6 +29,7 @@ export function ChatMessageList({
   messagesEndRef,
   recipientId,
 }: ChatMessageListProps) {
+  const { t } = useLanguage();
   const emptyStateClassName = isVibesPro
     ? "bg-[#181818]/80 backdrop-blur-3xl border border-[#D4AF37]/20 rounded-4xl p-8 text-center text-[#EBD39A]/70 shadow-[0_0_30px_rgba(212,175,55,0.08)]"
     : "bg-white/80 backdrop-blur-3xl border border-sky-100 rounded-4xl p-8 text-center text-slate-700 shadow-[0_10px_35px_rgba(14,165,233,0.08)]";
@@ -38,7 +40,7 @@ export function ChatMessageList({
         {recipientId ? (
           <div className="space-y-2">
             {loadingMore && (
-              <div className="text-center text-white/50 text-sm py-2">Loading older messages…</div>
+              <div className="text-center text-white/50 text-sm py-2">{t("chat.loadingOlder")}</div>
             )}
             {messagesLoading ? (
               <div className="space-y-4 py-8">
@@ -54,7 +56,7 @@ export function ChatMessageList({
               </div>
             ) : messages.length === 0 ? (
               <div className="text-center text-white/50 py-8">
-                No messages yet. Start the conversation! 💬
+                {t("chat.emptyConversation")}
               </div>
             ) : (() => {
               const filteredMessages = searchQuery.trim()
@@ -67,7 +69,7 @@ export function ChatMessageList({
               if (filteredMessages.length === 0) {
                 return (
                   <div className={`text-center py-8 ${isVibesPro ? "text-[#EBD39A]/70" : "text-white/50"}`}>
-                    No messages match your search. 🔎
+                    {t("chat.noSearchMatches")}
                   </div>
                 );
               }
@@ -87,7 +89,7 @@ export function ChatMessageList({
           </div>
         ) : (
           <div className={emptyStateClassName}>
-            Open a message thread or tap a profile message icon to start chatting.
+            {t("chat.openThreadPrompt")}
           </div>
         )}
       </div>

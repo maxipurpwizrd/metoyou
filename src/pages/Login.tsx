@@ -110,7 +110,7 @@ export default function Login() {
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-linear-to-br from-sky-500 to-cyan-400 text-white shadow-lg shadow-sky-400/30">
               <CloudSun className="h-9 w-9" aria-hidden="true" />
             </div>
-            <h1 className="text-4xl font-black tracking-tight text-sky-950">Welcome back</h1>
+            <h1 className="text-4xl font-black tracking-tight text-sky-950">{t("login.welcomeTitle")}</h1>
             <p className="mt-2 text-sky-800/70">{t("login.subtitle")}</p>
           </div>
 
@@ -142,18 +142,18 @@ export default function Login() {
 
           <div className="my-5 flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.2em] text-sky-700/55">
             <span className="h-px flex-1 bg-sky-200" />
-            <span>or</span>
+            <span>{t("auth.or")}</span>
             <span className="h-px flex-1 bg-sky-200" />
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
             <button type="button" onClick={() => void handleOAuthLogin("google")} disabled={loading} className="flex items-center justify-center gap-2 rounded-2xl border border-sky-200 bg-white/90 px-4 py-3 font-semibold text-sky-950 transition hover:bg-white disabled:opacity-60">
               <GoogleIcon />
-              {oauthComingSoon === "Google" ? "Coming soon" : "Google"}
+              {oauthComingSoon === "Google" ? t("auth.comingSoon") : "Google"}
             </button>
             <button type="button" onClick={() => void handleOAuthLogin("apple")} disabled={loading} className="flex items-center justify-center gap-2 rounded-2xl border border-sky-200 bg-white/90 px-4 py-3 font-semibold text-sky-950 transition hover:bg-white disabled:opacity-60">
               <AppleIcon />
-              {oauthComingSoon === "Apple" ? "Coming soon" : "Apple"}
+              {oauthComingSoon === "Apple" ? t("auth.comingSoon") : "Apple"}
             </button>
           </div>
 

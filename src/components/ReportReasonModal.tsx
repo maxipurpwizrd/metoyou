@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { useLanguage } from "../contexts/LanguageContext";
 
 const POST_REPORT_REASONS = [
   "Bullying or abuse",
@@ -10,6 +11,13 @@ const POST_REPORT_REASONS = [
 
 export type PostReportReason = (typeof POST_REPORT_REASONS)[number];
 
+const POST_REPORT_REASON_KEYS: Record<PostReportReason, string> = {
+  "Bullying or abuse": "report.postReason.bullying",
+  "Adult Content": "report.postReason.adultContent",
+  "Fraud or Scam": "report.postReason.fraud",
+  "I don't just wanna see this": "report.postReason.notInterested",
+};
+
 type ReportReasonModalProps = {
   open: boolean;
   onClose: () => void;
@@ -17,6 +25,7 @@ type ReportReasonModalProps = {
 };
 
 export default function ReportReasonModal({ open, onClose, onSelect }: ReportReasonModalProps) {
+  const { t } = useLanguage();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,7 +53,7 @@ export default function ReportReasonModal({ open, onClose, onSelect }: ReportRea
       await onSelect(reason);
       onClose();
     } catch {
-      setError("Unable to submit this report right now. Please try again.");
+      setError(t("report.error"));
     } finally {
       setIsSubmitting(false);
     }
@@ -52,12 +61,12 @@ export default function ReportReasonModal({ open, onClose, onSelect }: ReportRea
 
   return createPortal(
     <div className="fixed inset-0 z-10000 grid place-items-center bg-black/40 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="report-reason-title">
-      <button type="button" aria-label="Close report dialog" onClick={onClose} className="absolute inset-0" disabled={isSubmitting} />
+      <button type="button" aria-label={t("common.close")} onClick={onClose} className="absolute inset-0" disabled={isSubmitting} />
       <div className="relative z-10 w-full max-w-sm rounded-2xl border border-sky-100 bg-white p-5 text-slate-800 shadow-2xl">
         <div className="mb-4 flex items-start justify-between gap-4">
-          <h2 id="report-reason-title" className="text-lg font-semibold">Why do you wanna report this post?</h2>
-          <button type="button" onClick={onClose} disabled={isSubmitting} className="text-sm text-slate-400 hover:text-slate-700" aria-label="Close report dialog">
-            Close
+          <h2 id="report-reason-title" className="text-lg font-semibold">{t("report.postTitle")}</h2>
+          <button type="button" onClick={onClose} disabled={isSubmitting} className="text-sm text-slate-400 hover:text-slate-700" aria-label={t("common.close")}>
+            {t("common.close")}
           </button>
         </div>
         <div className="space-y-2">
@@ -70,7 +79,7 @@ export default function ReportReasonModal({ open, onClose, onSelect }: ReportRea
               className="flex w-full items-center gap-3 rounded-xl border border-slate-200 px-3 py-3 text-left text-sm transition hover:border-sky-300 hover:bg-sky-50 disabled:cursor-wait disabled:opacity-60"
             >
               <span className="font-semibold text-slate-400">{index + 1}.</span>
-              <span>{reason}</span>
+              <span>{t(POST_REPORT_REASON_KEYS[reason])}</span>
             </button>
           ))}
         </div>

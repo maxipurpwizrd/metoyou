@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import SafetyOperationsPanel from "../components/admin/SafetyOperationsPanel";
+import { useLanguage } from "../contexts/LanguageContext";
 
 type AdminDashboardStats = {
   users: number;
@@ -83,6 +84,7 @@ type AdminReportedMessageItem = {
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [isCheckingAccess, setIsCheckingAccess] = useState(true);
   const [hasAdminAccess, setHasAdminAccess] = useState(false);
   const [isLoadingAdminDashboard, setIsLoadingAdminDashboard] = useState(false);
@@ -890,13 +892,13 @@ export default function AdminDashboard() {
             className="inline-flex w-fit items-center gap-2 rounded-full border border-white/60 bg-white/80 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm backdrop-blur"
           >
             <ArrowLeft className="h-4 w-4" />
-            ← Back
+            ← {t("admin.back")}
           </button>
 
           <div className="rounded-[32px] border border-white/60 bg-white/70 p-8 text-center shadow-2xl backdrop-blur-2xl">
             <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-sky-200 border-t-sky-500" />
-            <p className="text-lg font-semibold text-slate-900">Checking access…</p>
-            <p className="mt-2 text-sm text-slate-600">Please wait while we confirm your admin permissions.</p>
+            <p className="text-lg font-semibold text-slate-900">{t("admin.checkingAccess")}</p>
+            <p className="mt-2 text-sm text-slate-600">{t("admin.accessWait")}</p>
           </div>
         </div>
       </div>
@@ -913,12 +915,12 @@ export default function AdminDashboard() {
             className="inline-flex w-fit items-center gap-2 rounded-full border border-white/60 bg-white/80 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm backdrop-blur"
           >
             <ArrowLeft className="h-4 w-4" />
-            ← Back
+            ← {t("admin.back")}
           </button>
 
           <div className="rounded-[32px] border border-white/60 bg-white/70 p-8 text-center shadow-2xl backdrop-blur-2xl">
-            <p className="text-lg font-semibold text-slate-900">Sorry, you're not an admin.</p>
-            <p className="mt-2 text-sm text-slate-600">This area is restricted to MeToYou administrators.</p>
+            <p className="text-lg font-semibold text-slate-900">{t("admin.denied")}</p>
+            <p className="mt-2 text-sm text-slate-600">{t("admin.restrictedDescription")}</p>
           </div>
         </div>
       </div>
@@ -934,27 +936,27 @@ export default function AdminDashboard() {
           className="inline-flex w-fit items-center gap-2 rounded-full border border-white/60 bg-white/80 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm backdrop-blur"
         >
           <ArrowLeft className="h-4 w-4" />
-          ← Back
+          ← {t("admin.back")}
         </button>
 
         <div className="rounded-[32px] border border-white/60 bg-white/70 p-6 shadow-2xl backdrop-blur-2xl sm:p-8">
           <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.35em] text-slate-500">Developer/Admin</p>
-              <h1 className="text-3xl font-bold text-slate-950">Admin dashboard</h1>
-              <p className="mt-2 text-sm text-slate-600">A safer, dedicated workspace for moderation tools and platform insights.</p>
+              <p className="text-sm font-semibold uppercase tracking-[0.35em] text-slate-500">{t("admin.section")}</p>
+              <h1 className="text-3xl font-bold text-slate-950">{t("admin.dashboardTitle")}</h1>
+              <p className="mt-2 text-sm text-slate-600">{t("admin.dashboardDescription")}</p>
             </div>
-            {isLoadingAdminDashboard && <p className="text-sm text-slate-500">Loading live data…</p>}
+            {isLoadingAdminDashboard && <p className="text-sm text-slate-500">{t("admin.loadingLiveData")}</p>}
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {[
-              { label: "Users", value: adminStats.users, icon: User, tone: "from-sky-500 to-blue-500", action: () => navigate("/admin-users") },
-              { label: "Posts", value: adminStats.posts, icon: Activity, tone: "from-sky-500 to-cyan-500", action: () => navigate("/admin-posts") },
-              { label: "Comments", value: adminStats.comments, icon: AlertTriangle, tone: "from-amber-500 to-orange-500" },
-              { label: "Likes", value: adminStats.likes, icon: Heart, tone: "from-sky-500 to-blue-500" },
-              { label: "Reports", value: adminStats.reports, icon: ShieldAlert, tone: "from-red-500 to-rose-500" },
-              { label: "Online now", value: adminStats.onlineNow, icon: UserCheck, tone: "from-emerald-500 to-teal-500" },
+              { label: t("admin.users"), value: adminStats.users, icon: User, tone: "from-sky-500 to-blue-500", action: () => navigate("/admin-users") },
+              { label: t("admin.posts"), value: adminStats.posts, icon: Activity, tone: "from-sky-500 to-cyan-500", action: () => navigate("/admin-posts") },
+              { label: t("admin.comments"), value: adminStats.comments, icon: AlertTriangle, tone: "from-amber-500 to-orange-500" },
+              { label: t("admin.likes"), value: adminStats.likes, icon: Heart, tone: "from-sky-500 to-blue-500" },
+              { label: t("admin.reports"), value: adminStats.reports, icon: ShieldAlert, tone: "from-red-500 to-rose-500" },
+              { label: t("admin.onlineNow"), value: adminStats.onlineNow, icon: UserCheck, tone: "from-emerald-500 to-teal-500" },
             ].map((item) => {
               const Icon = item.icon;
               return (
@@ -980,10 +982,10 @@ export default function AdminDashboard() {
               <div className="rounded-2xl border border-white/60 bg-white/80 p-4 shadow-sm">
                 <div className="mb-3 flex items-center gap-2">
                   <Clock3 className="h-4 w-4 text-slate-500" />
-                  <h2 className="font-semibold text-slate-900">Recent activity</h2>
+                  <h2 className="font-semibold text-slate-900">{t("admin.recentActivity")}</h2>
                 </div>
                 {adminActivity.length === 0 ? (
-                  <p className="text-sm text-slate-500">No recent activity yet.</p>
+                  <p className="text-sm text-slate-500">{t("admin.noRecentActivity")}</p>
                 ) : (
                   <div className="space-y-2">
                     {adminActivity.map((item) => (
@@ -1004,17 +1006,17 @@ export default function AdminDashboard() {
               <div className="rounded-2xl border border-white/60 bg-white/80 p-4 shadow-sm">
                 <div className="mb-3 flex items-center gap-2">
                   <AlertTriangle className="h-4 w-4 text-slate-500" />
-                  <h2 className="font-semibold text-slate-900">Reports overview</h2>
+                  <h2 className="font-semibold text-slate-900">{t("admin.reportsOverview")}</h2>
                 </div>
                 {adminReports.total === 0 ? (
-                  <p className="text-sm text-slate-500">No reports available.</p>
+                  <p className="text-sm text-slate-500">{t("admin.noReports")}</p>
                 ) : (
                   <div className="grid gap-2 sm:grid-cols-2">
                     {[
-                      { label: "Total", value: adminReports.total, tone: "bg-slate-100 text-slate-700" },
-                      { label: "Pending", value: adminReports.pending, tone: "bg-amber-100 text-amber-700" },
-                      { label: "Reviewed", value: adminReports.reviewed, tone: "bg-emerald-100 text-emerald-700" },
-                      { label: "Escalated", value: adminReports.escalated, tone: "bg-rose-100 text-rose-700" },
+                      { label: t("admin.total"), value: adminReports.total, tone: "bg-slate-100 text-slate-700" },
+                      { label: t("admin.pending"), value: adminReports.pending, tone: "bg-amber-100 text-amber-700" },
+                      { label: t("admin.reviewed"), value: adminReports.reviewed, tone: "bg-emerald-100 text-emerald-700" },
+                      { label: t("admin.escalated"), value: adminReports.escalated, tone: "bg-rose-100 text-rose-700" },
                     ].map((item) => (
                       <div key={item.label} className={`rounded-2xl px-3 py-3 ${item.tone}`}>
                         <p className="text-lg font-semibold">{item.value}</p>
@@ -1026,17 +1028,17 @@ export default function AdminDashboard() {
 
                 <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50 p-3">
                   <div className="mb-3 flex items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-slate-900">Reported posts</p>
-                    <span className="text-xs text-slate-500">Pending only</span>
+                    <p className="text-sm font-semibold text-slate-900">{t("admin.reportedPosts")}</p>
+                    <span className="text-xs text-slate-500">{t("admin.pendingOnly")}</span>
                   </div>
 
                   {reportedPostsError ? <p className="mb-2 text-sm text-rose-600">{reportedPostsError}</p> : null}
                   {actionFeedback ? <div className="mb-3 flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700"><CheckCircle2 className="h-4 w-4" />{actionFeedback}</div> : null}
 
                   {isLoadingReportedPosts ? (
-                    <p className="text-sm text-slate-500">Loading reported posts…</p>
+                    <p className="text-sm text-slate-500">{t("admin.loadingReportedPosts")}</p>
                   ) : reportedPosts.length === 0 ? (
-                    <p className="text-sm text-slate-500">No pending reported posts.</p>
+                    <p className="text-sm text-slate-500">{t("admin.noPendingPosts")}</p>
                   ) : (
                     <div className="space-y-3">
                       {reportedPosts.map((item) => (
@@ -1044,26 +1046,26 @@ export default function AdminDashboard() {
                           <div className="flex flex-wrap items-start justify-between gap-2">
                             <div>
                               <p className="text-sm font-semibold text-slate-900">{item.reportReason}</p>
-                              <p className="mt-1 text-xs text-slate-500">{new Date(item.reportDate).toLocaleString()} • Reporter: {item.reporterUsername} • Reported: {item.reportedUsername}</p>
+                              <p className="mt-1 text-xs text-slate-500">{new Date(item.reportDate).toLocaleString()} • {t("admin.reporter")}: {item.reporterUsername} • {t("admin.reported")}: {item.reportedUsername}</p>
                             </div>
                           </div>
-                          <p className="mt-2 text-sm text-slate-700">{item.postPreview || "Post preview unavailable."}</p>
-                          {item.postImageUrl ? <img src={item.postImageUrl} alt="Reported post" className="mt-3 max-h-48 w-full rounded-xl border border-slate-200 object-cover" /> : null}
+                          <p className="mt-2 text-sm text-slate-700">{item.postPreview || t("admin.postPreviewUnavailable")}</p>
+                          {item.postImageUrl ? <img src={item.postImageUrl} alt={t("admin.reportedPosts")} className="mt-3 max-h-48 w-full rounded-xl border border-slate-200 object-cover" /> : null}
                           <div className="mt-3 flex flex-wrap gap-2">
                             <button type="button" onClick={() => setSelectedReportedPost(item)} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700">
-                              <span className="inline-flex items-center gap-1"><Eye className="h-3.5 w-3.5" />View Post</span>
+                              <span className="inline-flex items-center gap-1"><Eye className="h-3.5 w-3.5" />{t("admin.viewPost")}</span>
                             </button>
                             <button type="button" disabled={busyReportId === item.reportId} onClick={() => void handleDeleteReportedPost(item)} className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-sm font-medium text-rose-700 disabled:cursor-not-allowed disabled:opacity-70">
-                              <span className="inline-flex items-center gap-1"><Trash2 className="h-3.5 w-3.5" />Delete Post</span>
+                              <span className="inline-flex items-center gap-1"><Trash2 className="h-3.5 w-3.5" />{t("admin.deletePost")}</span>
                             </button>
                             <button type="button" disabled={busyReportId === item.reportId} onClick={() => void handleSuspendReportedUser(item)} className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-700 disabled:cursor-not-allowed disabled:opacity-70">
-                              <span className="inline-flex items-center gap-1"><UserX className="h-3.5 w-3.5" />Suspend User</span>
+                              <span className="inline-flex items-center gap-1"><UserX className="h-3.5 w-3.5" />{t("admin.suspendUser")}</span>
                             </button>
                             <button type="button" disabled={busyReportId === item.reportId} onClick={() => void handleBanReportedUser(item)} className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-sm font-medium text-rose-700 disabled:cursor-not-allowed disabled:opacity-70">
-                              <span className="inline-flex items-center gap-1"><Ban className="h-3.5 w-3.5" />Ban User</span>
+                              <span className="inline-flex items-center gap-1"><Ban className="h-3.5 w-3.5" />{t("admin.banUser")}</span>
                             </button>
                             <button type="button" disabled={busyReportId === item.reportId} onClick={() => void handleDismissReportedPost(item.reportId)} className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-700 disabled:cursor-not-allowed disabled:opacity-70">
-                              <span className="inline-flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5" />Dismiss Report</span>
+                              <span className="inline-flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5" />{t("admin.dismissReport")}</span>
                             </button>
                           </div>
                         </div>
@@ -1074,16 +1076,16 @@ export default function AdminDashboard() {
 
                 <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50 p-3">
                   <div className="mb-3 flex items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-slate-900">Reported comments</p>
-                    <span className="text-xs text-slate-500">Pending only</span>
+                    <p className="text-sm font-semibold text-slate-900">{t("admin.reportedComments")}</p>
+                    <span className="text-xs text-slate-500">{t("admin.pendingOnly")}</span>
                   </div>
 
                   {reportedCommentsError ? <p className="mb-2 text-sm text-rose-600">{reportedCommentsError}</p> : null}
 
                   {isLoadingReportedComments ? (
-                    <p className="text-sm text-slate-500">Loading reported comments…</p>
+                    <p className="text-sm text-slate-500">{t("admin.loadingReportedComments")}</p>
                   ) : reportedComments.length === 0 ? (
-                    <p className="text-sm text-slate-500">No pending reported comments.</p>
+                    <p className="text-sm text-slate-500">{t("admin.noPendingComments")}</p>
                   ) : (
                     <div className="space-y-3">
                       {reportedComments.map((item) => (
@@ -1120,16 +1122,16 @@ export default function AdminDashboard() {
 
                 <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50 p-3">
                   <div className="mb-3 flex items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-slate-900">Reported messages</p>
+                    <p className="text-sm font-semibold text-slate-900">{t("admin.reportedMessages")}</p>
                     <span className="text-xs text-slate-500">Pending only</span>
                   </div>
 
                   {reportedMessagesError ? <p className="mb-2 text-sm text-rose-600">{reportedMessagesError}</p> : null}
 
                   {isLoadingReportedMessages ? (
-                    <p className="text-sm text-slate-500">Loading reported messages…</p>
+                    <p className="text-sm text-slate-500">{t("admin.loadingReportedMessages")}</p>
                   ) : reportedMessages.length === 0 ? (
-                    <p className="text-sm text-slate-500">No pending reported messages.</p>
+                    <p className="text-sm text-slate-500">{t("admin.noPendingMessages")}</p>
                   ) : (
                     <div className="space-y-3">
                       {reportedMessages.map((item) => (
@@ -1137,25 +1139,25 @@ export default function AdminDashboard() {
                           <div className="flex flex-wrap items-start justify-between gap-2">
                             <div>
                               <p className="text-sm font-semibold text-slate-900">{item.reportReason}</p>
-                              <p className="mt-1 text-xs text-slate-500">{new Date(item.reportDate).toLocaleString()} • Reporter: {item.reporterUsername} • Sender: {item.senderUsername} • Receiver: {item.receiverUsername}</p>
+                              <p className="mt-1 text-xs text-slate-500">{new Date(item.reportDate).toLocaleString()} • {t("admin.reporter")}: {item.reporterUsername} • {t("admin.sender")}: {item.senderUsername} • {t("admin.receiver")}: {item.receiverUsername}</p>
                             </div>
                           </div>
-                          <p className="mt-2 text-sm text-slate-700">{item.messagePreview || "Message preview unavailable."}</p>
+                          <p className="mt-2 text-sm text-slate-700">{item.messagePreview || t("admin.messagePreviewUnavailable")}</p>
                           <div className="mt-3 flex flex-wrap gap-2">
                             <button type="button" onClick={() => setSelectedReportedMessage(item)} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700">
-                              <span className="inline-flex items-center gap-1"><Eye className="h-3.5 w-3.5" />View Full Message</span>
+                              <span className="inline-flex items-center gap-1"><Eye className="h-3.5 w-3.5" />{t("admin.viewFullMessage")}</span>
                             </button>
                             <button type="button" disabled={busyReportId === item.reportId} onClick={() => void handleDeleteReportedMessage(item)} className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-sm font-medium text-rose-700 disabled:cursor-not-allowed disabled:opacity-70">
-                              <span className="inline-flex items-center gap-1"><Trash2 className="h-3.5 w-3.5" />Delete Message</span>
+                              <span className="inline-flex items-center gap-1"><Trash2 className="h-3.5 w-3.5" />{t("admin.deleteMessage")}</span>
                             </button>
                             <button type="button" disabled={busyReportId === item.reportId} onClick={() => void handleSuspendReportedSender(item)} className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-700 disabled:cursor-not-allowed disabled:opacity-70">
-                              <span className="inline-flex items-center gap-1"><UserX className="h-3.5 w-3.5" />Suspend Sender</span>
+                              <span className="inline-flex items-center gap-1"><UserX className="h-3.5 w-3.5" />{t("admin.suspendSender")}</span>
                             </button>
                             <button type="button" disabled={busyReportId === item.reportId} onClick={() => void handleBanReportedSender(item)} className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-sm font-medium text-rose-700 disabled:cursor-not-allowed disabled:opacity-70">
-                              <span className="inline-flex items-center gap-1"><Ban className="h-3.5 w-3.5" />Ban Sender</span>
+                              <span className="inline-flex items-center gap-1"><Ban className="h-3.5 w-3.5" />{t("admin.banSender")}</span>
                             </button>
                             <button type="button" disabled={busyReportId === item.reportId} onClick={() => void handleDismissReportedMessage(item.reportId)} className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-700 disabled:cursor-not-allowed disabled:opacity-70">
-                              <span className="inline-flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5" />Dismiss Report</span>
+                              <span className="inline-flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5" />{t("admin.dismissReport")}</span>
                             </button>
                           </div>
                         </div>
@@ -1172,13 +1174,13 @@ export default function AdminDashboard() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
           <div className="w-full max-w-2xl rounded-[28px] border border-white/60 bg-white p-4 shadow-2xl">
             <div className="mb-3 flex justify-end">
-              <button type="button" onClick={() => setSelectedReportedPost(null)} className="rounded-full bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">Close</button>
+              <button type="button" onClick={() => setSelectedReportedPost(null)} className="rounded-full bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">{t("admin.close")}</button>
             </div>
             <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
               <p className="text-sm font-semibold text-slate-900">{selectedReportedPost.reportReason}</p>
               <p className="mt-1 text-xs text-slate-500">{new Date(selectedReportedPost.reportDate).toLocaleString()}</p>
-              <p className="mt-3 whitespace-pre-wrap text-sm text-slate-700">{selectedReportedPost.postPreview || "Post preview unavailable."}</p>
-              {selectedReportedPost.postImageUrl ? <img src={selectedReportedPost.postImageUrl} alt="Reported post" className="mt-3 max-h-72 w-full rounded-xl border border-slate-200 object-cover" /> : null}
+              <p className="mt-3 whitespace-pre-wrap text-sm text-slate-700">{selectedReportedPost.postPreview || t("admin.postPreviewUnavailable")}</p>
+              {selectedReportedPost.postImageUrl ? <img src={selectedReportedPost.postImageUrl} alt={t("admin.reportedPosts")} className="mt-3 max-h-72 w-full rounded-xl border border-slate-200 object-cover" /> : null}
             </div>
           </div>
         </div>
@@ -1188,12 +1190,12 @@ export default function AdminDashboard() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
           <div className="w-full max-w-2xl rounded-[28px] border border-white/60 bg-white p-4 shadow-2xl">
             <div className="mb-3 flex justify-end">
-              <button type="button" onClick={() => setSelectedReportedComment(null)} className="rounded-full bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">Close</button>
+              <button type="button" onClick={() => setSelectedReportedComment(null)} className="rounded-full bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">{t("admin.close")}</button>
             </div>
             <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
               <p className="text-sm font-semibold text-slate-900">{selectedReportedComment.reportReason}</p>
               <p className="mt-1 text-xs text-slate-500">{new Date(selectedReportedComment.reportDate).toLocaleString()}</p>
-              <p className="mt-3 whitespace-pre-wrap text-sm text-slate-700">{selectedReportedComment.commentPreview || "Comment preview unavailable."}</p>
+              <p className="mt-3 whitespace-pre-wrap text-sm text-slate-700">{selectedReportedComment.commentPreview || t("admin.commentPreviewUnavailable")}</p>
             </div>
           </div>
         </div>
@@ -1203,17 +1205,17 @@ export default function AdminDashboard() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
           <div className="w-full max-w-2xl rounded-[28px] border border-white/60 bg-white p-4 shadow-2xl">
             <div className="mb-3 flex justify-end">
-              <button type="button" onClick={() => setSelectedReportedMessage(null)} className="rounded-full bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">Close</button>
+              <button type="button" onClick={() => setSelectedReportedMessage(null)} className="rounded-full bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">{t("admin.close")}</button>
             </div>
             <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
               <p className="text-sm font-semibold text-slate-900">{selectedReportedMessage.reportReason}</p>
               <p className="mt-1 text-xs text-slate-500">{new Date(selectedReportedMessage.reportDate).toLocaleString()}</p>
               <div className="mt-3 flex flex-wrap gap-3 text-sm text-slate-600">
-                <span>Sender: {selectedReportedMessage.senderUsername}</span>
-                <span>Receiver: {selectedReportedMessage.receiverUsername}</span>
-                <span>Time: {selectedReportedMessage.messageTimestamp ? new Date(selectedReportedMessage.messageTimestamp).toLocaleString() : "Unknown"}</span>
+                <span>{t("admin.sender")}: {selectedReportedMessage.senderUsername}</span>
+                <span>{t("admin.receiver")}: {selectedReportedMessage.receiverUsername}</span>
+                <span>{t("admin.time")}: {selectedReportedMessage.messageTimestamp ? new Date(selectedReportedMessage.messageTimestamp).toLocaleString() : t("admin.unknown")}</span>
               </div>
-              <p className="mt-3 whitespace-pre-wrap text-sm text-slate-700">{selectedReportedMessage.fullMessage || "Message unavailable."}</p>
+              <p className="mt-3 whitespace-pre-wrap text-sm text-slate-700">{selectedReportedMessage.fullMessage || t("admin.messageUnavailable")}</p>
             </div>
           </div>
         </div>

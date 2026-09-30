@@ -1,5 +1,6 @@
 import { Mic, Paperclip, Play, Pause, Send, Smile, Square, X } from "lucide-react";
 import type { ChangeEvent, RefObject } from "react";
+import { useLanguage } from "../../contexts/LanguageContext";
 
 interface ChatComposerProps {
   isVibesPro: boolean;
@@ -76,6 +77,7 @@ export function ChatComposer({
   formatRecordingTime,
   onFileSelect,
 }: ChatComposerProps) {
+  const { t } = useLanguage();
   const messageBoxClassName = isVibesPro
     ? "bg-[#181818]/90 backdrop-blur-3xl border border-[#D4AF37]/20 rounded-3xl md:rounded-4xl p-2 md:p-4 shadow-[0_0_30px_rgba(212,175,55,0.12)]"
     : "bg-white/80 backdrop-blur-3xl border border-sky-100 rounded-3xl md:rounded-4xl p-2 md:p-4 shadow-[0_10px_35px_rgba(14,165,233,0.12)]";
@@ -96,10 +98,10 @@ export function ChatComposer({
         {replyTo && (
           <div className={`mb-3 rounded-2xl border px-3 py-2 text-sm flex items-center justify-between ${isVibesPro ? "border-white/10 bg-white/10 text-white/80" : "border-sky-100 bg-white/90 text-slate-700 shadow-sm"}`}>
             <div className="min-w-0">
-              <div className={`text-[11px] uppercase tracking-[0.2em] ${isVibesPro ? "text-white/50" : "text-slate-500"}`}>Replying to</div>
-              <div className="truncate">{replyTo.text ?? "message"}</div>
+              <div className={`text-[11px] uppercase tracking-[0.2em] ${isVibesPro ? "text-white/50" : "text-slate-500"}`}>{t("chat.replyingTo")}</div>
+              <div className="truncate">{replyTo.text ?? t("chat.message")}</div>
             </div>
-            <button onClick={onReplyCancel} className={`ml-2 rounded-full p-1 ${isVibesPro ? "hover:bg-white/10" : "hover:bg-slate-100"}`} aria-label="Cancel reply">
+            <button onClick={onReplyCancel} className={`ml-2 rounded-full p-1 ${isVibesPro ? "hover:bg-white/10" : "hover:bg-slate-100"}`} aria-label={t("chat.cancelReply")}>
               <X size={16} />
             </button>
           </div>
@@ -110,21 +112,21 @@ export function ChatComposer({
             <button
               onClick={onTogglePlayPreview}
               className={`h-9 w-9 rounded-full flex items-center justify-center ${audioButtonClassName}`}
-              aria-label={isPlaying ? "Pause preview" : "Play preview"}
+              aria-label={isPlaying ? t("chat.pausePreview") : t("chat.playPreview")}
             >
               {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
             </button>
 
             <div className="flex-1">
               <canvas ref={waveformRef} className="w-full h-8" />
-              <div className={`text-xs mt-1 ${isVibesPro ? "text-white/70" : "text-slate-600"}`}>Voice note ready</div>
+              <div className={`text-xs mt-1 ${isVibesPro ? "text-white/70" : "text-slate-600"}`}>{t("chat.voiceNoteReady")}</div>
             </div>
 
             <div className="flex items-center gap-2">
               <button
                 onClick={onRecordingClear}
                 className={`h-8 w-8 rounded-full flex items-center justify-center ${isVibesPro ? "bg-slate-900/60 text-white" : "bg-slate-900/10 text-slate-800"}`}
-                aria-label="Remove voice note"
+                aria-label={t("chat.removeVoiceNote")}
               >
                 <X className="h-4 w-4" />
               </button>
@@ -176,7 +178,7 @@ export function ChatComposer({
               <button
                 onClick={onAttachmentClick}
                 className={`h-10 w-10 rounded-full transition flex items-center justify-center shrink-0 ${audioButtonClassName}`}
-                title="Add attachment"
+                title={t("chat.addAttachment")}
               >
                 <Paperclip className="h-4 w-4" />
               </button>
@@ -185,7 +187,7 @@ export function ChatComposer({
                 <button
                   onClick={onStopRecording}
                   className="h-10 w-10 rounded-full bg-red-500 text-white shadow-lg shadow-red-500/30 animate-pulse flex items-center justify-center shrink-0"
-                  title="Stop recording"
+                  title={t("chat.stopRecording")}
                 >
                   <Square className="h-4 w-4" />
                 </button>
@@ -193,7 +195,7 @@ export function ChatComposer({
                 <button
                   onClick={onStartRecording}
                   className={`h-10 w-10 rounded-full transition flex items-center justify-center shrink-0 ${audioButtonClassName}`}
-                  title="Start recording"
+                  title={t("chat.startRecording")}
                 >
                   <Mic className="h-4 w-4" />
                 </button>
@@ -204,15 +206,15 @@ export function ChatComposer({
               {isRecording ? (
                 <div className="mb-2 flex items-center gap-2 rounded-full bg-red-500/15 px-3 py-1.5 text-xs font-medium text-red-200 border border-red-400/30 w-fit">
                   <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
-                  <span>Recording • {formatRecordingTime(recordingDuration)}</span>
+                  <span>{t("chat.recording").replace("{duration}", formatRecordingTime(recordingDuration))}</span>
                 </div>
               ) : null}
-              <label htmlFor="message-input" className="sr-only">Message</label>
+              <label htmlFor="message-input" className="sr-only">{t("chat.message")}</label>
               <input
                 id="message-input"
                 name="message"
                 type="text"
-                placeholder="Type a message..."
+                placeholder={t("chat.typeMessage")}
                 value={inputText}
                 onChange={onInputChange}
                 onKeyDown={(e) => e.key === "Enter" && onSend()}
@@ -225,7 +227,7 @@ export function ChatComposer({
               <button
                 onClick={onEmojiToggle}
                 className={`h-10 w-10 rounded-full transition flex items-center justify-center ${audioButtonClassName}`}
-                title="Add emoji"
+                title={t("chat.addEmoji")}
               >
                 <Smile className="h-4 w-4" />
               </button>
@@ -251,9 +253,9 @@ export function ChatComposer({
               className={sendButtonClassName}
             >
               {isLoading ? (
-                <span className="hidden md:inline">Uploading... {uploadProgress}%</span>
+                <span className="hidden md:inline">{t("chat.uploading").replace("{progress}", String(uploadProgress))}</span>
               ) : (
-                <span className="hidden md:inline">Send</span>
+                <span className="hidden md:inline">{t("chat.send")}</span>
               )}
               {isLoading ? (
                 <span className="md:hidden">{uploadProgress}%</span>

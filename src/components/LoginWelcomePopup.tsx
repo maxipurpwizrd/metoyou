@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Sparkles } from "lucide-react";
+import { useLanguage } from "../contexts/LanguageContext";
 
 export default function LoginWelcomePopup() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -34,8 +36,8 @@ export default function LoginWelcomePopup() {
         <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-linear-to-br from-sky-500 to-cyan-400 text-white shadow-lg shadow-cyan-400/30">
           <Sparkles className="h-8 w-8" aria-hidden="true" />
         </div>
-        <h2 className="mt-5 text-2xl font-black">Welcome Back Twin</h2>
-        <p className="mt-2 text-sm font-medium leading-6 text-sky-800/75">There is no time to waste, your homies are waiting for you.</p>
+        <h2 className="mt-5 text-2xl font-black">{t("welcome.loginTitle")}</h2>
+        <p className="mt-2 text-sm font-medium leading-6 text-sky-800/75">{t("welcome.loginBody")}</p>
         <div className="mx-auto mt-5 h-1.5 w-32 overflow-hidden rounded-full bg-sky-100">
           <div className="h-full w-full origin-left animate-[shrink_4s_linear] rounded-full bg-linear-to-r from-sky-500 to-cyan-400" />
         </div>

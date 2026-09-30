@@ -9,6 +9,8 @@ import {
   subscribeToNotifications,
   deleteNotification,
   deleteAllNotifications,
+  isMessageNotificationType,
+  isSelfPostActivityNotification,
   type Notification,
 } from "../lib/notificationApi";
 import { getAuthBoundaryVersion, isCurrentAuthUser } from "../lib/authBoundary";
@@ -18,6 +20,7 @@ import { NotificationsSkeleton } from "../components/skeletons/Skeletons";
 import { useLanguage } from "../contexts/LanguageContext";
 import { useAppInit } from "../contexts/AppInitContext";
 import { isVibesProEnabled } from "../lib/vibesPro";
+import { fetchPostByIdFromSupabase } from "../lib/postApi";
 
 function joinActorNames(names: string[]) {
   if (names.length === 0) return "Someone";
@@ -182,7 +185,14 @@ export default function Notifications({ embedded }: NotificationsProps) {
       const raw = sessionStorage.getItem(cacheKey);
       if (raw) {
         const cached = JSON.parse(raw) as Notification[];
-        window.requestAnimationFrame(() => updateNotifications(cached));
+        const visibleCached = cached.filter((item) => (
+          !isMessageNotificationType(item.type) &&
+          !isSelfPostActivityNotification(item.type, item.actorId, userId)
+        ));
+        if (visibleCached.length !== cached.length) {
+          sessionStorage.setItem(cacheKey, JSON.stringify(visibleCached));
+        }
+        window.requestAnimationFrame(() => updateNotifications(visibleCached));
       } else {
         window.requestAnimationFrame(() => setNotificationsLoading(true));
       }
@@ -296,6 +306,30 @@ export default function Notifications({ embedded }: NotificationsProps) {
 
   const cancelDelete = () => setConfirmDialog(null);
 
+  const openPostNotification = async (notification: NotificationItem) => {
+    if (!notification.postId) return;
+
+    const params = new URLSearchParams({ postId: String(notification.postId) });
+    if (notification.type === "comment") params.set("showComments", "1");
+
+    const post = await fetchPostByIdFromSupabase(String(notification.postId));
+    if (post?.video_url) {
+      navigate(`/clips?${params.toString()}`);
+      return;
+    }
+    if (post?.audio_url) {
+      navigate(`/tracks?${params.toString()}`);
+      return;
+    }
+    if (post?.image_url || post?.image_original_url) {
+      params.set("image", post.image_original_url ?? post.image_url ?? "");
+      navigate(`/flicks?${params.toString()}`);
+      return;
+    }
+
+    navigate(`/feed?${params.toString()}`);
+  };
+
   const getEmoji = (type: string) => {
     switch (type) {
       case "like":
@@ -372,9 +406,7 @@ export default function Notifications({ embedded }: NotificationsProps) {
                     return;
                   }
 
-                  if (notif.postId) {
-                    navigate(`/feed?postId=${encodeURIComponent(String(notif.postId))}`);
-                  }
+                  void openPostNotification(notif);
                 }}
                 className={`relative rounded-4xl shadow-2xl px-5 py-5 pb-12 transition-all duration-200 cursor-pointer ${
                   isVibesPro

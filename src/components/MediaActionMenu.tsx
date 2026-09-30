@@ -1,6 +1,7 @@
 import { Ban, Download, Flag, Grid2X2, Link, MessageCircle, Pencil, Repeat2, Share2, Sparkles, Trash2, UserRound, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useEffect } from "react";
+import { useLanguage } from "../contexts/LanguageContext";
 
 export type MediaAction = {
   label: string;
@@ -38,6 +39,8 @@ export default function MediaActionMenu({
   onClose: () => void;
   actions: MediaAction[];
 }) {
+  const { t } = useLanguage();
+
   useEffect(() => {
     if (!open) return;
 
@@ -48,12 +51,12 @@ export default function MediaActionMenu({
 
   return (
     <>
-      <button type="button" onClick={(event) => { event.stopPropagation(); onToggle(); }} aria-label="More actions" className={`${isDark ? "text-white/90" : "text-slate-700"} transition hover:scale-110`}>
+      <button type="button" onClick={(event) => { event.stopPropagation(); onToggle(); }} aria-label={t("media.moreActions")} className={`${isDark ? "text-white/90" : "text-slate-700"} transition hover:scale-110`}>
         <Grid2X2 className="h-6 w-6" />
       </button>
       {open && typeof document !== "undefined" && createPortal(
         <div className="fixed inset-0 z-9999 grid place-items-center bg-black/35 p-4 backdrop-blur-sm" onClick={onClose}>
-          <button type="button" aria-label="Close actions" onClick={onClose} className="absolute inset-0" />
+          <button type="button" aria-label={t("media.closeActions")} onClick={onClose} className="absolute inset-0" />
           <div onClick={(event) => event.stopPropagation()} className={`relative z-10 grid w-full max-w-xs grid-cols-2 gap-2 rounded-2xl border p-3 text-left text-xs shadow-2xl ${isDark ? "border-white/15 bg-slate-950 text-white" : "border-sky-100 bg-white text-slate-700"}`}>
             {actions.map((action) => {
               const Icon = icons[action.icon];

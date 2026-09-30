@@ -5,6 +5,7 @@ import type { AppLanguage } from "../lib/i18n";
 import {
   ArrowRight,
   AtSign,
+  Bell,
   Flag,
   HelpCircle,
   Image,
@@ -25,11 +26,13 @@ import { useSession } from "../contexts/SessionContext";
 import { fetchProfileByUsername, upsertProfileToSupabase, uploadFreeTierProfileImage, uploadProfileImage } from "../lib/profileApi";
 import { logout } from "../lib/auth";
 import { Ban } from "lucide-react";
+import { useChatNotifications } from "../hooks/useChatNotifications";
 
 export default function Settings() {
   const { profile: profileFromContext, refreshSession } = useSession();
   const { language, setLanguage, t } = useLanguage();
   const navigate = useNavigate();
+  const { notificationsEnabled, setNotificationsEnabled } = useChatNotifications(profileFromContext?.id);
 
   const initialProfile = profileFromContext ?? DEFAULT_PROFILE;
   const isVibesPro = Boolean(profileFromContext?.is_vibes_pro ?? profileFromContext?.vibes_pro);
@@ -406,7 +409,7 @@ export default function Settings() {
                   </div>
                   <div>
                     <p className="font-semibold text-slate-900">{t("settings.profilePicture")}</p>
-                    <p className="text-sm text-slate-500">{profilePictureUrl ? "Custom profile picture set" : t("settings.profilePictureDesc")}</p>
+                    <p className="text-sm text-slate-500">{profilePictureUrl ? t("settings.customPictureSet") : t("settings.profilePictureDesc")}</p>
                   </div>
                 </div>
                 <ArrowRight className="w-5 h-5 text-slate-500" />
@@ -420,9 +423,9 @@ export default function Settings() {
                 <Ban className="w-6 h-6" />
               </div>
               <div>
-                <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Privacy</p>
-                <h2 className="text-2xl font-bold text-slate-900">Blocked users</h2>
-                <p className="mt-1 text-sm text-slate-500">View and unblock people you have blocked</p>
+                <p className="text-sm uppercase tracking-[0.3em] text-slate-500">{t("profile.privacy")}</p>
+                <h2 className="text-2xl font-bold text-slate-900">{t("settings.blockedUsers")}</h2>
+                <p className="mt-1 text-sm text-slate-500">{t("settings.blockedUsersDescription")}</p>
               </div>
             </div>
             <ArrowRight className="w-5 h-5 text-slate-500" />
@@ -449,7 +452,7 @@ export default function Settings() {
                   </div>
                   <div>
                     <p className="font-semibold text-slate-900">{t("settings.changePassword")}</p>
-                    <p className="text-sm text-slate-500">Update your login key</p>
+                    <p className="text-sm text-slate-500">{t("settings.securityCheck")}</p>
                   </div>
                 </div>
                 <ArrowRight className="w-5 h-5 text-slate-500" />
@@ -462,7 +465,7 @@ export default function Settings() {
                   </div>
                   <div>
                     <p className="font-semibold text-slate-900">{t("settings.securityCheck")}</p>
-                    <p className="text-sm text-slate-500">Review your account protection</p>
+                    <p className="text-sm text-slate-500">{t("settings.securitySectionTitle")}</p>
                   </div>
                 </div>
                 <ArrowRight className="w-5 h-5 text-slate-500" />
@@ -475,7 +478,7 @@ export default function Settings() {
                   </div>
                   <div>
                     <p className="font-semibold text-slate-900">{t("settings.phoneNumber")}</p>
-                    <p className="text-sm text-slate-500">Two-factor and recovery support</p>
+                    <p className="text-sm text-slate-500">{t("settings.twoFactorDescription")}</p>
                   </div>
                 </div>
                 <ArrowRight className="w-5 h-5 text-slate-500" />
@@ -488,7 +491,7 @@ export default function Settings() {
                   </div>
                   <div>
                     <p className="font-semibold text-slate-900">{t("settings.email")}</p>
-                    <p className="text-sm text-slate-500">Manage your account address</p>
+                    <p className="text-sm text-slate-500">{t("settings.manageAddress")}</p>
                   </div>
                 </div>
                 <ArrowRight className="w-5 h-5 text-slate-500" />
@@ -504,16 +507,16 @@ export default function Settings() {
                   <Info className="w-6 h-6" />
                 </div>
                 <div>
-                  <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Your Information & Permissions</p>
-                  <h2 className="text-2xl font-bold text-slate-900">A thoughtful experience coming soon</h2>
+                  <p className="text-sm uppercase tracking-[0.3em] text-slate-500">{t("settings.infoPermissions")}</p>
+                  <h2 className="text-2xl font-bold text-slate-900">{t("settings.thoughtfulComingSoon")}</h2>
                 </div>
               </div>
             </div>
 
             <div className="rounded-3xl border border-dashed border-white/40 bg-white/10 p-10 text-center text-slate-700">
-              <p className="text-2xl font-semibold">Coming Soon 🚧</p>
+              <p className="text-2xl font-semibold">{t("settings.comingSoon")}</p>
               <p className="mt-3 text-sm leading-7 text-slate-500">
-                We’re crafting a premium permissions hub for your privacy and access controls.
+                {t("settings.permissionsDescription")}
               </p>
             </div>
           </section>
@@ -570,7 +573,7 @@ export default function Settings() {
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <p className="text-base font-semibold text-slate-900">{t("home.theme")}</p>
-                  <p className="text-sm text-slate-500">Current selected appearance</p>
+                  <p className="text-sm text-slate-500">{t("settings.currentAppearance")}</p>
                 </div>
                 <span className="rounded-full bg-slate-950/10 px-4 py-2 text-sm font-semibold text-slate-900 uppercase tracking-[0.15em]">
                   {selectedTheme === "black-ice" ? "BlackGold" : "BlueSky"}
@@ -588,7 +591,7 @@ export default function Settings() {
                   }`}
                 >
                   <p className="font-semibold text-slate-900">{t("settings.theme.blackIce")}</p>
-                  <p className="text-sm text-slate-500 mt-1">Dark theme preview</p>
+                  <p className="text-sm text-slate-500 mt-1">{t("settings.darkThemePreview")}</p>
                 </button>
 
                 <button
@@ -601,7 +604,7 @@ export default function Settings() {
                   }`}
                 >
                   <p className="font-semibold text-slate-900">BlueSky</p>
-                  <p className="text-sm text-slate-500 mt-1">Light theme preview</p>
+                  <p className="text-sm text-slate-500 mt-1">{t("settings.lightThemePreview")}</p>
                 </button>
               </div>
             </div>
@@ -615,17 +618,17 @@ export default function Settings() {
                   <HelpCircle className="w-6 h-6" />
                 </div>
                 <div>
-                  <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Help</p>
-                  <h2 className="text-2xl font-bold text-slate-900">Support whenever you need it</h2>
+                  <p className="text-sm uppercase tracking-[0.3em] text-slate-500">{t("settings.help")}</p>
+                  <h2 className="text-2xl font-bold text-slate-900">{t("settings.supportDescription")}</h2>
                 </div>
               </div>
             </div>
 
             <div className="grid gap-4">
               {[
-                { label: "Help Center", icon: LifeBuoy },
-                { label: "Support", icon: HelpCircle },
-                { label: "Report A Problem", icon: Flag },
+                { label: t("settings.helpCenter"), icon: LifeBuoy },
+                { label: t("settings.support"), icon: HelpCircle },
+                { label: t("profile.reportProblem"), icon: Flag },
               ].map((item) => (
                 <button
                   key={item.label}
@@ -647,12 +650,40 @@ export default function Settings() {
           <section className="bg-white/20 backdrop-blur-3xl border border-white/30 rounded-[32px] shadow-2xl p-6">
             <div className="flex items-center justify-between gap-3 mb-6">
               <div className="flex items-center gap-3">
+                <div className="grid place-items-center w-12 h-12 rounded-3xl bg-sky-500/15 text-sky-700">
+                  <Bell className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-sm uppercase tracking-[0.3em] text-slate-500">{t("profile.notifications")}</p>
+                  <h2 className="text-2xl font-bold text-slate-900">{t("nav.notifications")}</h2>
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => void setNotificationsEnabled(!notificationsEnabled)}
+              className="w-full flex items-center justify-between gap-4 rounded-3xl border border-white/40 bg-white/15 px-5 py-4 text-left shadow-lg transition hover:bg-white/30"
+            >
+              <div>
+                <p className="font-semibold text-slate-900">{notificationsEnabled ? "Device notifications enabled" : "Enable device notifications"}</p>
+                <p className="text-sm text-slate-500">{notificationsEnabled ? "Push alerts are connected to this account." : "Allow browser alerts for activity on your account."}</p>
+              </div>
+              <span className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.12em] ${notificationsEnabled ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>
+                {notificationsEnabled ? "On" : "Off"}
+              </span>
+            </button>
+          </section>
+
+          <section className="bg-white/20 backdrop-blur-3xl border border-white/30 rounded-[32px] shadow-2xl p-6">
+            <div className="flex items-center justify-between gap-3 mb-6">
+              <div className="flex items-center gap-3">
                 <div className="grid place-items-center w-12 h-12 rounded-3xl bg-blue-500/15 text-blue-700">
                   <Info className="w-6 h-6" />
                 </div>
                 <div>
-                  <p className="text-sm uppercase tracking-[0.3em] text-slate-500">About</p>
-                  <h2 className="text-2xl font-bold text-slate-900">Learn more about MeToYou</h2>
+                  <p className="text-sm uppercase tracking-[0.3em] text-slate-500">{t("settings.about")}</p>
+                  <h2 className="text-2xl font-bold text-slate-900">{t("settings.learnAbout")}</h2>
                 </div>
               </div>
             </div>
@@ -663,7 +694,7 @@ export default function Settings() {
                   <div className="grid place-items-center w-11 h-11 rounded-2xl bg-linear-to-br from-sky-500 via-cyan-400 to-blue-500 text-white">
                     <Info className="w-5 h-5" />
                   </div>
-                  <span className="font-semibold text-slate-900">About MeToYou</span>
+                  <span className="font-semibold text-slate-900">{t("settings.aboutLink")}</span>
                 </div>
                 <ArrowRight className="w-5 h-5 text-slate-500" />
               </button>
@@ -677,7 +708,7 @@ export default function Settings() {
                     <div className="grid place-items-center w-11 h-11 rounded-2xl bg-linear-to-br from-cyan-500 via-sky-500 to-blue-500 text-white">
                       <LayoutDashboard className="w-5 h-5" />
                     </div>
-                    <span className="font-semibold text-slate-900">Developer/Admin Dashboard</span>
+                    <span className="font-semibold text-slate-900">{t("settings.adminDashboard")}</span>
                   </div>
                   <ArrowRight className="w-5 h-5 text-slate-500" />
                 </button>
@@ -690,11 +721,11 @@ export default function Settings() {
                       <Info className="w-5 h-5" />
                     </div>
                     <div>
-                      <p className="font-semibold text-slate-900">MeToYou Version</p>
-                      <p className="text-sm text-slate-500">Current application build</p>
+                      <p className="font-semibold text-slate-900">{t("settings.versionName")}</p>
+                      <p className="text-sm text-slate-500">{t("settings.currentBuild")}</p>
                     </div>
                   </div>
-                  <span className="rounded-full bg-white/70 px-4 py-2 text-sm font-semibold text-slate-900">Version 1.0.0</span>
+                  <span className="rounded-full bg-white/70 px-4 py-2 text-sm font-semibold text-slate-900">{t("settings.version").replace("{version}", "1.0.0")}</span>
                 </div>
               </div>
             </div>
@@ -708,7 +739,7 @@ export default function Settings() {
                 </div>
                 <div>
                   <p className="text-sm uppercase tracking-[0.3em] text-slate-500">{t("profile.logout")}</p>
-                  <h2 className="text-2xl font-bold text-slate-900">Exit your MeToYou session</h2>
+                  <h2 className="text-2xl font-bold text-slate-900">{t("settings.exitSession")}</h2>
                 </div>
               </div>
             </div>
@@ -718,7 +749,7 @@ export default function Settings() {
               onClick={() => openModal("logout")}
               className="w-full rounded-3xl bg-red-500/20 border border-red-300 text-red-700 px-6 py-4 text-lg font-semibold shadow-xl transition hover:bg-red-500/30"
             >
-              Logout
+              {t("settings.logOut")}
             </button>
           </section>
         </div>
@@ -730,11 +761,11 @@ export default function Settings() {
           <div className="relative w-full max-w-xl rounded-[32px] border border-white/30 bg-white/95 p-6 shadow-2xl backdrop-blur-2xl">
             <div className="flex items-start justify-between gap-4 mb-6">
               <div>
-                <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Edit</p>
+                <p className="text-sm uppercase tracking-[0.3em] text-slate-500">{t("settings.edit")}</p>
                 <h3 className="text-3xl font-bold text-slate-950">
                   {activeModal === "name" && t("settings.profileName")}
                   {activeModal === "username" && t("settings.profileUsername")}
-                  {activeModal === "picture" && "Update Profile Picture"}
+                  {activeModal === "picture" && t("settings.updatePicture")}
                   {activeModal === "language" && t("settings.languageModalTitle")}
                 </h3>
               </div>
@@ -777,7 +808,7 @@ export default function Settings() {
                     onClick={() => fileInputRef.current?.click()}
                     className="w-full rounded-3xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-semibold text-sky-600 transition hover:bg-sky-100"
                   >
-                    📷 Choose from gallery
+                    📷 {t("settings.chooseGallery")}
                   </button>
 
                   <button
@@ -786,22 +817,22 @@ export default function Settings() {
                     disabled={isSaving}
                     className="w-full rounded-3xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
                   >
-                    🧹 Remove current photo
+                    🧹 {t("settings.removePhoto")}
                   </button>
 
                   {profilePicturePreview && (
                     <div className="rounded-3xl border border-slate-200 bg-slate-50 p-3">
-                      <p className="mb-2 text-sm font-semibold text-slate-800">Preview</p>
+                      <p className="mb-2 text-sm font-semibold text-slate-800">{t("settings.preview")}</p>
                       <img
                         src={profilePicturePreview}
-                        alt="Profile preview"
+                        alt={t("settings.profilePreviewAlt")}
                         className="mx-auto h-36 w-36 rounded-3xl object-cover shadow-sm"
                       />
                     </div>
                   )}
 
                   <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                    <p className="text-sm font-semibold text-slate-800">Or use an image URL</p>
+                    <p className="text-sm font-semibold text-slate-800">{t("settings.imageUrlPrompt")}</p>
                     <input
                       value={profilePictureUrl}
                       onChange={(event) => setProfilePictureUrl(event.target.value)}
@@ -873,10 +904,10 @@ export default function Settings() {
             : "border-white/30 bg-white/95 text-slate-900 shadow-2xl"
           }`}>
             <div className="mb-5">
-              <p className={`text-sm uppercase tracking-[0.3em] ${isVibesPro ? "text-[#D4AF37]" : "text-slate-500"}`}>Confirm Logout</p>
-              <h3 className={`mt-3 text-3xl font-bold ${isVibesPro ? "text-[#F7F3E8]" : "text-slate-950"}`}>Are you sure you want to logout?</h3>
+              <p className={`text-sm uppercase tracking-[0.3em] ${isVibesPro ? "text-[#D4AF37]" : "text-slate-500"}`}>{t("settings.confirmLogout")}</p>
+              <h3 className={`mt-3 text-3xl font-bold ${isVibesPro ? "text-[#F7F3E8]" : "text-slate-950"}`}>{t("settings.logoutConfirmTitle")}</h3>
             </div>
-            <p className={`leading-7 ${isVibesPro ? "text-[#D6D6D6]" : "text-slate-600"}`}>Logging out will close your session and return you to the login screen.</p>
+            <p className={`leading-7 ${isVibesPro ? "text-[#D6D6D6]" : "text-slate-600"}`}>{t("settings.logoutConfirmDescription")}</p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row justify-end">
               <button
@@ -887,7 +918,7 @@ export default function Settings() {
                   : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
                 }`}
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 type="button"
@@ -897,7 +928,7 @@ export default function Settings() {
                   : "bg-red-500 text-white hover:bg-red-600"
                 }`}
               >
-                Logout
+                {t("settings.logOut")}
               </button>
             </div>
           </div>

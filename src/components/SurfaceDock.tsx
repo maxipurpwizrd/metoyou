@@ -33,18 +33,22 @@ export default function SurfaceDock() {
       hideTimerRef.current = window.setTimeout(() => setVisible(false), 6000);
     };
 
-    const handleScroll = () => {
+    const handleScroll = (event: Event) => {
+      const target = event.target;
+      const isSurfaceScroll = target instanceof HTMLElement && target.hasAttribute("data-surface-scroll");
+      if (target !== document && !isSurfaceScroll) return;
+
       clearTimers();
       setVisible(false);
       stopTimerRef.current = window.setTimeout(showThenHide, 180);
     };
 
-    window.addEventListener("scroll", handleScroll, { passive: true });
+    window.addEventListener("scroll", handleScroll, { passive: true, capture: true });
     showThenHide();
 
     return () => {
       clearTimers();
-      window.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("scroll", handleScroll, true);
     };
   }, [location.pathname]);
 

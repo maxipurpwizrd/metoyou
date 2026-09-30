@@ -80,29 +80,14 @@ export type BlockedUser = {
 };
 
 export async function getBlockedUsers(): Promise<BlockedUser[]> {
-  const { data: authData, error: authError } = await supabase.auth.getUser();
-  if (authError || !authData.user) throw authError ?? new Error("Authentication required.");
+  const { data, error } = await supabase.rpc("get_my_blocked_users");
+  if (error) throw error;
 
-  const { data: blocks, error: blocksError } = await supabase
-    .from("user_blocks")
-    .select("blocked_user_id")
-    .eq("blocker_user_id", authData.user.id)
-    .order("created_at", { ascending: false });
-  if (blocksError) throw blocksError;
-
-  const blockedIds = (blocks ?? []).map((block) => block.blocked_user_id).filter(Boolean);
-  if (blockedIds.length === 0) return [];
-
-  const { data: profiles, error: profilesError } = await supabase
-    .from("public_profiles")
-    .select("id, username, profile_pic")
-    .in("id", blockedIds);
-  if (profilesError) throw profilesError;
-
-  const profilesById = new Map((profiles ?? []).map((profile) => [profile.id, profile]));
-  return blockedIds
-    .map((id) => profilesById.get(id))
-    .filter((profile): profile is BlockedUser => Boolean(profile));
+  return (data ?? []).map((user: { id: string; username: string | null; profile_pic: string | null }) => ({
+    id: user.id,
+    username: user.username ?? `User ${user.id.slice(0, 8)}`,
+    profile_pic: user.profile_pic ?? null,
+  }));
 }
 
 export async function createAppeal(details: string) {

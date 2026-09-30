@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type FormEvent, type TouchEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type TouchEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Ban, CloudSun, Download, Flag, Grid2X2, LoaderCircle, MessageCircle, Mic, MoonStar, Repeat2, Share2, Square, Trash2 } from "lucide-react";
+import { ArrowLeft, Ban, CloudSun, Download, Flag, Grid2X2, LoaderCircle, MessageCircle, Mic, MoonStar, Repeat2, Share2, Square, Trash2 } from "lucide-react";
 import { fetchFlicksPage, type FlickRecord } from "../lib/flicksApi";
 import { likePost, unlikePost } from "../lib/likeApi";
 import { addComment, deleteComment, editComment, getComments, type CommentRecord } from "../lib/commentApi";
@@ -9,11 +9,14 @@ import { useVoiceCommentRecorder } from "../hooks/useVoiceCommentRecorder";
 import { useAuth } from "../hooks/useAuth";
 import SurfaceDock from "../components/SurfaceDock";
 import ReportReasonModal, { type PostReportReason } from "../components/ReportReasonModal";
-import { deletePostFromSupabase, savePostToSupabase } from "../lib/postApi";
+import { deletePostFromSupabase, fetchPostByIdFromSupabase, savePostToSupabase } from "../lib/postApi";
 import { submitPostReport } from "../lib/reportApi";
+import { restoreSurfaceScrollPosition, saveSurfaceScrollPosition } from "../lib/surfaceScrollPosition";
+import { useLanguage } from "../contexts/LanguageContext";
 
 const PAGE_SIZE = 7;
 const FLICKS_CACHE_KEY = "metoyou-flicks-cache";
+const FLICKS_SCROLL_KEY_PREFIX = "metoyou-flicks-scroll:";
 
 type CachedFlicksState = {
   flicks: FlickRecord[];
@@ -43,8 +46,8 @@ const readFlicksCache = (): CachedFlicksState => {
 
 function FlickSkeleton() {
   return (
-    <div className="mx-auto min-h-[calc(100svh-6rem)] max-w-xl animate-pulse overflow-hidden rounded-3xl bg-slate-200">
-      <div className="h-[calc(100svh-14rem)] bg-slate-300" />
+    <div className="mx-auto flex h-dvh w-full max-w-xl animate-pulse flex-col overflow-hidden bg-slate-200 md:rounded-3xl">
+      <div className="flex-1 bg-slate-300" />
       <div className="space-y-3 p-5">
         <div className="h-4 w-32 rounded bg-slate-300" />
         <div className="h-4 w-3/4 rounded bg-slate-300" />
@@ -54,11 +57,14 @@ function FlickSkeleton() {
 }
 
 export default function Flicks() {
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
   const requestedImage = new URLSearchParams(location.search).get("image");
   const requestedPostId = new URLSearchParams(location.search).get("postId");
+  const hasQueryFocus = Boolean(requestedImage || requestedPostId);
+  const isImageOnlyViewer = Boolean(requestedImage && !requestedPostId);
   const [theme, setTheme] = useState<"bluesky" | "dark">(() => {
     if (typeof window === "undefined") return "bluesky";
     return window.localStorage.getItem("metoyou-clips-theme") === "dark" ? "dark" : "bluesky";
@@ -66,6 +72,9 @@ export default function Flicks() {
   const cachedFlicks = readFlicksCache();
   const hasCachedFlicks = cachedFlicks.flicks.length > 0;
   const [flicks, setFlicks] = useState<FlickRecord[]>(() => cachedFlicks.flicks);
+  const [focusedFlick, setFocusedFlick] = useState<FlickRecord | null>(null);
+  const [focusedFlickLoading, setFocusedFlickLoading] = useState(false);
+  const [focusedFlickError, setFocusedFlickError] = useState<string | null>(null);
   const [loading, setLoading] = useState(() => cachedFlicks.flicks.length === 0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(() => cachedFlicks.hasMore);
@@ -89,9 +98,20 @@ export default function Flicks() {
   });
   const longPressTimerRef = useRef<number | null>(null);
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const restoredScrollKeyRef = useRef<string | null>(null);
+  const scrollSaveFrameRef = useRef<number | null>(null);
+  const scrollCacheKey = `${FLICKS_SCROLL_KEY_PREFIX}${user?.id ?? "anonymous"}`;
   const { isRecording, recordingDuration, voiceUrl, startRecording, stopRecording, clearVoiceUrl } = useVoiceCommentRecorder();
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const isDark = theme === "dark";
+  const visibleFlicks = hasQueryFocus
+    ? focusedFlick ? [focusedFlick] : []
+    : flicks.filter((flick) => !blockedAuthorIds.includes(flick.author_id));
+  const visibleLoading = hasQueryFocus
+    ? Boolean(requestedPostId) && (focusedFlickLoading || (!focusedFlick && !focusedFlickError))
+    : loading;
+  const visibleError = hasQueryFocus ? focusedFlickError : error;
 
   const handleTouchStart = (event: TouchEvent<HTMLElement>) => {
     const target = event.target as HTMLElement;
@@ -148,10 +168,7 @@ export default function Flicks() {
   }, [commentsFor]);
 
   useEffect(() => {
-    const hasQueryFocus = Boolean(requestedImage || requestedPostId);
-    if (!hasQueryFocus && hasCachedFlicks) {
-      return undefined;
-    }
+    if (hasQueryFocus || hasCachedFlicks) return undefined;
 
     let active = true;
     void (async () => {
@@ -160,38 +177,64 @@ export default function Flicks() {
         if (!active) return;
 
         const hydratedRows = await hydrateSurfacePostInteractions(rows, user?.id);
-
-        const selectedIndex = hydratedRows.findIndex((flick) => (
-          (requestedPostId && flick.id === requestedPostId)
-          || (requestedImage && (flick.image_url === requestedImage || flick.image_original_url === requestedImage))
-        ));
-        const orderedRows = selectedIndex >= 0
-          ? [hydratedRows[selectedIndex], ...hydratedRows.filter((_, index) => index !== selectedIndex)]
-          : requestedImage
-            ? [{
-                id: requestedPostId ?? `image-${Date.now()}`,
-                author_id: "",
-                username: "Image",
-                profile_pic: null,
-                text: null,
-                image_url: requestedImage,
-                image_original_url: requestedImage,
-                video_url: null,
-                audio_url: null,
-                duration_ms: null,
-                created_at: new Date().toISOString(),
-                likes_count: 0,
-                comments_count: 0,
-                liked: false,
-              }, ...hydratedRows]
-            : hydratedRows;
-
-        setFlicks(orderedRows);
+        setFlicks(hydratedRows);
         setHasMore(rows.length === PAGE_SIZE);
       } catch {
         if (active) setError("Unable to load Flicks right now.");
       } finally {
         if (active) setLoading(false);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [hasCachedFlicks, hasQueryFocus, user?.id]);
+
+  useEffect(() => {
+    if (!requestedPostId) {
+      setFocusedFlick(null);
+      setFocusedFlickError(null);
+      setFocusedFlickLoading(false);
+      return undefined;
+    }
+
+    let active = true;
+    setFocusedFlick(null);
+    setFocusedFlickError(null);
+    setFocusedFlickLoading(true);
+
+    void (async () => {
+      try {
+        const post = await fetchPostByIdFromSupabase(requestedPostId);
+        if (!active) return;
+        if (!post) throw new Error("Unable to find this image.");
+
+        const imageUrl = requestedImage ?? post.image_original_url ?? post.image_url;
+        if (!imageUrl) throw new Error("This post has no image to display.");
+
+        const candidate: FlickRecord = {
+          id: post.id,
+          author_id: post.author_id,
+          username: post.profiles?.username ?? "User",
+          profile_pic: post.profiles?.profile_pic ?? null,
+          text: post.text ?? null,
+          image_url: imageUrl,
+          image_original_url: post.image_original_url ?? null,
+          video_url: post.video_url ?? null,
+          audio_url: post.audio_url ?? null,
+          duration_ms: null,
+          created_at: post.created_at,
+          likes_count: post.likes_count ?? 0,
+          comments_count: post.comments_count ?? 0,
+          liked: false,
+        };
+        const [hydrated] = await hydrateSurfacePostInteractions([candidate], user?.id);
+        if (active) setFocusedFlick(hydrated ?? candidate);
+      } catch {
+        if (active) setFocusedFlickError("Unable to load this image right now.");
+      } finally {
+        if (active) setFocusedFlickLoading(false);
       }
     })();
 
@@ -204,6 +247,28 @@ export default function Flicks() {
     if (typeof window === "undefined") return;
     window.sessionStorage.setItem(FLICKS_CACHE_KEY, JSON.stringify({ flicks, hasMore }));
   }, [flicks, hasMore]);
+
+  useLayoutEffect(() => {
+    const scroller = scrollContainerRef.current;
+    if (hasQueryFocus) {
+      restoredScrollKeyRef.current = null;
+      return;
+    }
+    if (!scroller || loading || flicks.length === 0 || restoredScrollKeyRef.current === scrollCacheKey) return;
+
+    restoreSurfaceScrollPosition(scroller, scrollCacheKey);
+    restoredScrollKeyRef.current = scrollCacheKey;
+  }, [flicks.length, hasQueryFocus, loading, scrollCacheKey]);
+
+  useEffect(() => () => {
+    if (scrollSaveFrameRef.current !== null) {
+      window.cancelAnimationFrame(scrollSaveFrameRef.current);
+      scrollSaveFrameRef.current = null;
+    }
+    if (!hasQueryFocus && scrollContainerRef.current) {
+      saveSurfaceScrollPosition(scrollContainerRef.current, scrollCacheKey);
+    }
+  }, [hasQueryFocus, scrollCacheKey]);
 
   const loadMore = async () => {
     if (loadingMore || !hasMore || flicks.length === 0) return;
@@ -427,14 +492,30 @@ export default function Flicks() {
     setActiveCommentId(null);
   };
 
+  if (isImageOnlyViewer && requestedImage) {
+    return (
+      <main className={`relative grid h-dvh w-full place-items-center bg-slate-950 ${isDark ? "" : "bg-[linear-gradient(135deg,#e0f2fe,#ffffff,#cffafe)]"}`}>
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          aria-label={t("common.goBack")}
+          className="absolute left-4 top-4 z-10 grid h-11 w-11 place-items-center rounded-full bg-black/55 text-white shadow-lg backdrop-blur"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </button>
+        <img src={requestedImage} alt={t("profile.viewPicture")} className="max-h-full max-w-full object-contain" />
+      </main>
+    );
+  }
+
   return (
-    <main onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} className={`min-h-screen px-3 pb-8 pt-6 transition-colors ${isDark ? "bg-[#0B0B0B]" : "bg-linear-to-br from-sky-100 via-white to-cyan-100"}`}>
-      <div className="relative mx-auto mb-2 flex max-w-xl items-center justify-center px-2 text-center">
+    <main onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} className={`relative h-dvh w-full overflow-hidden transition-colors ${isDark ? "bg-[#0B0B0B]" : "bg-linear-to-br from-sky-100 via-white to-cyan-100"}`}>
+      <div className="absolute left-1/2 top-4 z-40 flex w-full max-w-xl -translate-x-1/2 items-center justify-center px-5 text-center">
         <button
           type="button"
           onClick={() => setTheme("bluesky")}
-          aria-label="Use BlueSky theme"
-          title="BlueSky theme"
+          aria-label={t("media.useBlueSkyTheme")}
+          title={t("media.blueSkyTheme")}
           className={`absolute left-0 grid h-10 w-10 place-items-center rounded-full border shadow-sm transition ${theme === "bluesky" ? "border-sky-500 bg-sky-500 text-white" : isDark ? "border-white/15 bg-white/5 text-white/60" : "border-sky-200 bg-white/70 text-sky-600"}`}
         >
           <CloudSun className="h-5 w-5" />
@@ -446,27 +527,41 @@ export default function Flicks() {
         <button
           type="button"
           onClick={() => setTheme("dark")}
-          aria-label="Use Dark Gold theme"
-          title="Dark Gold theme"
+          aria-label={t("media.useDarkGoldTheme")}
+          title={t("media.darkGoldTheme")}
           className={`absolute right-0 grid h-10 w-10 place-items-center rounded-full border shadow-sm transition ${theme === "dark" ? "border-amber-300 bg-amber-400 text-slate-950" : "border-sky-200 bg-white/70 text-slate-700"}`}
         >
           <MoonStar className="h-5 w-5" />
         </button>
-        {loadingMore && <LoaderCircle className={`absolute right-12 h-5 w-5 animate-spin ${isDark ? "text-amber-300" : "text-sky-600"}`} />}
+        {!hasQueryFocus && loadingMore && <LoaderCircle className={`absolute right-12 h-5 w-5 animate-spin ${isDark ? "text-amber-300" : "text-sky-600"}`} />}
       </div>
 
-      {loading && <FlickSkeleton />}
-      {error && <p className="mx-auto mb-3 max-w-xl rounded-2xl bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
-      {!loading && flicks.length === 0 && !error && <p className="mx-auto max-w-xl rounded-2xl bg-white p-6 text-center text-slate-600">No Flicks yet.</p>}
+      <div
+        ref={scrollContainerRef}
+        data-surface-scroll
+        onScroll={(event) => {
+          const scroller = event.currentTarget;
+          if (hasQueryFocus || scrollSaveFrameRef.current !== null) return;
+          scrollSaveFrameRef.current = window.requestAnimationFrame(() => {
+            scrollSaveFrameRef.current = null;
+            saveSurfaceScrollPosition(scroller, scrollCacheKey);
+          });
+        }}
+        className="absolute inset-0 h-full snap-y snap-mandatory overflow-x-hidden overflow-y-auto overscroll-y-contain"
+        style={{ overflowY: commentsFor || menuFor || reportTarget ? "hidden" : "auto" }}
+      >
+      {visibleLoading && <FlickSkeleton />}
+      {visibleError && <p className="mx-auto mt-20 max-w-xl rounded-2xl bg-rose-50 p-3 text-sm text-rose-700">{visibleError}</p>}
+      {!visibleLoading && visibleFlicks.length === 0 && !visibleError && <p className="mx-auto mt-24 max-w-xl rounded-2xl bg-white p-6 text-center text-slate-600">{t("media.noFlicks")}</p>}
 
-      <div className="space-y-5">
-        {flicks.filter((flick) => !blockedAuthorIds.includes(flick.author_id)).map((flick, index) => {
+      <div className="flex w-full flex-col">
+        {visibleFlicks.map((flick, index) => {
           const caption = flick.text || "";
           const isLongCaption = caption.length > 120;
           const isExpanded = expandedCaptions[flick.id] ?? false;
 
           return (
-            <article key={flick.id} className={`relative mx-auto min-h-[calc(100svh-7rem)] max-w-xl overflow-hidden rounded-3xl shadow-2xl ${isDark ? "bg-[#111111] shadow-amber-950/30" : "bg-slate-950 shadow-sky-900/20"}`}>
+            <article key={flick.id} className={`relative mx-auto h-dvh w-full max-w-xl snap-start snap-always overflow-hidden bg-slate-950 shadow-2xl md:rounded-3xl ${isDark ? "shadow-amber-950/30" : "shadow-sky-900/20"}`}>
               <div className="absolute inset-0 z-0 flex h-full w-full items-center justify-center bg-slate-950">
                 <img src={flick.image_url} alt={caption || `${flick.username}'s Flick`} loading={index < 2 ? "eager" : "lazy"} decoding="async" className="max-h-full w-full object-contain" />
               </div>
@@ -488,40 +583,40 @@ export default function Flicks() {
                           aria-expanded={isExpanded}
                           className={`pointer-events-auto mt-1 inline-flex text-xs font-semibold underline-offset-2 hover:underline ${isExpanded ? "text-sky-200" : "text-sky-200"}`}
                         >
-                          {isExpanded ? "See less" : "See more"}
+                          {isExpanded ? t("media.seeLess") : t("media.seeMore")}
                         </button>
                       )}
                     </div>
                   ) : null}
                 </div>
                 <div className="flex flex-col items-center gap-4">
-                  <button type="button" onClick={() => void toggleLike(flick)} aria-label="Like Flick" className="text-2xl transition hover:scale-110">
+                  <button type="button" onClick={() => void toggleLike(flick)} aria-label={t("media.likeClip")} className="text-2xl transition hover:scale-110">
                     <span aria-hidden="true">{flick.liked ? "❤️" : "🤍"}</span>
                   </button>
                   <span className="text-xs text-white/80">{flick.likes_count}</span>
-                  <button type="button" onClick={() => void toggleComments(flick)} aria-label="View comments" className="text-white/90 transition hover:scale-110">
+                  <button type="button" onClick={() => void toggleComments(flick)} aria-label={t("media.comments")} className="text-white/90 transition hover:scale-110">
                     <MessageCircle className="h-7 w-7" />
                   </button>
                   <span className="text-xs text-white/80">{flick.comments_count}</span>
                   <div className="relative">
-                    <button type="button" onClick={() => setMenuFor((current) => current === flick.id ? null : flick.id)} aria-label="More Flick actions" className="text-white/90 transition hover:scale-110">
+                    <button type="button" onClick={() => setMenuFor((current) => current === flick.id ? null : flick.id)} aria-label={t("media.moreClipActions")} className="text-white/90 transition hover:scale-110">
                       <Grid2X2 className="h-6 w-6" />
                     </button>
                     {menuFor === flick.id && (
                       <div className="fixed inset-0 z-60 grid place-items-center bg-black/35 p-4">
-                        <button type="button" aria-label="Close actions" onClick={() => setMenuFor(null)} className="absolute inset-0" />
+                        <button type="button" aria-label={t("media.closeActions")} onClick={() => setMenuFor(null)} className="absolute inset-0" />
                         <div onClick={(event) => event.stopPropagation()} className={`relative z-10 grid w-full max-w-xs grid-cols-2 gap-2 rounded-2xl border p-3 text-left text-xs shadow-2xl ${isDark ? "border-white/15 bg-slate-950 text-white" : "border-sky-100 bg-white text-slate-700"}`}>
-                          <button type="button" onClick={() => void shareFlick(flick)} className="flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center hover:bg-sky-50"><Share2 className="h-5 w-5" />Share</button>
-                          <button type="button" onClick={() => void saveFlickToDevice(flick)} className="flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center hover:bg-sky-50"><Download className="h-5 w-5" />Save to device</button>
-                          <button type="button" onClick={() => void repostFlick(flick)} className="flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center hover:bg-sky-50"><Repeat2 className="h-5 w-5" />Repost</button>
+                          <button type="button" onClick={() => void shareFlick(flick)} className="flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center hover:bg-sky-50"><Share2 className="h-5 w-5" />{t("common.share")}</button>
+                          <button type="button" onClick={() => void saveFlickToDevice(flick)} className="flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center hover:bg-sky-50"><Download className="h-5 w-5" />{t("media.saveToDevice")}</button>
+                          <button type="button" onClick={() => void repostFlick(flick)} className="flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center hover:bg-sky-50"><Repeat2 className="h-5 w-5" />{t("media.repost")}</button>
                           {flick.author_id !== user?.id && (
-                            <button type="button" onClick={() => { setReportTarget(flick); setMenuFor(null); }} className="flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center hover:bg-sky-50"><Flag className="h-5 w-5" />Report</button>
+                            <button type="button" onClick={() => { setReportTarget(flick); setMenuFor(null); }} className="flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center hover:bg-sky-50"><Flag className="h-5 w-5" />{t("common.report")}</button>
                           )}
                           {flick.author_id !== user?.id && (
-                            <button type="button" onClick={() => blockFlickAuthor(flick)} className="col-span-2 flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center text-rose-500 hover:bg-rose-50"><Ban className="h-5 w-5" />Block author</button>
+                            <button type="button" onClick={() => blockFlickAuthor(flick)} className="col-span-2 flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center text-rose-500 hover:bg-rose-50"><Ban className="h-5 w-5" />{t("media.blockAuthor")}</button>
                           )}
                           {flick.author_id === user?.id && (
-                            <button type="button" onClick={() => void deleteFlick(flick)} className="col-span-2 flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center text-rose-500 hover:bg-rose-50"><Trash2 className="h-5 w-5" />Delete</button>
+                            <button type="button" onClick={() => void deleteFlick(flick)} className="col-span-2 flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center text-rose-500 hover:bg-rose-50"><Trash2 className="h-5 w-5" />{t("media.delete")}</button>
                           )}
                         </div>
                       </div>
@@ -534,21 +629,21 @@ export default function Flicks() {
                 <>
                   <button
                     type="button"
-                    aria-label="Close comments"
+                    aria-label={t("media.closeComments")}
                     onClick={() => setCommentsFor(null)}
                     className="fixed inset-0 z-40 cursor-default bg-black/20"
                   />
                   <div onClick={(event) => event.stopPropagation()} className={`fixed inset-x-[3%] bottom-[10%] z-50 flex max-h-[80vh] flex-col overflow-hidden rounded-2xl p-4 shadow-2xl ring-1 ${isDark ? "bg-slate-950/98 text-white ring-white/15" : "bg-white/98 text-slate-900 ring-sky-200"}`}>
                     <div className="mb-3 flex items-center justify-between">
-                      <p className="font-semibold">Comments</p>
-                      <button type="button" onClick={() => setCommentsFor(null)} className={isDark ? "text-white/60" : "text-slate-500"}>Close</button>
+                      <p className="font-semibold">{t("media.comments")}</p>
+                      <button type="button" onClick={() => setCommentsFor(null)} className={isDark ? "text-white/60" : "text-slate-500"}>{t("common.close")}</button>
                     </div>
 
                     <div className="max-h-[calc(80vh-9rem)] overflow-y-auto pr-1">
                       {commentsLoadingById[flick.id] ? (
-                        <p className={isDark ? "text-sm text-white/60" : "text-sm text-slate-500"}>Loading...</p>
+                        <p className={isDark ? "text-sm text-white/60" : "text-sm text-slate-500"}>{t("media.loading")}</p>
                       ) : (commentsById[flick.id] ?? []).length === 0 ? (
-                        <p className={isDark ? "text-sm text-white/60" : "text-sm text-slate-500"}>No comments yet.</p>
+                        <p className={isDark ? "text-sm text-white/60" : "text-sm text-slate-500"}>{t("media.noComments")}</p>
                       ) : (
                         <div className="space-y-2">
                           {(commentsById[flick.id] ?? []).map((comment) => (
@@ -565,8 +660,8 @@ export default function Flicks() {
                                 <div className="space-y-2">
                                   <textarea value={editingCommentText} onChange={(event) => setEditingCommentText(event.target.value)} rows={3} className={`w-full resize-none rounded-lg p-2 text-sm outline-none ${isDark ? "bg-white/10" : "bg-slate-100"}`} />
                                   <div className="flex gap-2">
-                                    <button type="button" onClick={() => void saveCommentEdit(comment)} className="rounded-lg bg-sky-500 px-3 py-1 text-xs font-semibold">Save</button>
-                                    <button type="button" onClick={() => setEditingCommentId(null)} className={`rounded-lg px-3 py-1 text-xs ${isDark ? "bg-white/10" : "bg-slate-100 text-slate-600"}`}>Cancel</button>
+                                    <button type="button" onClick={() => void saveCommentEdit(comment)} className="rounded-lg bg-sky-500 px-3 py-1 text-xs font-semibold">{t("common.saveChanges")}</button>
+                                    <button type="button" onClick={() => setEditingCommentId(null)} className={`rounded-lg px-3 py-1 text-xs ${isDark ? "bg-white/10" : "bg-slate-100 text-slate-600"}`}>{t("common.cancel")}</button>
                                   </div>
                                 </div>
                               ) : (
@@ -577,8 +672,8 @@ export default function Flicks() {
                               )}
                               {activeCommentId === comment.id && editingCommentId !== comment.id && (
                                 <div className={`mt-2 flex gap-2 border-t pt-2 ${isDark ? "border-white/10" : "border-sky-100"}`}>
-                                  <button type="button" onClick={() => { setEditingCommentId(comment.id); setEditingCommentText(comment.text ?? ""); }} className="text-xs font-semibold text-sky-300">Edit</button>
-                                  <button type="button" onClick={() => void removeComment(comment)} className="text-xs font-semibold text-rose-300">Delete</button>
+                                  <button type="button" onClick={() => { setEditingCommentId(comment.id); setEditingCommentText(comment.text ?? ""); }} className="text-xs font-semibold text-sky-300">{t("media.edit")}</button>
+                                  <button type="button" onClick={() => void removeComment(comment)} className="text-xs font-semibold text-rose-300">{t("media.delete")}</button>
                                 </div>
                               )}
                             </div>
@@ -590,27 +685,27 @@ export default function Flicks() {
                     {voiceUrl && (
                       <div className={`mb-2 flex items-center gap-2 rounded-xl border p-2 ${isDark ? "border-white/10 bg-white/5" : "border-sky-100 bg-sky-50/80"}`}>
                         <audio controls src={voiceUrl} className="h-7 min-w-0 flex-1" />
-                        <button type="button" onClick={clearVoiceUrl} className={isDark ? "text-xs text-white/60" : "text-xs text-slate-500"}>Remove</button>
+                        <button type="button" onClick={clearVoiceUrl} className={isDark ? "text-xs text-white/60" : "text-xs text-slate-500"}>{t("media.remove")}</button>
                       </div>
                     )}
-                    {isRecording && <p className="mb-2 text-xs text-rose-300">Recording voice comment: {recordingDuration}s / 15s</p>}
+                    {isRecording && <p className="mb-2 text-xs text-rose-300">{t("media.recordingVoiceComment").replace("{duration}", String(recordingDuration))}</p>}
                     <form onSubmit={(event) => void submitComment(event, flick)} className="mt-3 flex w-full items-end gap-2">
                       <textarea
                         value={commentDrafts[flick.id] ?? ""}
                         onChange={(event) => setCommentDrafts((current) => ({ ...current, [flick.id]: event.target.value }))}
-                        placeholder="Add a comment"
+                        placeholder={t("media.addComment")}
                         rows={4}
                         className={`w-full min-w-0 flex-1 resize-none overflow-y-auto rounded-xl px-3 py-2 text-sm outline-none ${isDark ? "bg-white/10 text-white placeholder:text-white/45" : "bg-slate-100 text-slate-900 placeholder:text-slate-400"}`}
                       />
                       <button
                         type="button"
                         onClick={() => void (isRecording ? stopRecording() : startRecording())}
-                        aria-label={isRecording ? "Stop voice comment" : "Record voice comment"}
+                        aria-label={isRecording ? t("media.stopVoiceComment") : t("media.recordVoiceComment")}
                         className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${isRecording ? "bg-rose-500 text-white" : isDark ? "bg-white/10 text-white" : "bg-sky-100 text-sky-700"}`}
                       >
                         {isRecording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
                       </button>
-                      <button type="submit" className="shrink-0 rounded-xl bg-sky-500 px-3 py-2 text-sm font-semibold">Send</button>
+                      <button type="submit" className="shrink-0 rounded-xl bg-sky-500 px-3 py-2 text-sm font-semibold">{t("media.send")}</button>
                     </form>
                   </div>
                 </>
@@ -626,8 +721,9 @@ export default function Flicks() {
         onSelect={(reason) => reportTarget ? reportFlick(reportTarget, reason) : Promise.reject(new Error("No report target selected."))}
       />
 
-      {hasMore && flicks.length > 0 && <div ref={loadMoreSentinelRef} className="h-4" aria-hidden="true" />}
-      {loadingMore && <LoaderCircle className="mx-auto mt-5 h-6 w-6 animate-spin text-sky-600" aria-label="Loading more Flicks" />}
+      {!hasQueryFocus && hasMore && flicks.length > 0 && <div ref={loadMoreSentinelRef} className="h-4 snap-none" aria-hidden="true" />}
+      {!hasQueryFocus && loadingMore && <LoaderCircle className="mx-auto my-5 h-6 w-6 animate-spin text-sky-600" aria-label="Loading more Flicks" />}
+      </div>
       <SurfaceDock />
     </main>
   );

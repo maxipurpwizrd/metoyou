@@ -5,6 +5,7 @@ import EditPostModal from "./EditPostModal";
 import MediaActionMenu, { type MediaAction } from "./MediaActionMenu";
 import ReportReasonModal, { type PostReportReason } from "./ReportReasonModal";
 import { useSession } from "../contexts/SessionContext";
+import { useLanguage } from "../contexts/LanguageContext";
 import { useAutoplayVideo } from "../hooks/useAutoplayVideo";
 import { useAutoplayAudio } from "../hooks/useAutoplayAudio";
 import { useVideoContext } from "../contexts/VideoContext";
@@ -36,8 +37,11 @@ type Props = {
   onDeleteVideo?: () => void;
 
   isSelected?: boolean;
+  isCommentsOpen?: boolean;
   onToggleLike?: () => void;
-  onSelectPost?: () => void;
+  onOpenComments?: () => void;
+  onCloseComments?: () => void;
+  onCommentInputFocusChange?: (isFocused: boolean) => void;
   onClosePost?: () => void;
   onRepost?: () => void;
   onSavePost?: () => void;
@@ -72,8 +76,11 @@ export default function PostCard({
   liked = false,
   highlighted = false,
   isSelected = false,
+  isCommentsOpen = false,
   onToggleLike,
-  onSelectPost,
+  onOpenComments,
+  onCloseComments,
+  onCommentInputFocusChange,
   onClosePost,
   onRepost,
   onSavePost,
@@ -95,6 +102,7 @@ export default function PostCard({
 }: Props) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useLanguage();
   const { profile: currentUser } = useSession();
   const ownerId = authorId ?? author?.id;
   const isOwner = Boolean(currentUser && ownerId && currentUser.id === ownerId);
@@ -103,6 +111,7 @@ export default function PostCard({
   const [displayLikes, setDisplayLikes] = useState(likes);
   const [displayLiked, setDisplayLiked] = useState(Boolean(liked));
   const [newComment, setNewComment] = useState("");
+  const newCommentRef = useRef<HTMLTextAreaElement | null>(null);
   const [voiceComment, setVoiceComment] = useState<string | undefined>(undefined);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingText, setEditingText] = useState("");
@@ -113,6 +122,14 @@ export default function PostCard({
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [draftPostText, setDraftPostText] = useState(text);
   const MAX_RECORDING_SECONDS = 60;
+
+  useEffect(() => {
+    const textarea = newCommentRef.current;
+    if (!textarea) return;
+
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
+  }, [newComment]);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -130,6 +147,8 @@ export default function PostCard({
   const [isMuted, setIsMuted] = useState(true);
   const [mediaReady, setMediaReady] = useState(() => !image || loadedImageUrls.has(image));
   const [mediaErrored, setMediaErrored] = useState(false);
+  const [imageAspect, setImageAspect] = useState<{ src: string; ratio: number } | null>(null);
+  const imageAspectRatio = !video && imageAspect && imageAspect.src === image ? imageAspect.ratio : null;
   const { playingVideoId, setPlayingVideoId } = useVideoContext();
 
   const videoElementId = `video_${postId}`;
@@ -336,7 +355,7 @@ export default function PostCard({
 
   const startRecording = async (replaceExisting = false) => {
     if (!replaceExisting && voiceComment) {
-      alert("Only one voice comment can be attached at a time.");
+      alert(t("post.onlyOneVoiceComment"));
       return;
     }
 
@@ -382,7 +401,7 @@ export default function PostCard({
       startWaveformVisualization(stream);
       setIsRecording(true);
     } catch {
-      alert("Microphone permission denied.");
+      alert(t("post.microphoneDenied"));
     }
   };
 
@@ -432,18 +451,18 @@ export default function PostCard({
   const isPremiumTheme = Boolean(isVibesPro || variant === "gold" || author?.is_vibes_pro);
   const feedMenuActions: MediaAction[] = isOwner
     ? [
-        { label: "Edit post", icon: "edit", onClick: () => { setDraftPostText(text); setIsEditingPost(true); setShowMenu(false); } },
-        { label: "Share", icon: "share", onClick: async () => { try { if (navigator.share) await navigator.share({ title: `${author.username}'s post`, text, url: window.location.href }); else await navigator.clipboard.writeText(window.location.href); } catch { /* ignore share failure */ } setShowMenu(false); } },
-        ...(video ? [{ label: "Delete video", icon: "delete" as const, tone: "danger" as const, onClick: () => { onDeleteVideo?.(); setShowMenu(false); } }] : []),
-        { label: highlighted ? "Unhighlight" : "Highlight", icon: "highlight", onClick: () => { onHighlight?.(); setShowMenu(false); } },
-        { label: "Delete post", icon: "delete" as const, tone: "danger" as const, onClick: () => { onDeletePost?.(); setShowMenu(false); } },
+        { label: t("post.edit"), icon: "edit", onClick: () => { setDraftPostText(text); setIsEditingPost(true); setShowMenu(false); } },
+        { label: t("post.share"), icon: "share", onClick: async () => { try { if (navigator.share) await navigator.share({ title: `${author.username}'s post`, text, url: window.location.href }); else await navigator.clipboard.writeText(window.location.href); } catch { /* ignore share failure */ } setShowMenu(false); } },
+        ...(video ? [{ label: t("post.deleteVideo"), icon: "delete" as const, tone: "danger" as const, onClick: () => { onDeleteVideo?.(); setShowMenu(false); } }] : []),
+        { label: highlighted ? t("post.unhighlight") : t("post.highlight"), icon: "highlight", onClick: () => { onHighlight?.(); setShowMenu(false); } },
+        { label: t("post.deletePost"), icon: "delete" as const, tone: "danger" as const, onClick: () => { onDeletePost?.(); setShowMenu(false); } },
       ]
     : [
-        { label: "Share", icon: "share", onClick: async () => { try { if (navigator.share) await navigator.share({ title: `${author.username}'s post`, text, url: window.location.href }); else await navigator.clipboard.writeText(window.location.href); } catch { /* ignore share failure */ } setShowMenu(false); } },
-        { label: "Save", icon: "download", onClick: () => { onSavePost?.(); setShowMenu(false); } },
-        { label: "Repost", icon: "repost", onClick: () => { onRepost?.(); setShowMenu(false); } },
-        { label: "Report", icon: "report", onClick: () => { setIsReportModalOpen(true); setShowMenu(false); } },
-        { label: "Block author", icon: "block", tone: "danger", onClick: () => { onBlockUser?.(); setShowMenu(false); } },
+        { label: t("post.share"), icon: "share", onClick: async () => { try { if (navigator.share) await navigator.share({ title: `${author.username}'s post`, text, url: window.location.href }); else await navigator.clipboard.writeText(window.location.href); } catch { /* ignore share failure */ } setShowMenu(false); } },
+        { label: t("post.save"), icon: "download", onClick: () => { onSavePost?.(); setShowMenu(false); } },
+        { label: t("post.repost"), icon: "repost", onClick: () => { onRepost?.(); setShowMenu(false); } },
+        { label: t("post.report"), icon: "report", onClick: () => { setIsReportModalOpen(true); setShowMenu(false); } },
+        { label: t("post.blockAuthor"), icon: "block", tone: "danger", onClick: () => { onBlockUser?.(); setShowMenu(false); } },
       ];
 
   const handleReport = async (reason: PostReportReason) => {
@@ -456,7 +475,7 @@ export default function PostCard({
       reportedUserId: ownerId,
       reason,
     });
-    window.alert("Report submitted. Thanks for helping keep MeToYou safe.");
+    window.alert(t("post.reportSubmitted"));
   };
 
   useEffect(() => {
@@ -476,6 +495,7 @@ export default function PostCard({
         `}</style>
       )}
       <div
+        data-post-card-id={postId === undefined ? undefined : String(postId)}
         className={`relative overflow-hidden rounded-[28px] p-5 mb-4 transition-all duration-300 md:rounded-3xl md:p-7 ${
           isPremiumTheme
             ? "border border-amber-200/80 bg-[linear-gradient(135deg,rgba(255,249,196,0.96)_0%,rgba(255,224,130,0.92)_38%,rgba(245,158,11,0.85)_100%)] shadow-[0_0_0_1px_rgba(255,215,0,0.25),0_18px_60px_rgba(217,119,6,0.16)] backdrop-blur-xl"
@@ -536,7 +556,7 @@ export default function PostCard({
             </div>
             {highlighted && (
               <span className={`inline-block text-[9px] font-bold uppercase tracking-wider rounded-md px-1.5 py-0.5 mt-0.5 ${isPremiumTheme ? "bg-amber-100/80 text-amber-800" : "bg-amber-100 text-amber-700"}`}>
-                ✨ Highlight
+                ✨ {t("post.highlightBadge")}
               </span>
             )}
           </div>
@@ -553,8 +573,8 @@ export default function PostCard({
           {uploadState === "uploading" && (
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-[11px] font-semibold text-slate-700">
-                <span>Uploading... {uploadProgress ?? 0}%</span>
-                <span className="text-[10px] uppercase tracking-wide text-sky-500">Live</span>
+                <span>{t("post.uploading").replace("{progress}", String(uploadProgress ?? 0))}</span>
+                <span className="text-[10px] uppercase tracking-wide text-sky-500">{t("post.live")}</span>
               </div>
               <div className="h-1.5 rounded-full bg-slate-200 overflow-hidden">
                 <div className="h-full rounded-full bg-linear-to-r from-sky-500 via-cyan-400 to-blue-500 transition-all duration-300" style={{ width: `${Math.max(4, uploadProgress ?? 0)}%` }} />
@@ -562,22 +582,22 @@ export default function PostCard({
             </div>
           )}
           {uploadState === "completed" && (
-            <div className="text-[11px] font-semibold text-emerald-600">✓ Upload complete</div>
+            <div className="text-[11px] font-semibold text-emerald-600">{t("post.uploadComplete")}</div>
           )}
           {uploadState === "waiting-network" && (
             <div className="space-y-1">
               <div className="flex items-center gap-2 text-[11px] font-semibold text-amber-600">
                 <span>⚠</span>
-                <span>Waiting for network...</span>
+                <span>{t("post.waitingNetwork")}</span>
               </div>
-              <p className="text-[10px] text-slate-500">Will continue automatically</p>
+              <p className="text-[10px] text-slate-500">{t("post.continueAutomatically")}</p>
             </div>
           )}
           {uploadState === "failed" && (
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[11px] font-semibold text-red-600">Upload failed</span>
-              <button type="button" onClick={(e)=>{e.stopPropagation(); onRetryPost?.();}} className="rounded-full bg-sky-500 px-2.5 py-1 text-[10px] font-semibold text-white">Retry</button>
-              <button type="button" onClick={(e)=>{e.stopPropagation(); onDeletePost?.();}} className="rounded-full bg-slate-200 px-2.5 py-1 text-[10px] font-semibold text-slate-700">Delete</button>
+              <span className="text-[11px] font-semibold text-red-600">{t("post.uploadFailed")}</span>
+              <button type="button" onClick={(e)=>{e.stopPropagation(); onRetryPost?.();}} className="rounded-full bg-sky-500 px-2.5 py-1 text-[10px] font-semibold text-white">{t("post.retry")}</button>
+              <button type="button" onClick={(e)=>{e.stopPropagation(); onDeletePost?.();}} className="rounded-full bg-slate-200 px-2.5 py-1 text-[10px] font-semibold text-slate-700">{t("post.delete")}</button>
             </div>
           )}
         </div>
@@ -589,7 +609,10 @@ export default function PostCard({
           {hasVisualMedia ? (
             <div className="flex md:flex-col gap-3 md:gap-3.5">
               {/* LEFT: Media Container (45% on mobile, full width on desktop) */}
-              <div className={`w-[45%] md:w-full aspect-[4/3] shrink-0 rounded-2xl flex items-center justify-center overflow-hidden relative shadow-inner border ${isPremiumTheme ? "border-amber-200/80 bg-[linear-gradient(135deg,rgba(255,250,205,0.95),rgba(253,230,138,0.9))]" : "bg-linear-to-br from-sky-100 via-white to-cyan-100 border-white/20"}`}>
+              <div
+                style={imageAspectRatio ? { aspectRatio: String(imageAspectRatio), maxHeight: "70dvh" } : undefined}
+                className={`w-[45%] md:w-full aspect-[4/3] shrink-0 rounded-2xl flex items-center justify-center overflow-hidden relative shadow-inner border ${isPremiumTheme ? "border-amber-200/80 bg-[linear-gradient(135deg,rgba(255,250,205,0.95),rgba(253,230,138,0.9))]" : "bg-linear-to-br from-sky-100 via-white to-cyan-100 border-white/20"}`}
+              >
                 {!mediaReady && !mediaErrored && (
                   <div className="absolute inset-0 flex items-center justify-center bg-white/60 backdrop-blur-sm">
                     <div className="h-8 w-8 animate-spin rounded-full border-2 border-sky-300 border-t-transparent" />
@@ -635,7 +658,11 @@ export default function PostCard({
                     loading="lazy"
                     className="w-full h-full object-contain bg-black/5 cursor-pointer active:scale-98 transition-transform"
                     onLoad={() => {
-                                            if (image) loadedImageUrls.add(image);
+                      if (image) loadedImageUrls.add(image);
+                      const loadedImage = imgRef.current;
+                      if (image && loadedImage?.naturalWidth && loadedImage.naturalHeight) {
+                        setImageAspect({ src: image, ratio: loadedImage.naturalWidth / loadedImage.naturalHeight });
+                      }
                       setMediaReady(true);
                       onMediaLoad?.();
                     }}
@@ -684,7 +711,7 @@ export default function PostCard({
                           }}
                           className="mt-2 inline-flex items-center rounded-full bg-slate-800 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-white"
                         >
-                          More
+                          {t("post.more")}
                         </button>
                       </>
                     ) : (
@@ -722,7 +749,7 @@ export default function PostCard({
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onSelectPost?.();
+                      onOpenComments?.();
                     }}
                     className={`py-1.5 md:py-2.5 text-xs font-bold text-center transition-colors rounded-lg border ${isPremiumTheme ? "text-amber-900 hover:bg-amber-100/70 border-amber-200/70" : "text-blue-600 hover:bg-blue-50/40 border-blue-200/50 md:border-slate-100"}`}
                   >
@@ -762,18 +789,18 @@ export default function PostCard({
                   }}
                       className={`flex-1 py-2.5 text-xs font-bold text-center transition-colors ${isPremiumTheme ? "text-amber-800 hover:bg-amber-100/70" : "text-sky-600 hover:bg-sky-50/40"}`}
                 >
-                  {displayLiked ? "❤️" : "🤍"} {displayLikes} Likes
+                    {displayLiked ? "❤️" : "🤍"} {displayLikes} {t("post.likes")}
                 </button>
                 <div className="w-px bg-slate-100"></div>
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onSelectPost?.();
+                    onOpenComments?.();
                   }}
                   className={`flex-1 py-2.5 text-xs font-bold text-center transition-colors ${isPremiumTheme ? "text-amber-900 hover:bg-amber-100/70" : "text-blue-600 hover:bg-blue-50/40"}`}
                 >
-                  💬 {comments?.length || 0} Comments
+                    💬 {comments?.length || 0} {t("post.comments")}
                 </button>
               </div>
             </div>
@@ -799,7 +826,7 @@ export default function PostCard({
             type="button"
             onClick={() => setIsReadingModeOpen(false)}
             className="absolute inset-0 bg-slate-950/25 backdrop-blur-xl"
-            aria-label="Close reading mode"
+            aria-label={t("post.closeReadingMode")}
           />
           <div className={`relative z-10 w-full max-w-160 max-h-[85vh] rounded-[28px] p-4 shadow-2xl sm:p-5 ${isPremiumTheme ? "border border-amber-200/80 bg-[linear-gradient(135deg,rgba(255,251,235,0.96),rgba(255,244,183,0.9))]" : "border border-white/60 bg-white/95"}`}>
             <div className="mb-3 flex items-center justify-between gap-3">
@@ -812,7 +839,7 @@ export default function PostCard({
                 onClick={() => setIsReadingModeOpen(false)}
                 className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold ${isPremiumTheme ? "border-amber-300/80 bg-white/70 text-amber-900" : "border-slate-200 bg-white text-slate-600"}`}
               >
-                Show Photo
+                {t("post.showPhoto")}
               </button>
             </div>
 
@@ -823,24 +850,20 @@ export default function PostCard({
         </div>
       )}
 
-      {/* Comments overlay matching Flicks mobile pattern */}
-      {isSelected && (
-        <>
-          <button
-            type="button"
-            aria-label="Close comments"
-            onClick={() => onClosePost?.()}
-            className="fixed inset-0 z-40 cursor-default bg-black/20"
-          />
+      </div>
+      </div>
 
-          <div
+      {isCommentsOpen && (
+          <section
+            aria-label={t("post.comments")}
+            data-comments-card-id={postId === undefined ? undefined : String(postId)}
             onClick={(event) => event.stopPropagation()}
-            className="fixed inset-x-[3%] bottom-[10%] z-50 flex max-h-[80vh] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white/98 p-4 shadow-2xl ring-1 ring-sky-200"
+            className={`mt-2 flex max-h-[70vh] flex-col overflow-hidden rounded-2xl border p-4 shadow-xl ${isPremiumTheme ? "border-amber-200/80 bg-white/95" : "border-sky-100 bg-white/95 ring-1 ring-sky-100"}`}
           >
             <div className="mb-3 flex items-center justify-between">
-              <p className="font-semibold text-slate-900">Comments</p>
-              <button type="button" onClick={() => onClosePost?.()} className="text-sm text-slate-500">
-                Close
+              <p className="font-semibold text-slate-900">{t("post.comments")}</p>
+              <button type="button" onClick={() => onCloseComments?.()} className="text-sm text-slate-500">
+                {t("common.close")}
               </button>
             </div>
 
@@ -934,7 +957,7 @@ export default function PostCard({
                   ))}
                 </div>
               ) : (
-                <p className="py-4 text-center text-sm text-slate-500">No comments yet.</p>
+                <p className="py-4 text-center text-sm text-slate-500">{t("media.noComments")}</p>
               )}
             </div>
 
@@ -942,10 +965,10 @@ export default function PostCard({
               <div className="mb-2 mt-3 flex items-center gap-2 rounded-xl border border-sky-100 bg-sky-50/80 p-2">
                 <audio controls src={voiceComment} className="h-7 min-w-0 flex-1" />
                 <button type="button" onClick={retryRecording} className="text-xs font-semibold text-sky-600">
-                  Retry
+                  {t("post.retry")}
                 </button>
                 <button type="button" onClick={removeVoiceComment} className="text-xs text-slate-500">
-                  Remove
+                  {t("media.remove")}
                 </button>
               </div>
             )}
@@ -953,7 +976,7 @@ export default function PostCard({
             {isRecording && (
               <div className="mb-2 mt-3 rounded-xl border border-rose-200 bg-rose-50 p-2 text-xs text-rose-700">
                 <div className="flex items-center justify-between gap-2">
-                  <span>Recording voice comment</span>
+                  <span>{t("media.recordVoiceComment")}</span>
                   <span>{formatRecordingDuration(recordingDuration)} / 01:00</span>
                 </div>
                 <canvas ref={waveCanvasRef} className="mt-2 h-8 w-full rounded-xl bg-slate-900/90" />
@@ -976,14 +999,18 @@ export default function PostCard({
               className="mt-3 flex w-full items-end gap-2"
             >
               <textarea
+                ref={newCommentRef}
                 value={newComment}
                 onChange={(event) => setNewComment(event.target.value)}
-                placeholder="Add a comment"
-                rows={4}
+                placeholder={t("media.addComment")}
+                rows={1}
+                style={{ maxHeight: 120 }}
+                onFocus={() => onCommentInputFocusChange?.(true)}
+                onBlur={() => onCommentInputFocusChange?.(false)}
                 onPointerDown={(event) => event.stopPropagation()}
                 onTouchStart={(event) => event.stopPropagation()}
                 onMouseDown={(event) => event.stopPropagation()}
-                className="w-full min-w-0 flex-1 resize-none overflow-y-auto rounded-xl border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-sky-300"
+                className="min-h-10 w-full min-w-0 flex-1 resize-none overflow-y-auto rounded-xl border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-sky-300"
               />
 
               <button
@@ -995,7 +1022,7 @@ export default function PostCard({
                     void startRecording();
                   }
                 }}
-                aria-label={isRecording ? "Stop voice comment" : "Record voice comment"}
+                aria-label={isRecording ? t("media.stopVoiceComment") : t("media.recordVoiceComment")}
                 className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${isRecording ? "bg-rose-500 text-white" : "bg-sky-100 text-sky-700"}`}
               >
                 {isRecording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
@@ -1005,14 +1032,11 @@ export default function PostCard({
                 type="submit"
                 className="shrink-0 rounded-xl bg-sky-500 px-3 py-2 text-sm font-semibold text-white"
               >
-                Send
+                {t("media.send")}
               </button>
             </form>
-          </div>
-        </>
+          </section>
       )}
-
-      </div>
 
       <ReportReasonModal
         open={isReportModalOpen}
@@ -1020,7 +1044,6 @@ export default function PostCard({
         onSelect={handleReport}
       />
 
-    </div>
     </>
   );
 }

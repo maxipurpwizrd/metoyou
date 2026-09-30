@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { getPresenceLabel } from "../../lib/presenceStatus";
+import { useLanguage } from "../../contexts/LanguageContext";
 
 interface ChatHeaderProps {
   recipientName: string;
@@ -30,6 +31,7 @@ export function ChatHeader({
   onVideoCall,
   onNavigateToProfile,
 }: ChatHeaderProps) {
+  const { t } = useLanguage();
   const headerClassName = isVibesPro
     ? "fixed top-0 left-0 right-0 z-50 bg-[#111111]/95 p-3 md:p-6 border-b border-[#D4AF37]/20 shadow-[0_0_40px_rgba(212,175,55,0.12)]"
     : "fixed top-0 left-0 right-0 z-50 bg-white/70 backdrop-blur-xl p-3 md:p-6 border-b border-white/70 shadow-[0_10px_35px_rgba(236,72,153,0.08)]";
@@ -69,7 +71,7 @@ export function ChatHeader({
 
               <p className={`text-xs mt-1 ${headerSubtextClassName}`}>
                 {typingUsers.includes(recipientId)
-                  ? `${recipientName} is typing...`
+                  ? t("chat.typing").replace("{name}", recipientName)
                   : getPresenceLabel({
                       isOnline: chatPresenceReady && isUserOnline(recipientId),
                       lastActive: chatPresenceReady ? undefined : undefined,
@@ -80,7 +82,7 @@ export function ChatHeader({
             <div className="ml-auto flex items-center gap-2">
               <button
                 onClick={onAudioCall}
-                title="Audio call"
+                title={t("chat.audioCall")}
                 className={`p-2 rounded-xl transition ${isVibesPro ? "bg-white/5 text-white hover:bg-white/10" : "bg-slate-900/10 text-slate-800 hover:bg-slate-900/20"}`}
               >
                 📞
@@ -88,7 +90,7 @@ export function ChatHeader({
 
               <button
                 onClick={onVideoCall}
-                title="Video call"
+                title={t("chat.videoCall")}
                 className={`p-2 rounded-xl transition ${isVibesPro ? "bg-white/5 text-white hover:bg-white/10" : "bg-slate-900/10 text-slate-800 hover:bg-slate-900/20"}`}
               >
                 🎥
@@ -101,7 +103,7 @@ export function ChatHeader({
               <input
                 value={searchQuery}
                 onChange={(event) => onSearchChange(event.target.value)}
-                placeholder="Search this conversation"
+                placeholder={t("chat.searchConversation")}
                 className={`w-full bg-transparent text-sm outline-none ${isVibesPro ? "text-[#F7E7B2] placeholder:text-[#E8C96F]/50 font-serif" : "text-white placeholder:text-white/50"}`}
               />
             </div>

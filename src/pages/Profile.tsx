@@ -1020,7 +1020,7 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
                   description: post.text,
                   mediaUrl: post.image,
                   mediaType: post.image ? 'image' : undefined,
-                  badgeLabel: post.highlighted ? 'Highlight' : 'Snapshot',
+                  badgeLabel: post.highlighted ? t("profile.highlightBadge") : t("profile.snapshotBadge"),
                   likes: (post.like_count ?? post.likes) ?? 0,
                   comments: (post.comment_count ?? post.comments) ?? 0,
                 }))}
@@ -1348,8 +1348,10 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
                         likes={post.likes ?? 0}
                         liked={Boolean(post.liked)}
                         isSelected={selectedPostId === post.id}
+                        isCommentsOpen={selectedPostId === post.id}
                         onToggleLike={() => void handleProfilePostLikeToggle(post)}
-                        onSelectPost={() => void handleProfilePostSelect(post)}
+                        onOpenComments={() => void handleProfilePostSelect(post)}
+                        onCloseComments={() => setSelectedPostId(null)}
                         onClosePost={() => {
                           if (selectedPostId === post.id) setSelectedPostId(null);
                         }}

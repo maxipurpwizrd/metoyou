@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type FormEvent, type TouchEvent } from "react";
-import { useNavigate } from "react-router-dom";
-import { Ban, CloudSun, Download, Flag, Grid2X2, LoaderCircle, MessageCircle, Mic, MoonStar, Music2, Play, Repeat2, Share2, Square, Trash2, Volume2, VolumeX } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type TouchEvent } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { ArrowLeft, Ban, CloudSun, Download, Flag, Grid2X2, LoaderCircle, MessageCircle, Mic, MoonStar, Music2, Play, Repeat2, Share2, Square, Trash2, Volume2, VolumeX } from "lucide-react";
 import { useSession } from "../contexts/SessionContext";
 import RequireVibesPro from "../components/RequireVibesPro";
 import { fetchClipsPage, type ClipRecord } from "../lib/clipsApi";
@@ -9,13 +9,16 @@ import { addComment, deleteComment, editComment, getComments, type CommentRecord
 import { getSurfacePostInteractionCounts, hydrateSurfacePostInteractions } from "../lib/surfacePostInteractions";
 import { useVoiceCommentRecorder } from "../hooks/useVoiceCommentRecorder";
 import { useAuth } from "../hooks/useAuth";
-import { deletePostFromSupabase, savePostToSupabase } from "../lib/postApi";
+import { deletePostFromSupabase, fetchPostByIdFromSupabase, savePostToSupabase } from "../lib/postApi";
 import SurfaceDock from "../components/SurfaceDock";
 import ReportReasonModal, { type PostReportReason } from "../components/ReportReasonModal";
 import { submitPostReport } from "../lib/reportApi";
+import { restoreSurfaceScrollPosition, saveSurfaceScrollPosition } from "../lib/surfaceScrollPosition";
+import { useLanguage } from "../contexts/LanguageContext";
 
 const PAGE_SIZE = 8;
 const CLIPS_CACHE_KEY = "metoyou-clips-cache";
+const CLIPS_SCROLL_KEY_PREFIX = "metoyou-clips-scroll:";
 
 type CachedClipsState = {
   clips: ClipRecord[];
@@ -47,7 +50,7 @@ const readClipsCache = (): CachedClipsState => {
 
 function ClipSkeleton() {
   return (
-    <div className="mx-auto flex min-h-[calc(100svh-7rem)] max-w-xl animate-pulse flex-col overflow-hidden rounded-3xl bg-slate-900">
+    <div className="mx-auto flex h-dvh w-full max-w-xl animate-pulse snap-start snap-always flex-col overflow-hidden bg-slate-900 md:rounded-3xl">
       <div className="flex-1 bg-slate-800" />
       <div className="space-y-3 p-5">
         <div className="h-4 w-32 rounded bg-slate-700" />
@@ -65,6 +68,9 @@ function ClipCard({
   onLike,
   onDelete,
   onVisible,
+  onOverlayChange,
+  initialCommentsOpen = false,
+  onCommentsOpenChange,
 }: {
   clip: ClipRecord;
   isActive: boolean;
@@ -73,12 +79,17 @@ function ClipCard({
   onLike: (clip: ClipRecord) => void;
   onDelete: (clipId: string) => void;
   onVisible: (node: HTMLDivElement | null) => void;
+  onOverlayChange: (clipId: string, isOpen: boolean) => void;
+  initialCommentsOpen?: boolean;
+  onCommentsOpenChange?: (isOpen: boolean) => void;
 }) {
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [videoOrientation, setVideoOrientation] = useState<"landscape" | "portrait" | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [commentsOpen, setCommentsOpen] = useState(initialCommentsOpen);
   const [comments, setComments] = useState<CommentRecord[]>([]);
   const [commentText, setCommentText] = useState("");
   const [commentsLoading, setCommentsLoading] = useState(false);
@@ -138,6 +149,22 @@ function ClipCard({
     };
   }, [menuOpen]);
 
+  useEffect(() => {
+    if (!commentsOpen || comments.length > 0) return;
+    let active = true;
+    setCommentsLoading(true);
+    void getComments(clip.id)
+      .then((rows) => { if (active) setComments(rows); })
+      .finally(() => { if (active) setCommentsLoading(false); });
+    return () => { active = false; };
+  }, [clip.id, comments.length, commentsOpen]);
+
+  useEffect(() => {
+    const isOverlayOpen = commentsOpen || menuOpen || isReportModalOpen;
+    onOverlayChange(clip.id, isOverlayOpen);
+    return () => onOverlayChange(clip.id, false);
+  }, [clip.id, commentsOpen, isReportModalOpen, menuOpen, onOverlayChange]);
+
   const toggleLike = async () => {
     if (!userId) return;
     const nextLiked = !clip.liked;
@@ -156,14 +183,7 @@ function ClipCard({
   const toggleComments = async () => {
     const nextOpen = !commentsOpen;
     setCommentsOpen(nextOpen);
-    if (nextOpen && comments.length === 0) {
-      setCommentsLoading(true);
-      try {
-        setComments(await getComments(clip.id));
-      } finally {
-        setCommentsLoading(false);
-      }
-    }
+    onCommentsOpenChange?.(nextOpen);
   };
 
   const submitComment = async (event: FormEvent) => {
@@ -283,7 +303,7 @@ function ClipCard({
   if (blockedAuthorIds.includes(clip.author_id)) return null;
 
   return (
-    <article ref={onVisible} className={`relative mx-auto min-h-[calc(100svh-7rem)] max-w-xl overflow-hidden rounded-3xl shadow-2xl ${isDark ? "bg-[#111111] shadow-amber-950/30" : "bg-slate-950 shadow-sky-900/20"}`}>
+    <article ref={onVisible} className={`relative mx-auto h-dvh w-full max-w-xl snap-start snap-always overflow-hidden bg-slate-950 shadow-2xl md:rounded-3xl ${isDark ? "shadow-amber-950/30" : "shadow-sky-900/20"}`}>
       <video
         ref={videoRef}
         src={clip.video_url}
@@ -294,7 +314,11 @@ function ClipCard({
         muted={isMuted}
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
-        className="absolute inset-0 h-full w-full object-cover"
+        onLoadedMetadata={(event) => {
+          const video = event.currentTarget;
+          setVideoOrientation(video.videoWidth > video.videoHeight ? "landscape" : "portrait");
+        }}
+        className={`absolute inset-0 h-full w-full ${videoOrientation === "portrait" ? "object-cover" : "object-contain"}`}
         onClick={() => {
           if (isPlaying) videoRef.current?.pause();
           else void videoRef.current?.play();
@@ -325,46 +349,46 @@ function ClipCard({
                   aria-expanded={isCaptionExpanded}
                   className="pointer-events-auto mt-1 inline-flex text-xs font-semibold text-sky-200 underline-offset-2 hover:underline"
                 >
-                  {isCaptionExpanded ? "See less" : "See more"}
+                  {isCaptionExpanded ? t("media.seeLess") : t("media.seeMore")}
                 </button>
               )}
             </div>
           ) : null}
         </div>
         <div className="flex flex-col items-center gap-4">
-          <button type="button" onClick={() => void toggleLike()} aria-label="Like clip" className="text-2xl transition hover:scale-110">
+          <button type="button" onClick={() => void toggleLike()} aria-label={t("media.likeClip")} className="text-2xl transition hover:scale-110">
             {clip.liked ? "❤️" : "🤍"}
           </button>
           <span className="text-xs text-white/80">{clip.likes_count}</span>
-          <button type="button" onClick={() => void toggleComments()} aria-label="Comments" className="text-white/90">
+          <button type="button" onClick={() => void toggleComments()} aria-label={t("media.comments")} className="text-white/90">
             <MessageCircle className="h-7 w-7" />
           </button>
           <span className="text-xs text-white/80">{clip.comments_count}</span>
           <div className="relative">
-            <button type="button" onClick={() => setMenuOpen((current) => !current)} aria-label="More Clip actions" className="text-white/90 transition hover:scale-110">
+            <button type="button" onClick={() => setMenuOpen((current) => !current)} aria-label={t("media.moreClipActions")} className="text-white/90 transition hover:scale-110">
               <Grid2X2 className="h-6 w-6" />
             </button>
             {menuOpen && (
               <div className="fixed inset-0 z-60 grid place-items-center bg-black/35 p-4">
-                <button type="button" aria-label="Close actions" onClick={() => setMenuOpen(false)} className="absolute inset-0" />
+                <button type="button" aria-label={t("media.closeActions")} onClick={() => setMenuOpen(false)} className="absolute inset-0" />
                 <div onClick={(event) => event.stopPropagation()} className={`relative z-10 grid w-full max-w-xs grid-cols-2 gap-2 rounded-2xl border p-3 text-left text-xs shadow-2xl ${isDark ? "border-white/15 bg-slate-950 text-white" : "border-sky-100 bg-white text-slate-700"}`}>
-                  <button type="button" onClick={() => void shareClip()} className="flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center hover:bg-sky-50"><Share2 className="h-5 w-5" />Share</button>
-                  <button type="button" onClick={() => void saveClipToDevice()} className="flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center hover:bg-sky-50"><Download className="h-5 w-5" />Save to device</button>
-                  <button type="button" onClick={() => void repostClip()} className="flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center hover:bg-sky-50"><Repeat2 className="h-5 w-5" />Repost</button>
+                  <button type="button" onClick={() => void shareClip()} className="flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center hover:bg-sky-50"><Share2 className="h-5 w-5" />{t("common.share")}</button>
+                  <button type="button" onClick={() => void saveClipToDevice()} className="flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center hover:bg-sky-50"><Download className="h-5 w-5" />{t("media.saveToDevice")}</button>
+                  <button type="button" onClick={() => void repostClip()} className="flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center hover:bg-sky-50"><Repeat2 className="h-5 w-5" />{t("media.repost")}</button>
                   {clip.author_id !== userId && (
-                    <button type="button" onClick={() => { setIsReportModalOpen(true); setMenuOpen(false); }} className="flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center hover:bg-sky-50"><Flag className="h-5 w-5" />Report</button>
+                    <button type="button" onClick={() => { setIsReportModalOpen(true); setMenuOpen(false); }} className="flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center hover:bg-sky-50"><Flag className="h-5 w-5" />{t("common.report")}</button>
                   )}
                   {clip.author_id === userId && (
-                    <button type="button" onClick={() => void deleteClip()} className="col-span-2 flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center text-rose-500 hover:bg-rose-50"><Trash2 className="h-5 w-5" />Delete</button>
+                    <button type="button" onClick={() => void deleteClip()} className="col-span-2 flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center text-rose-500 hover:bg-rose-50"><Trash2 className="h-5 w-5" />{t("media.delete")}</button>
                   )}
                   {clip.author_id !== userId && (
-                    <button type="button" onClick={blockClipAuthor} className="col-span-2 flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center text-rose-500 hover:bg-rose-50"><Ban className="h-5 w-5" />Block author</button>
+                    <button type="button" onClick={blockClipAuthor} className="col-span-2 flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-center text-rose-500 hover:bg-rose-50"><Ban className="h-5 w-5" />{t("media.blockAuthor")}</button>
                   )}
                 </div>
               </div>
             )}
           </div>
-          <button type="button" onClick={() => setIsMuted((value) => !value)} aria-label={isMuted ? "Unmute clip" : "Mute clip"} className="text-white/90">
+          <button type="button" onClick={() => setIsMuted((value) => !value)} aria-label={isMuted ? t("media.unmuteClip") : t("media.muteClip")} className="text-white/90">
             {isMuted ? <VolumeX className="h-6 w-6" /> : <Volume2 className="h-6 w-6" />}
           </button>
         </div>
@@ -378,17 +402,17 @@ function ClipCard({
         <>
           <button
             type="button"
-            aria-label="Close comments"
-            onClick={() => setCommentsOpen(false)}
+            aria-label={t("media.closeComments")}
+            onClick={() => { setCommentsOpen(false); onCommentsOpenChange?.(false); }}
             className="fixed inset-0 z-40 cursor-default bg-black/20"
           />
           <div onClick={(event) => event.stopPropagation()} className={`fixed inset-x-[3%] bottom-[10%] z-50 flex max-h-[80vh] flex-col overflow-hidden rounded-2xl p-4 shadow-2xl ring-1 ${isDark ? "bg-slate-950/98 text-white ring-white/15" : "bg-white/98 text-slate-900 ring-sky-200"}`}>
             <div className="mb-3 flex items-center justify-between">
-              <p className="font-semibold">Comments</p>
-              <button type="button" onClick={() => setCommentsOpen(false)} className={isDark ? "text-white/60" : "text-slate-500"}>Close</button>
+              <p className="font-semibold">{t("media.comments")}</p>
+              <button type="button" onClick={() => { setCommentsOpen(false); onCommentsOpenChange?.(false); }} className={isDark ? "text-white/60" : "text-slate-500"}>{t("common.close")}</button>
             </div>
             <div className="max-h-[calc(80vh-9rem)] overflow-y-auto pr-1">
-              {commentsLoading ? <p className={isDark ? "text-sm text-white/60" : "text-sm text-slate-500"}>Loading...</p> : comments.length === 0 ? <p className={isDark ? "text-sm text-white/60" : "text-sm text-slate-500"}>No comments yet.</p> : (
+              {commentsLoading ? <p className={isDark ? "text-sm text-white/60" : "text-sm text-slate-500"}>{t("media.loading")}</p> : comments.length === 0 ? <p className={isDark ? "text-sm text-white/60" : "text-sm text-slate-500"}>{t("media.noComments")}</p> : (
                 <div className="space-y-2">
                   {comments.map((comment) => (
                     <div
@@ -404,8 +428,8 @@ function ClipCard({
                         <div className="space-y-2">
                           <textarea value={editingCommentText} onChange={(event) => setEditingCommentText(event.target.value)} rows={3} className={`w-full resize-none rounded-lg p-2 text-sm outline-none ${isDark ? "bg-white/10" : "bg-slate-100"}`} />
                           <div className="flex gap-2">
-                            <button type="button" onClick={() => void saveCommentEdit(comment)} className="rounded-lg bg-sky-500 px-3 py-1 text-xs font-semibold">Save</button>
-                            <button type="button" onClick={() => setEditingCommentId(null)} className={`rounded-lg px-3 py-1 text-xs ${isDark ? "bg-white/10" : "bg-slate-100 text-slate-600"}`}>Cancel</button>
+                            <button type="button" onClick={() => void saveCommentEdit(comment)} className="rounded-lg bg-sky-500 px-3 py-1 text-xs font-semibold">{t("common.saveChanges")}</button>
+                            <button type="button" onClick={() => setEditingCommentId(null)} className={`rounded-lg px-3 py-1 text-xs ${isDark ? "bg-white/10" : "bg-slate-100 text-slate-600"}`}>{t("common.cancel")}</button>
                           </div>
                         </div>
                       ) : (
@@ -413,8 +437,8 @@ function ClipCard({
                       )}
                       {activeCommentId === comment.id && editingCommentId !== comment.id && (
                         <div className={`mt-2 flex gap-2 border-t pt-2 ${isDark ? "border-white/10" : "border-sky-100"}`}>
-                          <button type="button" onClick={() => { setEditingCommentId(comment.id); setEditingCommentText(comment.text ?? ""); }} className="text-xs font-semibold text-sky-300">Edit</button>
-                          <button type="button" onClick={() => void removeComment(comment)} className="text-xs font-semibold text-rose-300">Delete</button>
+                          <button type="button" onClick={() => { setEditingCommentId(comment.id); setEditingCommentText(comment.text ?? ""); }} className="text-xs font-semibold text-sky-300">{t("media.edit")}</button>
+                          <button type="button" onClick={() => void removeComment(comment)} className="text-xs font-semibold text-rose-300">{t("media.delete")}</button>
                         </div>
                       )}
                     </div>
@@ -425,16 +449,16 @@ function ClipCard({
             {voiceUrl && (
               <div className={`mb-2 flex items-center gap-2 rounded-xl border p-2 ${isDark ? "border-white/10 bg-white/5" : "border-sky-100 bg-sky-50/80"}`}>
                 <audio controls src={voiceUrl} className="h-7 min-w-0 flex-1" />
-                <button type="button" onClick={clearVoiceUrl} className={isDark ? "text-xs text-white/60" : "text-xs text-slate-500"}>Remove</button>
+                <button type="button" onClick={clearVoiceUrl} className={isDark ? "text-xs text-white/60" : "text-xs text-slate-500"}>{t("media.remove")}</button>
               </div>
             )}
-            {isRecording && <p className="mb-2 text-xs text-rose-300">Recording voice comment: {recordingDuration}s / 15s</p>}
+            {isRecording && <p className="mb-2 text-xs text-rose-300">{t("media.recordingVoiceComment").replace("{duration}", String(recordingDuration))}</p>}
             <form onSubmit={submitComment} className="mt-3 flex w-full items-end gap-2">
-              <textarea value={commentText} onChange={(event) => setCommentText(event.target.value)} placeholder="Add a comment" rows={4} className={`w-full min-w-0 flex-1 resize-none overflow-y-auto rounded-xl px-3 py-2 text-sm outline-none ${isDark ? "bg-white/10 text-white placeholder:text-white/45" : "bg-slate-100 text-slate-900 placeholder:text-slate-400"}`} />
+              <textarea value={commentText} onChange={(event) => setCommentText(event.target.value)} placeholder={t("media.addComment")} rows={4} className={`w-full min-w-0 flex-1 resize-none overflow-y-auto rounded-xl px-3 py-2 text-sm outline-none ${isDark ? "bg-white/10 text-white placeholder:text-white/45" : "bg-slate-100 text-slate-900 placeholder:text-slate-400"}`} />
               <button
                 type="button"
                 onClick={() => void (isRecording ? stopRecording() : startRecording())}
-                aria-label={isRecording ? "Stop voice comment" : "Record voice comment"}
+                aria-label={isRecording ? t("media.stopVoiceComment") : t("media.recordVoiceComment")}
                 className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${isRecording ? "bg-rose-500 text-white" : isDark ? "bg-white/10 text-white" : "bg-sky-100 text-sky-700"}`}
               >
                 {isRecording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
@@ -450,8 +474,12 @@ function ClipCard({
 
 export default function Clips() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { profile } = useSession();
   const { user } = useAuth();
+  const requestedPostId = new URLSearchParams(location.search).get("postId");
+  const requestedCommentsOpen = new URLSearchParams(location.search).get("showComments") === "1";
+  const hasQueryFocus = Boolean(requestedPostId);
   const [theme, setTheme] = useState<"bluesky" | "dark">(() => {
     if (typeof window === "undefined") return "bluesky";
     return window.localStorage.getItem("metoyou-clips-theme") === "dark" ? "dark" : "bluesky";
@@ -459,15 +487,26 @@ export default function Clips() {
   const cachedClips = readClipsCache();
   const hasCachedClips = cachedClips.clips.length > 0;
   const [clips, setClips] = useState<ClipRecord[]>(() => cachedClips.clips);
+  const [focusedClip, setFocusedClip] = useState<ClipRecord | null>(null);
+  const [focusedClipLoading, setFocusedClipLoading] = useState(false);
+  const [focusedClipError, setFocusedClipError] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(() => cachedClips.activeId ?? cachedClips.clips[0]?.id ?? null);
   const [loading, setLoading] = useState(() => cachedClips.clips.length === 0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(() => cachedClips.hasMore);
   const [error, setError] = useState<string | null>(null);
+  const [overlayClipId, setOverlayClipId] = useState<string | null>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const cardNodesRef = useRef(new Map<string, HTMLDivElement>());
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const restoredScrollKeyRef = useRef<string | null>(null);
+  const scrollSaveFrameRef = useRef<number | null>(null);
+  const scrollCacheKey = `${CLIPS_SCROLL_KEY_PREFIX}${user?.id ?? "anonymous"}`;
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const handleClipOverlayChange = useCallback((clipId: string, isOpen: boolean) => {
+    setOverlayClipId((current) => isOpen ? clipId : current === clipId ? null : current);
+  }, []);
 
   const handleTouchStart = (event: TouchEvent<HTMLElement>) => {
     const target = event.target as HTMLElement;
@@ -496,7 +535,7 @@ export default function Clips() {
   }, [theme]);
 
   useEffect(() => {
-    if (!profile?.is_vibes_pro || hasCachedClips) {
+    if (!profile?.is_vibes_pro || hasCachedClips || hasQueryFocus) {
       return;
     }
 
@@ -524,7 +563,77 @@ export default function Clips() {
       active = false;
       observerRef.current?.disconnect();
     };
-  }, [profile?.is_vibes_pro, user?.id]);
+  }, [hasCachedClips, hasQueryFocus, profile?.is_vibes_pro, user?.id]);
+
+  useEffect(() => {
+    if (!requestedPostId) {
+      setFocusedClip(null);
+      setFocusedClipError(null);
+      setFocusedClipLoading(false);
+      return undefined;
+    }
+
+    let active = true;
+    setFocusedClip(null);
+    setFocusedClipError(null);
+    setFocusedClipLoading(true);
+
+    void (async () => {
+      try {
+        const post = await fetchPostByIdFromSupabase(requestedPostId);
+        if (!active) return;
+        if (!post?.video_url) throw new Error("Unable to find this Clip.");
+
+        const candidate: ClipRecord = {
+          id: post.id,
+          author_id: post.author_id,
+          username: post.profiles?.username ?? "User",
+          profile_pic: post.profiles?.profile_pic ?? null,
+          text: post.text ?? null,
+          image_url: post.image_url ?? null,
+          image_original_url: post.image_original_url ?? null,
+          video_url: post.video_url,
+          audio_url: post.audio_url ?? null,
+          duration_ms: null,
+          created_at: post.created_at,
+          likes_count: post.likes_count ?? 0,
+          comments_count: post.comments_count ?? 0,
+        };
+        const [hydrated] = await hydrateSurfacePostInteractions([candidate], user?.id);
+        if (active) setFocusedClip(hydrated ?? candidate);
+      } catch {
+        if (active) setFocusedClipError("Unable to load this Clip right now.");
+      } finally {
+        if (active) setFocusedClipLoading(false);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [requestedPostId, user?.id]);
+
+  useLayoutEffect(() => {
+    const scroller = scrollContainerRef.current;
+    if (hasQueryFocus) {
+      restoredScrollKeyRef.current = null;
+      return;
+    }
+    if (!scroller || loading || clips.length === 0 || restoredScrollKeyRef.current === scrollCacheKey) return;
+
+    restoreSurfaceScrollPosition(scroller, scrollCacheKey);
+    restoredScrollKeyRef.current = scrollCacheKey;
+  }, [clips.length, hasQueryFocus, loading, scrollCacheKey]);
+
+  useEffect(() => () => {
+    if (scrollSaveFrameRef.current !== null) {
+      window.cancelAnimationFrame(scrollSaveFrameRef.current);
+      scrollSaveFrameRef.current = null;
+    }
+    if (!hasQueryFocus && scrollContainerRef.current) {
+      saveSurfaceScrollPosition(scrollContainerRef.current, scrollCacheKey);
+    }
+  }, [hasQueryFocus, scrollCacheKey]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -590,18 +699,23 @@ export default function Clips() {
   }
 
   const isDark = theme === "dark";
+  const visibleClips = hasQueryFocus ? focusedClip ? [focusedClip] : [] : clips;
+  const visibleLoading = hasQueryFocus
+    ? focusedClipLoading || (!focusedClip && !focusedClipError)
+    : loading;
+  const visibleError = hasQueryFocus ? focusedClipError : error;
 
   return (
-    <main onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} className={`min-h-screen px-3 pb-8 pt-6 transition-colors ${isDark ? "bg-[#0B0B0B]" : "bg-linear-to-br from-sky-100 via-white to-cyan-100"}`}>
-      <div className="relative mx-auto mb-2 flex max-w-xl items-center justify-center px-2 text-center">
+    <main onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} className={`relative h-dvh w-full overflow-hidden transition-colors ${isDark ? "bg-[#0B0B0B]" : "bg-linear-to-br from-sky-100 via-white to-cyan-100"}`}>
+      <div className="absolute left-1/2 top-4 z-40 flex w-full max-w-xl -translate-x-1/2 items-center justify-center px-5 text-center">
         <button
           type="button"
-          onClick={() => setTheme("bluesky")}
-          aria-label="Use BlueSky theme"
-          title="BlueSky theme"
+          onClick={() => hasQueryFocus ? navigate(-1) : setTheme("bluesky")}
+          aria-label={hasQueryFocus ? "Back" : "Use BlueSky theme"}
+          title={hasQueryFocus ? "Back" : "BlueSky theme"}
           className={`absolute left-0 grid h-10 w-10 place-items-center rounded-full border shadow-sm transition ${theme === "bluesky" ? "border-sky-500 bg-sky-500 text-white" : isDark ? "border-white/15 bg-white/5 text-white/60" : "border-sky-200 bg-white/70 text-sky-600"}`}
         >
-          <CloudSun className="h-5 w-5" />
+          {hasQueryFocus ? <ArrowLeft className="h-5 w-5" /> : <CloudSun className="h-5 w-5" />}
         </button>
         <div>
           <p className={`text-xs font-semibold uppercase tracking-[0.3em] ${isDark ? "text-amber-300" : "text-sky-600"}`}>VibesPro</p>
@@ -628,41 +742,74 @@ export default function Clips() {
         {loadingMore && <LoaderCircle className={`absolute right-24 h-5 w-5 animate-spin ${isDark ? "text-amber-300" : "text-sky-600"}`} />}
       </div>
 
-      {loading && <ClipSkeleton />}
-      {error && <p className="mx-auto mb-3 max-w-xl rounded-2xl bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
-      {!loading && clips.length === 0 && !error && <p className="mx-auto max-w-xl rounded-2xl bg-white p-6 text-center text-slate-600">No Clips yet.</p>}
+      <div
+        ref={scrollContainerRef}
+        data-surface-scroll
+        onScroll={(event) => {
+          const scroller = event.currentTarget;
+          if (scrollSaveFrameRef.current !== null) return;
+          scrollSaveFrameRef.current = window.requestAnimationFrame(() => {
+            scrollSaveFrameRef.current = null;
+            saveSurfaceScrollPosition(scroller, scrollCacheKey);
+          });
+        }}
+        className="absolute inset-0 h-full snap-y snap-mandatory overflow-x-hidden overflow-y-auto overscroll-y-contain"
+        style={{ overflowY: overlayClipId ? "hidden" : "auto" }}
+      >
+        {visibleLoading && <ClipSkeleton />}
+        {visibleError && <p className="mx-auto mt-20 max-w-xl rounded-2xl bg-rose-50 p-3 text-sm text-rose-700">{visibleError}</p>}
+        {!visibleLoading && visibleClips.length === 0 && !visibleError && <p className="mx-auto mt-24 max-w-xl rounded-2xl bg-white p-6 text-center text-slate-600">No Clips yet.</p>}
 
-      <div className="space-y-5">
-        {clips.map((clip) => (
-          <ClipCard
-            key={clip.id}
-            clip={clip}
-            userId={user?.id}
-            isActive={activeId === clip.id}
-            isDark={isDark}
-            onLike={(nextClip) => setClips((current) => current.map((item) => item.id === nextClip.id ? nextClip : item))}
-            onDelete={(clipId) => setClips((current) => current.filter((item) => item.id !== clipId))}
-            onVisible={(node) => {
-              if (node) {
-                node.dataset.clipId = clip.id;
-                cardNodesRef.current.set(clip.id, node);
-                observerRef.current?.observe(node);
-              } else {
-                cardNodesRef.current.delete(clip.id);
-              }
-            }}
-          />
-        ))}
-      </div>
-
-      {!loading && hasMore && clips.length > 0 && (
-        <div ref={loadMoreSentinelRef} className="h-1" aria-hidden="true" />
-      )}
-      {loadingMore && (
-        <div className="mt-4 text-center text-sm font-medium text-slate-500">
-          Loading more clips...
+        <div className="flex w-full flex-col">
+          {visibleClips.map((clip) => (
+            <ClipCard
+              key={clip.id}
+              clip={clip}
+              userId={user?.id}
+              isActive={hasQueryFocus || activeId === clip.id}
+              isDark={isDark}
+              initialCommentsOpen={hasQueryFocus && requestedCommentsOpen}
+              onCommentsOpenChange={hasQueryFocus ? (isOpen) => {
+                const params = new URLSearchParams(location.search);
+                if (isOpen) params.set("showComments", "1");
+                else params.delete("showComments");
+                const search = params.toString();
+                navigate({ pathname: location.pathname, search: search ? `?${search}` : "" }, { replace: true });
+              } : undefined}
+              onLike={(nextClip) => {
+                if (hasQueryFocus) setFocusedClip(nextClip);
+                else setClips((current) => current.map((item) => item.id === nextClip.id ? nextClip : item));
+              }}
+              onDelete={(clipId) => {
+                setClips((current) => current.filter((item) => item.id !== clipId));
+                if (focusedClip?.id === clipId) {
+                  setFocusedClip(null);
+                  navigate("/clips", { replace: true });
+                }
+              }}
+              onOverlayChange={handleClipOverlayChange}
+              onVisible={(node) => {
+                if (node) {
+                  node.dataset.clipId = clip.id;
+                  cardNodesRef.current.set(clip.id, node);
+                  observerRef.current?.observe(node);
+                } else {
+                  cardNodesRef.current.delete(clip.id);
+                }
+              }}
+            />
+          ))}
         </div>
-      )}
+
+        {!hasQueryFocus && !loading && hasMore && clips.length > 0 && (
+          <div ref={loadMoreSentinelRef} className="h-1 snap-none" aria-hidden="true" />
+        )}
+        {!hasQueryFocus && loadingMore && (
+          <div className="py-4 text-center text-sm font-medium text-slate-500">
+            Loading more clips...
+          </div>
+        )}
+      </div>
       <SurfaceDock />
     </main>
   );

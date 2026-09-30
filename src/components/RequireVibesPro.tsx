@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useSession } from "../contexts/SessionContext";
 import { isVibesProEnabled } from "../lib/vibesPro";
+import { useLanguage } from "../contexts/LanguageContext";
 
 type RequireVibesProProps = {
   children: ReactNode;
@@ -9,6 +10,7 @@ type RequireVibesProProps = {
 
 export default function RequireVibesPro({ children, fallback }: RequireVibesProProps) {
   const { profile } = useSession();
+  const { t } = useLanguage();
   const isVibesPro = isVibesProEnabled(profile);
 
   if (isVibesPro) {
@@ -25,9 +27,9 @@ export default function RequireVibesPro({ children, fallback }: RequireVibesProP
       <div className="relative flex flex-col gap-3">
         <div className="inline-flex w-fit items-center gap-2 rounded-full border border-amber-300/40 bg-amber-400/10 px-3 py-1 text-sm font-semibold text-amber-200">
           <span>🔒</span>
-          VibesPro Feature
+          {t("vibespro.featureHeader")}
         </div>
-        <p className="text-sm leading-6 text-white/80">Upgrade to unlock.</p>
+        <p className="text-sm leading-6 text-white/80">{t("vibespro.upgradeUnlock")}</p>
       </div>
     </div>
   );

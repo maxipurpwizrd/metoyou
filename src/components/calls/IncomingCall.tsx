@@ -1,4 +1,5 @@
 import { Phone, Video, X } from "lucide-react";
+import { useLanguage } from "../../contexts/LanguageContext";
 
 interface IncomingCallProps {
   senderName: string;
@@ -9,6 +10,7 @@ interface IncomingCallProps {
 
 export default function IncomingCall({ senderName, callType, onAccept, onReject }: IncomingCallProps) {
   const isVideo = callType === "video";
+  const { t } = useLanguage();
 
   return (
     <div className="fixed inset-0 z-100 flex min-h-dvh flex-col bg-slate-950 text-white backdrop-blur-xl">
@@ -21,16 +23,16 @@ export default function IncomingCall({ senderName, callType, onAccept, onReject 
               {senderName.charAt(0).toUpperCase() || "?"}
             </div>
           </div>
-          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-200/70">Incoming call</p>
-          <h2 className="mt-2 text-2xl font-bold">{senderName || "Someone"}</h2>
-          <p className="mt-2 text-sm text-white/60">{isVideo ? "Video call" : "Audio call"} is calling you</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-200/70">{t("calls.incoming")}</p>
+          <h2 className="mt-2 text-2xl font-bold">{senderName || t("calls.someone")}</h2>
+          <p className="mt-2 text-sm text-white/60">{t(isVideo ? "calls.videoCallingYou" : "calls.audioCallingYou")}</p>
         </div>
         <div className="mt-8 grid w-full grid-cols-2 gap-3 sm:mx-auto sm:max-w-md">
           <button type="button" onClick={onReject} className="inline-flex min-h-14 items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-4 py-3 font-semibold text-white transition hover:bg-rose-500/20">
-            <X className="h-5 w-5" /> Decline
+            <X className="h-5 w-5" /> {t("calls.decline")}
           </button>
           <button type="button" onClick={onAccept} className="inline-flex min-h-14 items-center justify-center gap-2 rounded-2xl bg-emerald-400 px-4 py-3 font-semibold text-slate-950 transition hover:bg-emerald-300">
-            {isVideo ? <Video className="h-5 w-5" /> : <Phone className="h-5 w-5" />} Accept
+            {isVideo ? <Video className="h-5 w-5" /> : <Phone className="h-5 w-5" />} {t("calls.accept")}
           </button>
         </div>
       </div>

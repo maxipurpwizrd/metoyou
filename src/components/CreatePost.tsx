@@ -3,6 +3,7 @@ import { useSession } from "../contexts/SessionContext";
 import { uploadVideo, type UploadProgress } from "../lib/videoApi";
 import { optimizeImageFile } from "../lib/imageUtils";
 import { optimizeVoiceNote } from "../lib/mediaOptimizer";
+import { useLanguage } from "../contexts/LanguageContext";
 
 
 
@@ -16,6 +17,7 @@ type Props = {
 
 export default function CreatePost({ onPost }: Props) {
   const { profile } = useSession();
+  const { t } = useLanguage();
 
   const [text, setText] = useState("");
 
@@ -48,11 +50,11 @@ export default function CreatePost({ onPost }: Props) {
     const file = event.target.files?.[0];
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) {
-      setComposerNotice({ type: "error", message: "Image must be less than 5MB" });
+      setComposerNotice({ type: "error", message: t("createPost.imageTooLarge") });
       return;
     }
     if (!file.type.startsWith("image/")) {
-      setComposerNotice({ type: "error", message: "Please select a valid image file" });
+      setComposerNotice({ type: "error", message: t("createPost.invalidImage") });
       return;
     }
 
@@ -62,7 +64,7 @@ export default function CreatePost({ onPost }: Props) {
         const readAsDataUrl = (source: Blob) => new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onloadend = () => resolve(reader.result as string);
-          reader.onerror = () => reject(new Error("Failed to read image file"));
+          reader.onerror = () => reject(new Error(t("createPost.failedImage")));
           reader.readAsDataURL(source);
         });
         const [optimizedDataUrl, originalDataUrl] = await Promise.all([
@@ -74,7 +76,7 @@ export default function CreatePost({ onPost }: Props) {
         setVideo(undefined);
       } catch (error) {
         console.warn("Image optimization failed", error);
-        setComposerNotice({ type: "error", message: "Image could not be compressed. Please choose a smaller image." });
+        setComposerNotice({ type: "error", message: t("createPost.imageCompressionFailed") });
       }
     })();
   };
@@ -157,18 +159,18 @@ export default function CreatePost({ onPost }: Props) {
     if (!file) return;
 
     if (audio) {
-      setComposerNotice({ type: "error", message: "Only one audio attachment is allowed per post." });
+      setComposerNotice({ type: "error", message: t("createPost.onlyOneAudio") });
       e.target.value = "";
       return;
     }
 
     if (file.size > 10 * 1024 * 1024) {
-      setComposerNotice({ type: "error", message: "Audio must be less than 10MB" });
+      setComposerNotice({ type: "error", message: t("createPost.audioTooLarge") });
       return;
     }
 
     if (!file.type.startsWith("audio/")) {
-      setComposerNotice({ type: "error", message: "Please select a valid audio file" });
+      setComposerNotice({ type: "error", message: t("createPost.invalidAudio") });
       return;
     }
 
@@ -181,12 +183,12 @@ export default function CreatePost({ onPost }: Props) {
           setVideo(undefined);
         };
         reader.onerror = () => {
-          setComposerNotice({ type: "error", message: "Failed to read audio file" });
+          setComposerNotice({ type: "error", message: t("createPost.failedAudio") });
         };
         reader.readAsDataURL(optimized);
       } catch (err) {
         console.warn("Audio optimization failed", err);
-        setComposerNotice({ type: "error", message: "Voice note could not be compressed. Please choose a smaller recording." });
+        setComposerNotice({ type: "error", message: t("createPost.voiceCompressionFailed") });
       }
     })();
 
@@ -324,7 +326,7 @@ export default function CreatePost({ onPost }: Props) {
 
           <div className="flex-1 bg-white/30 px-4 py-3 rounded-2xl text-slate-600 hover:bg-white/40 transition">
 
-            Drop your vibe 💬
+            {t("createPost.placeholder")}
 
           </div>
 
@@ -369,7 +371,7 @@ export default function CreatePost({ onPost }: Props) {
 
         <div className="flex items-center justify-between mb-4">
 
-          <h2 className="text-2xl font-bold text-slate-900">Create Post</h2>
+          <h2 className="text-2xl font-bold text-slate-900">{t("createPost.title")}</h2>
 
           <button
 
@@ -401,9 +403,9 @@ export default function CreatePost({ onPost }: Props) {
 
           <div>
 
-            <p className="font-semibold text-slate-900">{profile?.username ?? "User"}</p>
+            <p className="font-semibold text-slate-900">{profile?.username ?? t("createPost.user")}</p>
 
-            <p className="text-sm text-slate-600">Posting to your feed</p>
+            <p className="text-sm text-slate-600">{t("createPost.postingToYourFeed")}</p>
 
           </div>
 
@@ -459,7 +461,7 @@ export default function CreatePost({ onPost }: Props) {
 
                     src={image}
 
-                    alt="preview"
+                    alt={t("createPost.preview")}
 
                     className="rounded-2xl w-32 h-32 md:w-40 md:h-40 object-cover"
 
@@ -527,7 +529,7 @@ export default function CreatePost({ onPost }: Props) {
 
               onChange={handleTextChange}
 
-              placeholder="Drop your vibe 💬"
+              placeholder={t("createPost.placeholder")}
 
               className="flex-1 bg-white/50 border border-white/40 rounded-2xl outline-none text-base md:text-lg text-slate-700 p-3 md:p-4 resize-none min-h-32 max-h-40 overflow-y-auto focus:border-sky-400 focus:ring-1 focus:ring-sky-400"
 
@@ -547,7 +549,7 @@ export default function CreatePost({ onPost }: Props) {
 
             onChange={handleTextChange}
 
-            placeholder="Drop your vibe 💬"
+            placeholder={t("createPost.placeholder")}
 
             className="w-full bg-white/50 border border-white/40 rounded-2xl outline-none text-lg text-slate-700 p-4 resize-none min-h-32 max-h-80 overflow-y-auto mb-4 focus:border-sky-400 focus:ring-1 focus:ring-sky-400"
 
@@ -593,7 +595,7 @@ export default function CreatePost({ onPost }: Props) {
 
             <div className="flex items-center justify-between mb-2">
 
-              <p className="text-sm text-slate-600">Uploading...</p>
+              <p className="text-sm text-slate-600">{t("createPost.uploading")}</p>
 
               <p className="text-sm text-slate-600 font-semibold">
 
@@ -627,7 +629,7 @@ export default function CreatePost({ onPost }: Props) {
 
           <div className="mb-4 p-3 bg-blue-100 border border-blue-300 rounded-2xl text-center">
 
-            <p className="text-sm font-semibold text-blue-700">Creating post...</p>
+            <p className="text-sm font-semibold text-blue-700">{t("createPost.creating")}</p>
 
           </div>
 
@@ -639,7 +641,7 @@ export default function CreatePost({ onPost }: Props) {
 
           <div className="mb-4 p-3 bg-green-100 border border-green-300 rounded-2xl text-center">
 
-            <p className="text-sm font-semibold text-green-700">✓ Post created successfully!</p>
+            <p className="text-sm font-semibold text-green-700">{t("createPost.created")}</p>
 
           </div>
 
@@ -653,7 +655,7 @@ export default function CreatePost({ onPost }: Props) {
 
           <div className="flex items-center gap-3">
 
-            <label className="cursor-pointer w-11 h-11 rounded-xl bg-white shadow-md flex items-center justify-center text-xl hover:scale-105 transition">
+            <label title={t("createPost.uploadImage")} className="cursor-pointer w-11 h-11 rounded-xl bg-white shadow-md flex items-center justify-center text-xl hover:scale-105 transition">
 
               📸
 
@@ -679,7 +681,7 @@ export default function CreatePost({ onPost }: Props) {
 
             <label
               className={`w-11 h-11 rounded-xl bg-white shadow-md flex items-center justify-center text-xl hover:scale-105 transition ${audio ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
-              title={audio ? "Audio already selected" : "Upload audio"}
+              title={audio ? t("createPost.audioSelected") : t("createPost.uploadAudio")}
               onClick={(e) => {
                 if (audio) {
                   e.preventDefault();
@@ -708,7 +710,7 @@ export default function CreatePost({ onPost }: Props) {
 
             </label>
 
-            <label className={`w-11 h-11 rounded-xl bg-white shadow-md flex items-center justify-center text-xl hover:scale-105 transition ${audio ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`} title={audio ? "Remove audio to upload video" : "Upload video"} onClick={(e) => { if (audio) { e.preventDefault(); e.stopPropagation(); } }}>
+            <label className={`w-11 h-11 rounded-xl bg-white shadow-md flex items-center justify-center text-xl hover:scale-105 transition ${audio ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`} title={audio ? t("createPost.removeAudioForVideo") : t("createPost.uploadVideo")} onClick={(e) => { if (audio) { e.preventDefault(); e.stopPropagation(); } }}>
 
               🎬
 
@@ -746,7 +748,7 @@ export default function CreatePost({ onPost }: Props) {
 
             >
 
-              Cancel
+              {t("createPost.cancel")}
 
             </button>
 
@@ -764,7 +766,7 @@ export default function CreatePost({ onPost }: Props) {
 
             >
 
-              Post it 🔥
+              {t("createPost.postButton")}
 
             </button>
 

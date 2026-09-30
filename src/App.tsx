@@ -1,7 +1,6 @@
 import { BrowserRouter, Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useRef, type ReactNode } from "react";
 import ScrollRestoration from "./lib/ScrollRestoration";
-import { LanguageProvider } from "./contexts/LanguageContext";
 import { VideoProvider } from "./contexts/VideoContext";
 import { ChatProvider } from "./contexts/ChatContext";
 import PWAInstallPrompt from "./components/PWAInstallPrompt";
@@ -190,22 +189,20 @@ function AppRoutes() {
 
 function App() {
   return (
-    <LanguageProvider>
-      <VideoProvider>
-        <ChatProvider>
-          <BrowserRouter>
-            <GlobalCallProvider>
-              <ScrollRestoration />
-              <AppRoutes />
-              <RestrictedModeBanner />
-              <SignupWelcomePopup />
-              <LoginWelcomePopup />
-              <PWAInstallPrompt />
-            </GlobalCallProvider>
-          </BrowserRouter>
-        </ChatProvider>
-      </VideoProvider>
-    </LanguageProvider>
+    <VideoProvider>
+      <ChatProvider>
+        <BrowserRouter>
+          <GlobalCallProvider>
+            <ScrollRestoration />
+            <AppRoutes />
+            <RestrictedModeBanner />
+            <SignupWelcomePopup />
+            <LoginWelcomePopup />
+            <PWAInstallPrompt />
+          </GlobalCallProvider>
+        </BrowserRouter>
+      </ChatProvider>
+    </VideoProvider>
   );
 }
 

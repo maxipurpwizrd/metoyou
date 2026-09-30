@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { Ban, UserRoundX } from "lucide-react";
 import { getBlockedUsers, unblockUser, type BlockedUser } from "../../lib/moderationApi";
+import { useLanguage } from "../../contexts/LanguageContext";
 
 export default function BlockedUsersSection({ page = false }: { page?: boolean }) {
+  const { t } = useLanguage();
   const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
@@ -12,7 +14,7 @@ export default function BlockedUsersSection({ page = false }: { page?: boolean }
     let active = true;
     void getBlockedUsers()
       .then((users) => { if (active) setBlockedUsers(users); })
-      .catch(() => { if (active) setError("Unable to load your blocked users right now."); })
+      .catch(() => { if (active) setError(t("block.loadUsersError")); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, []);
@@ -24,7 +26,7 @@ export default function BlockedUsersSection({ page = false }: { page?: boolean }
       await unblockUser(userId);
       setBlockedUsers((users) => users.filter((user) => user.id !== userId));
     } catch {
-      setError("Unable to unblock this user right now.");
+      setError(t("block.unblockError"));
     } finally {
       setBusyUserId(null);
     }
@@ -38,13 +40,13 @@ export default function BlockedUsersSection({ page = false }: { page?: boolean }
           <Ban className="w-6 h-6" />
         </div>
         <div>
-          <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Privacy</p>
-          <h2 className="text-2xl font-bold text-slate-900">Blocked users</h2>
+          <p className="text-sm uppercase tracking-[0.3em] text-slate-500">{t("profile.privacy")}</p>
+          <h2 className="text-2xl font-bold text-slate-900">{t("settings.blockedUsers")}</h2>
         </div>
       </div>
 
-      {loading ? <p className="text-sm text-slate-500">Loading blocked users...</p> : blockedUsers.length === 0 ? (
-        <p className="text-sm text-slate-500">You have not blocked anyone.</p>
+      {loading ? <p className="text-sm text-slate-500">{t("block.loadingUsers")}</p> : blockedUsers.length === 0 ? (
+        <p className="text-sm text-slate-500">{t("block.emptyUsers")}</p>
       ) : (
         <div className="grid gap-3">
           {blockedUsers.map((user) => (
@@ -54,7 +56,7 @@ export default function BlockedUsersSection({ page = false }: { page?: boolean }
                 <span className="truncate font-semibold text-slate-900">{user.username}</span>
               </div>
               <button type="button" onClick={() => void handleUnblock(user.id)} disabled={busyUserId === user.id} className="shrink-0 rounded-xl border border-slate-300 bg-white/70 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-white disabled:cursor-wait disabled:opacity-60">
-                {busyUserId === user.id ? "Unblocking..." : "Unblock"}
+                {busyUserId === user.id ? t("block.unblocking") : t("block.unblock")}
               </button>
             </div>
           ))}

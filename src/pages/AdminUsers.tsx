@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Eye, Trash2, User } from "lucide-react";
 import { supabase } from "../lib/supabase";
+import { useLanguage } from "../contexts/LanguageContext";
 
 type AdminUserSearchResult = {
   id: string;
@@ -15,6 +16,7 @@ type AdminUserSearchResult = {
 
 export default function AdminUsers() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [isCheckingAccess, setIsCheckingAccess] = useState(true);
   const [hasAdminAccess, setHasAdminAccess] = useState(false);
   const [adminUserQuery, setAdminUserQuery] = useState("");
@@ -167,12 +169,12 @@ export default function AdminUsers() {
             className="inline-flex w-fit items-center gap-2 rounded-full border border-white/60 bg-white/80 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm backdrop-blur"
           >
             <ArrowLeft className="h-4 w-4" />
-            ← Back
+            ← {t("admin.back")}
           </button>
 
           <div className="rounded-[32px] border border-white/60 bg-white/70 p-8 text-center shadow-2xl backdrop-blur-2xl">
             <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-sky-200 border-t-sky-500" />
-            <p className="text-lg font-semibold text-slate-900">Checking access…</p>
+            <p className="text-lg font-semibold text-slate-900">{t("admin.checkingAccess")}</p>
           </div>
         </div>
       </div>
@@ -189,11 +191,11 @@ export default function AdminUsers() {
             className="inline-flex w-fit items-center gap-2 rounded-full border border-white/60 bg-white/80 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm backdrop-blur"
           >
             <ArrowLeft className="h-4 w-4" />
-            ← Back
+            ← {t("admin.back")}
           </button>
 
           <div className="rounded-[32px] border border-white/60 bg-white/70 p-8 text-center shadow-2xl backdrop-blur-2xl">
-            <p className="text-lg font-semibold text-slate-900">Sorry, you're not an admin.</p>
+            <p className="text-lg font-semibold text-slate-900">{t("admin.denied")}</p>
           </div>
         </div>
       </div>
@@ -209,27 +211,27 @@ export default function AdminUsers() {
           className="inline-flex w-fit items-center gap-2 rounded-full border border-white/60 bg-white/80 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm backdrop-blur"
         >
           <ArrowLeft className="h-4 w-4" />
-          ← Back
+          ← {t("admin.back")}
         </button>
 
         <div className="rounded-[32px] border border-white/60 bg-white/70 p-6 shadow-2xl backdrop-blur-2xl sm:p-8">
           <div className="mb-4 flex items-center gap-2">
             <User className="h-4 w-4 text-slate-500" />
-            <h1 className="text-2xl font-semibold text-slate-900">Users</h1>
+            <h1 className="text-2xl font-semibold text-slate-900">{t("admin.users")}</h1>
           </div>
 
           <input
             value={adminUserQuery}
             onChange={(event) => setAdminUserQuery(event.target.value)}
-            placeholder="Search by username or email"
+            placeholder={t("admin.searchUsers")}
             className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-sky-500"
           />
 
           <div className="mt-4 space-y-2">
             {isSearchingUsers ? (
-              <p className="text-sm text-slate-500">Loading users…</p>
+              <p className="text-sm text-slate-500">{t("admin.loadingUsers")}</p>
             ) : adminSearchResults.length === 0 ? (
-              <p className="text-sm text-slate-500">No users found.</p>
+              <p className="text-sm text-slate-500">{t("admin.noUsers")}</p>
             ) : (
               adminSearchResults.map((user) => (
                 <div key={user.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-3">
@@ -239,7 +241,7 @@ export default function AdminUsers() {
                     </div>
                     <div>
                       <p className="font-semibold text-slate-900">{user.username}</p>
-                      <p className="text-sm text-slate-500">{user.email || "No email on file"}</p>
+                      <p className="text-sm text-slate-500">{user.email || t("admin.noEmail")}</p>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -249,7 +251,7 @@ export default function AdminUsers() {
                       className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
                     >
                       <Eye className="h-3.5 w-3.5" />
-                      View
+                      {t("admin.view")}
                     </button>
                     <button
                       type="button"
@@ -258,11 +260,11 @@ export default function AdminUsers() {
                       className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-sm font-medium text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-70"
                     >
                       {deletingUserId === user.id ? (
-                        <span>Deleting...</span>
+                        <span>{t("admin.deleting")}</span>
                       ) : (
                         <>
                           <Trash2 className="h-3.5 w-3.5" />
-                          Delete
+                          {t("admin.deletePost")}
                         </>
                       )}
                     </button>
@@ -277,13 +279,13 @@ export default function AdminUsers() {
       {pendingDeleteUser ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
           <div className="w-full max-w-md rounded-[28px] border border-white/60 bg-white p-6 shadow-2xl">
-            <p className="text-lg font-semibold text-slate-900">Delete this account?</p>
-            <p className="mt-2 text-sm text-slate-600">This action cannot be undone. It will remove:</p>
+            <p className="text-lg font-semibold text-slate-900">{t("admin.deleteAccountTitle")}</p>
+            <p className="mt-2 text-sm text-slate-600">{t("admin.deleteAccountBody")}</p>
             <ul className="mt-3 space-y-1 text-sm text-slate-600">
-              <li>• profile</li>
-              <li>• posts</li>
-              <li>• comments</li>
-              <li>• likes</li>
+              <li>• {t("admin.profile")}</li>
+              <li>• {t("admin.posts")}</li>
+              <li>• {t("admin.comments")}</li>
+              <li>• {t("admin.likes")}</li>
             </ul>
             <div className="mt-6 flex flex-wrap justify-end gap-2">
               <button
@@ -291,7 +293,7 @@ export default function AdminUsers() {
                 onClick={() => setPendingDeleteUser(null)}
                 className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700"
               >
-                Cancel
+                {t("admin.cancel")}
               </button>
               <button
                 type="button"
@@ -299,7 +301,7 @@ export default function AdminUsers() {
                 disabled={deletingUserId === pendingDeleteUser.id}
                 className="rounded-full bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-70"
               >
-                {deletingUserId === pendingDeleteUser.id ? "Deleting..." : "Delete Forever"}
+                {deletingUserId === pendingDeleteUser.id ? t("admin.deleting") : t("admin.deleteForever")}
               </button>
             </div>
           </div>

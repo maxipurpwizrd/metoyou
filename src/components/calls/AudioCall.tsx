@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader, Mic, MicOff, Phone, Volume2 } from "lucide-react";
 import type { CallSession } from "../../types/call";
+import { useLanguage } from "../../contexts/LanguageContext";
 
 interface AudioCallProps {
   session: CallSession;
@@ -12,6 +13,7 @@ interface AudioCallProps {
 }
 
 export default function AudioCall({ session, remoteStream, isRemoteAudioActive, isMuted, onToggleMute, onEndCall }: AudioCallProps) {
+  const { t } = useLanguage();
   const [duration, setDuration] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -62,17 +64,17 @@ export default function AudioCall({ session, remoteStream, isRemoteAudioActive, 
         <div className={`relative grid h-32 w-32 place-items-center rounded-full border-4 border-cyan-300/70 bg-linear-to-br from-sky-400 to-cyan-500 text-5xl font-bold shadow-2xl shadow-cyan-500/25 ${isRemoteAudioActive ? "ring-8 ring-cyan-300/10" : ""}`}>
           {session.remoteUsername?.charAt(0).toUpperCase() || "?"}
         </div>
-        <p className="mt-7 text-xs font-semibold uppercase tracking-[0.3em] text-cyan-200/70">{session.status === "ringing" ? "Connecting" : "Connected"}</p>
-        <h1 className="mt-2 text-3xl font-bold">{session.remoteUsername || "User"}</h1>
+        <p className="mt-7 text-xs font-semibold uppercase tracking-[0.3em] text-cyan-200/70">{session.status === "ringing" ? t("calls.connecting") : t("calls.connected")}</p>
+        <h1 className="mt-2 text-3xl font-bold">{session.remoteUsername || t("calls.user")}</h1>
         <p className="mt-2 font-mono text-white/60">{formattedDuration}</p>
         <canvas ref={canvasRef} width={300} height={70} className="mt-10 h-20 w-full rounded-2xl border border-white/10 bg-white/5" />
         <div className="mt-10 flex items-center gap-4">
-          <button type="button" onClick={onToggleMute} className={`grid h-14 w-14 place-items-center rounded-full border border-white/10 transition ${isMuted ? "bg-rose-500" : "bg-white/10 hover:bg-white/20"}`} title={isMuted ? "Unmute" : "Mute"}>
+          <button type="button" onClick={onToggleMute} className={`grid h-14 w-14 place-items-center rounded-full border border-white/10 transition ${isMuted ? "bg-rose-500" : "bg-white/10 hover:bg-white/20"}`} title={isMuted ? t("calls.unmute") : t("calls.mute")}>
             {isMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
           </button>
-          <button type="button" className="grid h-14 w-14 place-items-center rounded-full border border-white/10 bg-white/10" title="Speaker"><Volume2 className="h-6 w-6" /></button>
-          <button type="button" onClick={onEndCall} className="grid h-16 w-16 place-items-center rounded-full bg-rose-500 shadow-lg shadow-rose-500/25 transition hover:bg-rose-400" title="End call"><Phone className="h-7 w-7 rotate-135" /></button>
-          <span className="grid h-14 w-14 place-items-center rounded-full border border-white/10 bg-white/10" aria-label="Connection status">{session.status === "ringing" ? <Loader className="h-6 w-6 animate-spin" /> : <span className="h-3 w-3 rounded-full bg-emerald-400" />}</span>
+          <button type="button" className="grid h-14 w-14 place-items-center rounded-full border border-white/10 bg-white/10" title={t("calls.speaker")}><Volume2 className="h-6 w-6" /></button>
+          <button type="button" onClick={onEndCall} className="grid h-16 w-16 place-items-center rounded-full bg-rose-500 shadow-lg shadow-rose-500/25 transition hover:bg-rose-400" title={t("calls.end")}><Phone className="h-7 w-7 rotate-135" /></button>
+          <span className="grid h-14 w-14 place-items-center rounded-full border border-white/10 bg-white/10" aria-label={t("calls.connectionStatus")}>{session.status === "ringing" ? <Loader className="h-6 w-6 animate-spin" /> : <span className="h-3 w-3 rounded-full bg-emerald-400" />}</span>
         </div>
       </div>
     </div>

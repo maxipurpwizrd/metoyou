@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, CalendarDays, CheckCircle2, Heart, MessageCircle, Search, Sparkles, User } from "lucide-react";
 import PostCard from "../components/PostCard";
 import { supabase } from "../lib/supabase";
+import { useLanguage } from "../contexts/LanguageContext";
 
 type AdminPostListItem = {
   id: string;
@@ -39,6 +40,7 @@ function extractSupabaseStoragePath(url: string) {
 
 export default function AdminPosts() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [isCheckingAccess, setIsCheckingAccess] = useState(true);
   const [hasAdminAccess, setHasAdminAccess] = useState(false);
   const [adminPosts, setAdminPosts] = useState<AdminPostListItem[]>([]);
@@ -291,12 +293,12 @@ export default function AdminPosts() {
         <div className="mx-auto flex max-w-5xl flex-col gap-4">
           <button type="button" onClick={() => navigate(-1)} className="inline-flex w-fit items-center gap-2 rounded-full border border-white/60 bg-white/80 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm backdrop-blur">
             <ArrowLeft className="h-4 w-4" />
-            ← Back
+            ← {t("admin.back")}
           </button>
 
           <div className="rounded-[32px] border border-white/60 bg-white/70 p-8 text-center shadow-2xl backdrop-blur-2xl">
             <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-sky-200 border-t-sky-500" />
-            <p className="text-lg font-semibold text-slate-900">Checking access…</p>
+            <p className="text-lg font-semibold text-slate-900">{t("admin.checkingAccess")}</p>
           </div>
         </div>
       </div>
@@ -309,11 +311,11 @@ export default function AdminPosts() {
         <div className="mx-auto flex max-w-5xl flex-col gap-4">
           <button type="button" onClick={() => navigate(-1)} className="inline-flex w-fit items-center gap-2 rounded-full border border-white/60 bg-white/80 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm backdrop-blur">
             <ArrowLeft className="h-4 w-4" />
-            ← Back
+            ← {t("admin.back")}
           </button>
 
           <div className="rounded-[32px] border border-white/60 bg-white/70 p-8 text-center shadow-2xl backdrop-blur-2xl">
-            <p className="text-lg font-semibold text-slate-900">Sorry, you're not an admin.</p>
+            <p className="text-lg font-semibold text-slate-900">{t("admin.denied")}</p>
           </div>
         </div>
       </div>
@@ -325,13 +327,13 @@ export default function AdminPosts() {
       <div className="mx-auto flex max-w-5xl flex-col gap-4">
         <button type="button" onClick={() => navigate(-1)} className="inline-flex w-fit items-center gap-2 rounded-full border border-white/60 bg-white/80 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm backdrop-blur">
           <ArrowLeft className="h-4 w-4" />
-          ← Back
+          ← {t("admin.back")}
         </button>
 
         <div className="rounded-[32px] border border-white/60 bg-white/70 p-6 shadow-2xl backdrop-blur-2xl sm:p-8">
           <div className="mb-4 flex items-center gap-2">
             <User className="h-4 w-4 text-slate-500" />
-            <h1 className="text-2xl font-semibold text-slate-900">Posts</h1>
+            <h1 className="text-2xl font-semibold text-slate-900">{t("admin.posts")}</h1>
           </div>
 
           <div className="mb-4 flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
@@ -339,7 +341,7 @@ export default function AdminPosts() {
             <input
               value={adminPostsSearch}
               onChange={(event) => setAdminPostsSearch(event.target.value)}
-              placeholder="Search posts or usernames"
+              placeholder={t("admin.searchPosts")}
               className="w-full bg-transparent outline-none"
             />
           </div>
@@ -347,9 +349,9 @@ export default function AdminPosts() {
           {adminPostsError ? <p className="mb-3 rounded-2xl bg-rose-50 px-3 py-2 text-sm text-rose-700">{adminPostsError}</p> : null}
 
           {adminPostsLoading ? (
-            <p className="text-sm text-slate-500">Loading posts…</p>
+            <p className="text-sm text-slate-500">{t("admin.loadingPosts")}</p>
           ) : adminPosts.length === 0 ? (
-            <p className="text-sm text-slate-500">No posts found.</p>
+            <p className="text-sm text-slate-500">{t("admin.noPosts")}</p>
           ) : (
             <div className="space-y-3">
               {adminPosts.map((post) => (
@@ -375,11 +377,11 @@ export default function AdminPosts() {
                               onChange={() => toggleMarkedPost(post.id)}
                               className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
                             />
-                            Mark to delete
+                            {t("admin.markToDelete")}
                           </label>
                         </div>
                         <div className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
-                          {post.text || "Shared a post"}
+                          {post.text || t("admin.postsShared")}
                         </div>
                         {renderPostMedia(post)}
                         <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-500">
@@ -390,9 +392,9 @@ export default function AdminPosts() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button type="button" onClick={() => setSelectedAdminPost(post)} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700">View</button>
+                      <button type="button" onClick={() => setSelectedAdminPost(post)} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700">{t("admin.view")}</button>
                       <button type="button" disabled={deletingAdminPostId === post.id} onClick={() => setAdminPostToDelete(post)} className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-sm font-medium text-rose-700 disabled:cursor-not-allowed disabled:opacity-70">
-                        {deletingAdminPostId === post.id ? "Deleting..." : "Delete"}
+                        {deletingAdminPostId === post.id ? t("admin.deleting") : t("admin.deletePost")}
                       </button>
                     </div>
                   </div>
@@ -410,7 +412,7 @@ export default function AdminPosts() {
             onClick={() => setShowDeleteSelectedConfirm(true)}
             className="rounded-full bg-rose-600 px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-rose-700"
           >
-            Delete Selected Post
+            {t("admin.deleteSelectedPost")}
           </button>
         </div>
       ) : null}
@@ -418,14 +420,14 @@ export default function AdminPosts() {
       {showDeleteSelectedConfirm ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
           <div className="w-full max-w-md rounded-[28px] border border-white/60 bg-white p-6 shadow-2xl">
-            <p className="text-lg font-semibold text-slate-900">Delete selected posts?</p>
-            <p className="mt-2 text-sm text-slate-600">This will permanently remove {markedPostIds.length} selected post{markedPostIds.length === 1 ? "" : "s"}.</p>
+            <p className="text-lg font-semibold text-slate-900">{t("admin.deleteSelectedConfirmTitle")}</p>
+            <p className="mt-2 text-sm text-slate-600">{markedPostIds.length === 1 ? t("admin.deleteSelectedOne") : t("admin.deleteSelectedMany").replace("{count}", String(markedPostIds.length))}</p>
             <div className="mt-6 flex flex-wrap justify-end gap-2">
               <button type="button" onClick={() => setShowDeleteSelectedConfirm(false)} className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700">
-                Cancel
+                {t("admin.cancel")}
               </button>
               <button type="button" onClick={handleDeleteSelectedAdminPosts} disabled={deletingSelectedAdminPosts} className="rounded-full bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-70">
-                {deletingSelectedAdminPosts ? "Deleting..." : "Delete Forever"}
+                {deletingSelectedAdminPosts ? t("admin.deleting") : t("admin.deleteForever")}
               </button>
             </div>
           </div>
@@ -435,12 +437,12 @@ export default function AdminPosts() {
       {adminPostToDelete ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
           <div className="w-full max-w-md rounded-[28px] border border-white/60 bg-white p-6 shadow-2xl">
-            <p className="text-lg font-semibold text-slate-900">Delete this post?</p>
-            <p className="mt-2 text-sm text-slate-600">This action cannot be undone.</p>
+            <p className="text-lg font-semibold text-slate-900">{t("admin.deletePostConfirmTitle")}</p>
+            <p className="mt-2 text-sm text-slate-600">{t("admin.irreversible")}</p>
             <div className="mt-6 flex flex-wrap justify-end gap-2">
-              <button type="button" onClick={() => setAdminPostToDelete(null)} className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700">Cancel</button>
+              <button type="button" onClick={() => setAdminPostToDelete(null)} className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700">{t("admin.cancel")}</button>
               <button type="button" onClick={handleDeleteAdminPost} disabled={deletingAdminPostId === adminPostToDelete.id} className="rounded-full bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-70">
-                {deletingAdminPostId === adminPostToDelete.id ? "Deleting..." : "Delete Forever"}
+                {deletingAdminPostId === adminPostToDelete.id ? t("admin.deleting") : t("admin.deleteForever")}
               </button>
             </div>
           </div>
@@ -454,7 +456,7 @@ export default function AdminPosts() {
               <CheckCircle2 className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-slate-900">Deleted successfully</p>
+              <p className="text-sm font-semibold text-slate-900">{t("admin.deletedSuccessfully")}</p>
               <p className="text-xs text-slate-500">{deleteSuccessMessage}</p>
             </div>
             <Sparkles className="h-4 w-4 text-amber-400" />
@@ -466,7 +468,7 @@ export default function AdminPosts() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
           <div className="w-full max-w-2xl rounded-[28px] border border-white/60 bg-white p-3 shadow-2xl">
             <div className="mb-3 flex justify-end">
-              <button type="button" onClick={() => setSelectedAdminPost(null)} className="rounded-full bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">Close</button>
+              <button type="button" onClick={() => setSelectedAdminPost(null)} className="rounded-full bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">{t("admin.close")}</button>
             </div>
             <div className="px-1 sm:px-2">
               <PostCard

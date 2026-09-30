@@ -556,6 +556,7 @@ export default function Chat() {
 
   const recipientId = searchParams.get("recipient") ?? "";
   const recipientName = searchParams.get("username") ?? "Friend";
+  const requestedCallType = searchParams.get("callType");
   const userId = user?.id;
   const recipientPresence = recipientId ? presenceState[recipientId] : undefined;
   const recipientIsOnline = Boolean(recipientPresence);
@@ -575,6 +576,28 @@ export default function Chat() {
 
     return `${prefix}-${randomPart}`;
   }
+
+  useEffect(() => {
+    if (!requestedCallType || !userId || !recipientId || !conversationId) return;
+
+    const targetCallType = requestedCallType === "video" ? "video" : "audio";
+    if (targetCallType !== "video" && targetCallType !== "audio") return;
+
+    const params = new URLSearchParams(searchParams);
+    params.delete("callType");
+
+    void (async () => {
+      try {
+        if (targetCallType === "audio") {
+          await handleStartAudioCall();
+        } else {
+          await handleStartVideoCall();
+        }
+      } finally {
+        navigate({ pathname: "/chat", search: params.toString() ? `?${params.toString()}` : "" }, { replace: true });
+      }
+    })();
+  }, [requestedCallType, userId, recipientId, conversationId, navigate, searchParams]);
 
   useEffect(() => {
     if (!userId || !recipientId) {

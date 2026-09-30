@@ -813,17 +813,17 @@ export default function Messages({ embedded: _embedded = false }: { embedded?: b
           }`}>
             <Link
               to="/messages/spam"
-              className={`flex-1 px-4 py-4 transition-colors text-left ${
+              className={`flex flex-1 items-center justify-start pl-6 pr-4 py-4 transition-colors text-left ${
                 isVibesPro ? 'border-r border-white/10 hover:bg-white/5' : 'border-r border-white/50 hover:bg-white/50'
               }`}
             >
-              Spam
+              {t("messages.spamTitle")}
             </Link>
             <button
               type="button"
               onClick={() => navigate("/messages/calls")}
-              aria-label="Call history"
-              title="Call history"
+              aria-label={t("callHistory.title")}
+              title={t("callHistory.title")}
               className={`group flex h-16 w-28 shrink-0 items-center justify-center gap-1 border-r px-3 py-4 text-xl transition-colors ${isVibesPro ? 'border-white/10 hover:bg-white/5' : 'border-white/50 hover:bg-white/50'}`}
             >
               <span aria-hidden="true">☎️</span>
@@ -835,7 +835,7 @@ export default function Messages({ embedded: _embedded = false }: { embedded?: b
               onClick={() => navigate("/messages/archived")}
               className={`flex-1 px-4 py-4 transition-colors ${isVibesPro ? 'hover:bg-white/5' : 'hover:bg-white/50'}`}
             >
-              Archived
+              {t("messages.archive")}
             </button>
           </div>
         </div>
@@ -853,21 +853,21 @@ export default function Messages({ embedded: _embedded = false }: { embedded?: b
             onClick={() => handleArchiveThread(contextMenuThreadId)}
             className={`w-full rounded-2xl px-3 py-2 text-left text-sm ${isVibesPro ? 'text-white hover:bg-white/5' : 'text-slate-900 hover:bg-white/60'}`}
           >
-            Archive
+            {t("messages.archiveAction")}
           </button>
           <button
             type="button"
             onClick={() => handleBlockThread(contextMenuThreadId)}
             className={`w-full rounded-2xl px-3 py-2 text-left text-sm ${isVibesPro ? 'text-white hover:bg-white/5' : 'text-slate-900 hover:bg-white/60'}`}
           >
-            Block
+            {t("messages.blockAction")}
           </button>
           <button
             type="button"
             onClick={() => handleReportThread(contextMenuThreadId)}
             className={`w-full rounded-2xl px-3 py-2 text-left text-sm ${isVibesPro ? 'text-white hover:bg-white/5' : 'text-slate-900 hover:bg-white/60'}`}
           >
-            Report
+            {t("common.report")}
           </button>
         </div>
       ) : null}
@@ -884,22 +884,22 @@ export default function Messages({ embedded: _embedded = false }: { embedded?: b
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-xs" onClick={() => setStoryChoiceOpen(false)} />
           <div className="relative w-full max-w-xs rounded-3xl bg-[#111111] border border-white/10 p-5 text-white shadow-2xl">
-            <h2 className="text-lg font-bold">Create Story</h2>
-            <p className="mt-2 text-sm text-white/70">Choose the content type for your story.</p>
+            <h2 className="text-lg font-bold">{t("story.createTitle")}</h2>
+            <p className="mt-2 text-sm text-white/70">{t("story.chooseType")}</p>
             <div className="mt-4 grid gap-3">
               <button
                 type="button"
                 onClick={() => openStoryEditor("text")}
                 className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm font-semibold text-white hover:bg-white/15"
               >
-                Text
+                {t("story.text")}
               </button>
               <button
                 type="button"
                 onClick={() => openStoryEditor("photo")}
                 className="rounded-2xl bg-linear-to-r from-sky-500 via-cyan-500 to-blue-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-sky-500/20"
               >
-                Photo
+                {t("story.photo")}
               </button>
             </div>
           </div>
@@ -912,28 +912,28 @@ export default function Messages({ embedded: _embedded = false }: { embedded?: b
           <div className="relative w-full max-w-md rounded-3xl bg-[#111111] border border-white/10 p-5 text-white shadow-2xl">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-bold">Share Story</h2>
-                <p className="mt-1 text-sm text-white/70">Add a photo or text story for your friends.</p>
+                <h2 className="text-lg font-bold">{t("story.shareTitle")}</h2>
+                <p className="mt-1 text-sm text-white/70">{t("story.shareDescription")}</p>
               </div>
               <button
                 type="button"
                 onClick={handleCloseStoryEditor}
                 className="rounded-full border border-white/20 bg-white/10 px-3 py-2 text-sm text-white hover:bg-white/15"
               >
-                Close
+                {t("story.close")}
               </button>
             </div>
             <div className="mt-4 space-y-4">
               {selectedImage ? (
                 <div className="flex max-h-[60vh] items-center justify-center overflow-hidden rounded-3xl bg-black/40">
-                  <img src={selectedImage} alt="Story preview" className="max-h-[60vh] w-full object-contain" />
+                  <img src={selectedImage} alt={t("story.preview")} className="max-h-[60vh] w-full object-contain" />
                 </div>
               ) : (
                 <textarea
                   value={storyText}
                   onChange={(event) => setStoryText(event.target.value)}
                   rows={5}
-                  placeholder="Write your story..."
+                  placeholder={t("story.writePlaceholder")}
                   className="w-full rounded-3xl border border-white/10 bg-black/60 p-4 text-sm text-white outline-none placeholder:text-white/40"
                 />
               )}
@@ -943,7 +943,7 @@ export default function Messages({ embedded: _embedded = false }: { embedded?: b
 
               <div className="space-y-2">
                 <div className={`text-[11px] font-semibold uppercase tracking-[0.2em] ${isVibesPro ? 'text-[#E8C96F]/70' : 'text-slate-400'}`}>
-                  Story Duration
+                  {t("story.duration")}
                 </div>
                 <div className="grid grid-cols-5 gap-2">
                   {[2, 4, 8, 12, 24].map((hours) => (
@@ -968,7 +968,7 @@ export default function Messages({ embedded: _embedded = false }: { embedded?: b
                   disabled={storyCreating}
                   className="min-w-36 rounded-2xl bg-linear-to-r from-sky-500 via-cyan-500 to-blue-500 px-4 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {storyCreating ? "Posting..." : "Share Story"}
+                  {storyCreating ? t("story.posting") : t("story.share")}
                 </button>
               </div>
             </div>
@@ -983,7 +983,7 @@ export default function Messages({ embedded: _embedded = false }: { embedded?: b
               type="button"
               onClick={toggleStoryMenu}
               className="rounded-full border border-white/10 bg-black/50 p-2 text-white hover:bg-white/10"
-              aria-label="Story options"
+              aria-label={t("story.options")}
             >
               <MoreHorizontal className="h-5 w-5" />
             </button>
@@ -998,28 +998,28 @@ export default function Messages({ embedded: _embedded = false }: { embedded?: b
                   onClick={() => handleStoryMenuAction("delete")}
                   className="w-full rounded-2xl px-3 py-2 text-left text-sm text-white hover:bg-white/10"
                 >
-                  Delete
+                  {t("story.delete")}
                 </button>
                 <button
                   type="button"
                   onClick={() => handleStoryMenuAction("share")}
                   className="w-full rounded-2xl px-3 py-2 text-left text-sm text-white hover:bg-white/10"
                 >
-                  Share
+                  {t("common.share")}
                 </button>
                 <button
                   type="button"
                   onClick={() => handleStoryMenuAction("shareToFeeds")}
                   className="w-full rounded-2xl px-3 py-2 text-left text-sm text-white hover:bg-white/10"
                 >
-                  Share to Feed
+                  {t("story.shareToFeed")}
                 </button>
                 <button
                   type="button"
                   onClick={() => handleStoryMenuAction("save")}
                   className="w-full rounded-2xl px-3 py-2 text-left text-sm text-white hover:bg-white/10"
                 >
-                  {savedStories.includes(selectedStory.id) ? "Saved" : "Save"}
+                  {savedStories.includes(selectedStory.id) ? t("story.saved") : t("story.save")}
                 </button>
                 {selectedStory.author_id !== currentUserId ? (
                   <button
@@ -1027,7 +1027,7 @@ export default function Messages({ embedded: _embedded = false }: { embedded?: b
                     onClick={() => handleStoryMenuAction("report")}
                     className="w-full rounded-2xl px-3 py-2 text-left text-sm text-white hover:bg-white/10"
                   >
-                    Report
+                    {t("common.report")}
                   </button>
                 ) : null}
               </div>
@@ -1038,7 +1038,7 @@ export default function Messages({ embedded: _embedded = false }: { embedded?: b
             type="button"
             onClick={closeStoryViewer}
             className="absolute top-4 right-4 z-50 rounded-full border border-white/20 bg-black/50 p-3 text-white hover:bg-white/10"
-            aria-label="Close story"
+            aria-label={t("story.close")}
           >
             ✕
           </button>
@@ -1056,8 +1056,8 @@ export default function Messages({ embedded: _embedded = false }: { embedded?: b
             </div>
 
             <div className="absolute inset-0 z-30 flex">
-              <button type="button" onClick={goToPreviousStory} className="h-full w-1/2" aria-label="Previous story" />
-              <button type="button" onClick={goToNextStory} className="h-full w-1/2" aria-label="Next story" />
+              <button type="button" onClick={goToPreviousStory} className="h-full w-1/2" aria-label={t("story.previous")} />
+              <button type="button" onClick={goToNextStory} className="h-full w-1/2" aria-label={t("story.next")} />
             </div>
 
             {selectedStory.image_url ? (
@@ -1065,7 +1065,7 @@ export default function Messages({ embedded: _embedded = false }: { embedded?: b
             ) : (
               <div className="flex h-full w-full items-center justify-center bg-linear-to-br from-sky-500 via-cyan-500 to-blue-500 p-6 text-white text-center">
                 <p className="max-w-2xl text-2xl font-semibold leading-relaxed whitespace-pre-wrap">
-                  {selectedStory.text || `${selectedStory.author_username} shared a story.`}
+                  {selectedStory.text || t("story.sharedBy").replace("{name}", selectedStory.author_username)}
                 </p>
               </div>
             )}

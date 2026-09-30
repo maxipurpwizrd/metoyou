@@ -2,8 +2,9 @@ import Navbar from "../components/Navbar";
 import { useMemo, useState, useEffect, useRef, useCallback, useLayoutEffect, type CSSProperties } from "react";
 import { AutoSizer, CellMeasurer, CellMeasurerCache, List, WindowScroller } from "react-virtualized";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useFeed, type Post as FeedPost } from "../contexts/FeedContext";
+import { useFeed, type Comment as FeedComment, type Post as FeedPost } from "../contexts/FeedContext";
 import { useSession } from "../contexts/SessionContext";
+import { useLanguage } from "../contexts/LanguageContext";
 import { VibesProFeed } from "../themes/vibespro";
 import { useAppInit } from "../contexts/AppInitContext";
 import { isVibesProEnabled } from "../lib/vibesPro";
@@ -15,7 +16,7 @@ import SurfaceDock from "../components/SurfaceDock";
 import MediaActionMenu, { type MediaAction } from "../components/MediaActionMenu";
 import { FreeFeedSkeleton, VibesProFeedSkeleton } from "../components/skeletons/FeedSkeletons";
 import { savePostToSupabase, deletePostFromSupabase, updatePostInSupabase, uploadAudioToSupabase, uploadImageVariantsToSupabase, fetchPostByIdFromSupabase } from "../lib/postApi";
-import { addComment, editComment, deleteComment } from "../lib/commentApi";
+import { addComment, editComment, deleteComment, getComments } from "../lib/commentApi";
 import { likePost, unlikePost, getPostLikes } from "../lib/likeApi";
 import { blockUser } from "../lib/moderationApi";
 import {
@@ -64,8 +65,20 @@ const mapStoryRecord = (story: StoryRecord): Story => ({
   createdAt: story.created_at,
 });
 
+const mapFeedComments = (records: Awaited<ReturnType<typeof getComments>>): FeedComment[] => records.map((comment) => ({
+  id: comment.id,
+  user: {
+    id: comment.author_id,
+    username: comment.profiles?.username ?? "Unknown",
+  },
+  text: comment.text ?? undefined,
+  voice: comment.voice_url ?? undefined,
+  likes: comment.likes ?? 0,
+}));
+
 export default function Feed(props: { embedded?: boolean } = {}) {
   void props;
+  const { t } = useLanguage();
   const { appReady } = useAppInit();
   const { profileReady } = useSession();
   const feedInitializing = !appReady || !profileReady;
@@ -83,11 +96,16 @@ export default function Feed(props: { embedded?: boolean } = {}) {
 
   const [selectedStory, setSelectedStory] = useState<Story | null>(null);
   const [focusedPost, setFocusedPost] = useState<FeedPost | null>(null);
+  const [commentsPostId, setCommentsPostId] = useState<string | number | null>(null);
   const requestedPostId = useMemo(() => {
     const params = new URLSearchParams(location.search);
     const value = params.get("postId");
     return value ? String(value) : null;
   }, [location.search]);
+  const requestedCommentsOpen = useMemo(
+    () => new URLSearchParams(location.search).get("showComments") === "1",
+    [location.search],
+  );
   const shouldFocusOnPost = Boolean(requestedPostId);
   const [selectedStoryIndex, setSelectedStoryIndex] = useState<number | null>(null);
   const [storyProgress, setStoryProgress] = useState(0);
@@ -110,6 +128,7 @@ export default function Feed(props: { embedded?: boolean } = {}) {
   const listRef = useRef<{ recomputeRowHeights: (startIndex?: number) => void } | null>(null);
   const previousFilteredIdsRef = useRef<string[]>([]);
   const previousLayoutSignatureRef = useRef("");
+  const previousCommentsPostIdRef = useRef<string | number | null>(null);
   const cache = useRef(
     new CellMeasurerCache({
       fixedWidth: true,
@@ -219,8 +238,9 @@ export default function Feed(props: { embedded?: boolean } = {}) {
       currentIds.length !== previousIds.length ||
       currentIds.some((id, index) => id !== previousIds[index]);
     const layoutChanged = currentLayoutSignature !== previousLayoutSignature;
+    const commentsChanged = commentsPostId !== previousCommentsPostIdRef.current;
 
-    if (isInitialRender || (orderChanged && !isAppend) || (layoutChanged && !isAppend)) {
+    if (commentsChanged || isInitialRender || (orderChanged && !isAppend) || (layoutChanged && !isAppend)) {
       cache.current.clearAll();
       listRef.current?.recomputeRowHeights(0);
     } else if (isAppend) {
@@ -231,13 +251,15 @@ export default function Feed(props: { embedded?: boolean } = {}) {
 
     previousFilteredIdsRef.current = currentIds;
     previousLayoutSignatureRef.current = currentLayoutSignature;
-  }, [filteredPosts, selectedPostId]);
+    previousCommentsPostIdRef.current = commentsPostId;
+  }, [commentsPostId, filteredPosts, selectedPostId]);
 
   useEffect(() => {
     if (!requestedPostId) {
       const timeout = window.setTimeout(() => {
         setFocusedPost(null);
         setSelectedPostId(null);
+        setCommentsPostId(null);
       }, 0);
       return () => window.clearTimeout(timeout);
     }
@@ -247,9 +269,13 @@ export default function Feed(props: { embedded?: boolean } = {}) {
     const loadFocusedPost = async () => {
       const existing = posts.find((post) => String(post.id) === requestedPostId);
       if (existing) {
+        const comments = requestedCommentsOpen ? mapFeedComments(await getComments(requestedPostId)) : existing.comments;
+        if (!active) return;
+
         if (active) {
-          setFocusedPost(existing);
+          setFocusedPost({ ...existing, comments });
           setSelectedPostId(requestedPostId);
+          setCommentsPostId(requestedCommentsOpen ? requestedPostId : null);
         }
         return;
       }
@@ -260,6 +286,7 @@ export default function Feed(props: { embedded?: boolean } = {}) {
       if (!record) {
         setFocusedPost(null);
         setSelectedPostId(requestedPostId);
+        setCommentsPostId(null);
         return;
       }
 
@@ -289,8 +316,14 @@ export default function Feed(props: { embedded?: boolean } = {}) {
         persisted: true,
       };
 
+      if (requestedCommentsOpen) {
+        mappedPost.comments = mapFeedComments(await getComments(requestedPostId));
+      }
+      if (!active) return;
+
       setFocusedPost(mappedPost);
       setSelectedPostId(requestedPostId);
+      setCommentsPostId(requestedCommentsOpen ? requestedPostId : null);
     };
 
     void loadFocusedPost();
@@ -298,9 +331,11 @@ export default function Feed(props: { embedded?: boolean } = {}) {
     return () => {
       active = false;
     };
-  }, [posts, requestedPostId, setSelectedPostId]);
+  }, [posts, requestedCommentsOpen, requestedPostId, setSelectedPostId]);
 
   const suppressAutoCloseRef = useRef(false);
+  const commentInputFocusedRef = useRef(false);
+  const manualScrollIntentUntilRef = useRef(0);
   const fastScrollCloseRef = useRef<{
     postId: string | number;
     direction: 1 | -1;
@@ -366,10 +401,10 @@ export default function Feed(props: { embedded?: boolean } = {}) {
 
   const storyMenuActions: MediaAction[] = selectedStory
     ? [
-        { label: "Share", icon: "share", onClick: () => { void handleShareStory(); } },
-        { label: "Save story", icon: "download", onClick: handleSaveStory },
-        { label: "Report", icon: "report", onClick: handleReportStory },
-        ...(isStoryOwner ? [{ label: "Delete story", icon: "delete" as const, tone: "danger" as const, onClick: handleDeleteStory }] : []),
+        { label: t("common.share"), icon: "share", onClick: () => { void handleShareStory(); } },
+        { label: t("story.save"), icon: "download", onClick: handleSaveStory },
+        { label: t("common.report"), icon: "report", onClick: handleReportStory },
+        ...(isStoryOwner ? [{ label: t("story.delete"), icon: "delete" as const, tone: "danger" as const, onClick: handleDeleteStory }] : []),
       ]
     : [];
 
@@ -470,6 +505,19 @@ export default function Feed(props: { embedded?: boolean } = {}) {
     }
   };
 
+  const handleCommentInputFocusChange = (isFocused: boolean) => {
+    commentInputFocusedRef.current = isFocused;
+
+    if (isFocused && fastScrollCloseRef.current) {
+      if (fastScrollCloseRef.current.timer !== null) {
+        window.clearTimeout(fastScrollCloseRef.current.timer);
+      }
+      fastScrollCloseRef.current = null;
+    }
+
+    setAutoCloseSuppressed(true);
+  };
+
   const openStoryAtIndex = (index: number) => {
     const story = stories[index];
     if (!story) return;
@@ -545,12 +593,44 @@ export default function Feed(props: { embedded?: boolean } = {}) {
     if (!selectedPostId) return;
 
     let lastScrollY = window.scrollY || 0;
+    let touchStart: { x: number; y: number } | null = null;
+    const noteManualScrollIntent = () => {
+      if (commentInputFocusedRef.current) {
+        manualScrollIntentUntilRef.current = Date.now() + 1000;
+      }
+    };
+
+    const handleWheel = (event: WheelEvent) => {
+      if (Math.abs(event.deltaY) > 0) noteManualScrollIntent();
+    };
+    const handleTouchStart = (event: TouchEvent) => {
+      const touch = event.touches[0];
+      if (touch) touchStart = { x: touch.clientX, y: touch.clientY };
+    };
+    const handleTouchMove = (event: TouchEvent) => {
+      const start = touchStart;
+      const touch = event.touches[0];
+      if (!start || !touch) return;
+
+      const deltaX = touch.clientX - start.x;
+      const deltaY = touch.clientY - start.y;
+      if (Math.abs(deltaY) > 8 && Math.abs(deltaY) > Math.abs(deltaX) * 1.2) {
+        noteManualScrollIntent();
+      }
+    };
+    const handleTouchEnd = () => {
+      touchStart = null;
+    };
 
     const closeIfAtEdge = () => {
-      if (suppressAutoCloseRef.current) return;
+      const manualScrollWhileFocused = commentInputFocusedRef.current && manualScrollIntentUntilRef.current > Date.now();
+      if ((suppressAutoCloseRef.current || commentInputFocusedRef.current) && !manualScrollWhileFocused) {
+        lastScrollY = window.scrollY || 0;
+        return;
+      }
 
       const selectedNode = document.querySelector(
-        `[data-post-id="${String(selectedPostId).replace(/"/g, '\\"')}"]`
+        `[data-post-card-id="${String(selectedPostId).replace(/"/g, '\\"')}"]`
       );
 
       if (!selectedNode) return;
@@ -561,9 +641,15 @@ export default function Feed(props: { embedded?: boolean } = {}) {
       const navbarHeight = 72;
       const bottomBarHeight = 88;
       const edgePadding = 20;
+      const commentsNode = manualScrollWhileFocused
+        ? document.querySelector(`[data-comments-card-id="${String(selectedPostId).replace(/"/g, '\\"')}"]`)
+        : null;
+      const commentsBottom = commentsNode?.getBoundingClientRect().bottom;
 
-      const shouldCloseAtTop = deltaY > 0 && rect.top <= navbarHeight + edgePadding;
-      const shouldCloseAtBottom = deltaY < 0 && rect.bottom >= window.innerHeight - bottomBarHeight - edgePadding;
+      const shouldCloseAtTop = deltaY > 0 && (manualScrollWhileFocused
+        ? commentsBottom !== undefined && commentsBottom <= navbarHeight + edgePadding
+        : rect.top + rect.height / 2 <= navbarHeight + edgePadding);
+      const shouldCloseAtBottom = !commentInputFocusedRef.current && deltaY < 0 && rect.bottom >= window.innerHeight - bottomBarHeight - edgePadding;
 
       if (shouldCloseAtTop || shouldCloseAtBottom) {
         const direction = deltaY > 0 ? 1 : -1;
@@ -573,6 +659,7 @@ export default function Feed(props: { embedded?: boolean } = {}) {
           const timer = window.setTimeout(() => {
             fastScrollCloseRef.current = null;
             setSelectedPostId(null);
+            setCommentsPostId(null);
           }, 180);
 
           fastScrollCloseRef.current = {
@@ -609,9 +696,17 @@ export default function Feed(props: { embedded?: boolean } = {}) {
 
     closeIfAtEdge();
     window.addEventListener("scroll", closeIfAtEdge, { passive: true });
+    window.addEventListener("wheel", handleWheel, { passive: true });
+    window.addEventListener("touchstart", handleTouchStart, { passive: true, capture: true });
+    window.addEventListener("touchmove", handleTouchMove, { passive: true, capture: true });
+    window.addEventListener("touchend", handleTouchEnd, { passive: true, capture: true });
 
     return () => {
       window.removeEventListener("scroll", closeIfAtEdge);
+      window.removeEventListener("wheel", handleWheel);
+      window.removeEventListener("touchstart", handleTouchStart, true);
+      window.removeEventListener("touchmove", handleTouchMove, true);
+      window.removeEventListener("touchend", handleTouchEnd, true);
       if (autoCloseTimeoutRef.current) {
         window.clearTimeout(autoCloseTimeoutRef.current);
       }
@@ -941,7 +1036,7 @@ export default function Feed(props: { embedded?: boolean } = {}) {
 
   const handleAudioSelection = async (file: File) => {
     if (file.size > 20 * 1024 * 1024) {
-      setAudioSelectionError("Audio files must be smaller than 20MB.");
+      setAudioSelectionError(t("story.audioFileTooLarge"));
       return;
     }
 
@@ -964,7 +1059,7 @@ export default function Feed(props: { embedded?: boolean } = {}) {
       setStoryMusic(undefined);
     } catch (error) {
       console.error("Failed to prepare audio", error);
-      setAudioSelectionError("We could not prepare this audio file. Please try another one.");
+      setAudioSelectionError(t("story.prepareAudioError"));
     }
   };
 
@@ -981,7 +1076,7 @@ export default function Feed(props: { embedded?: boolean } = {}) {
       setStoryVoice(audioUrl);
     } catch (error) {
       console.error("Failed to trim audio", error);
-      setAudioSelectionError("We could not trim this audio file.");
+      setAudioSelectionError(t("story.trimAudioError"));
     }
   };
 
@@ -1023,7 +1118,7 @@ export default function Feed(props: { embedded?: boolean } = {}) {
     if (!profile) return;
 
     if (!selectedImage && !storyText.trim() && !storyVoice && !storyMusic) {
-      setStoryCreateError("Add some content to your story.");
+      setStoryCreateError(t("story.addContentError"));
       return;
     }
 
@@ -1070,11 +1165,11 @@ export default function Feed(props: { embedded?: boolean } = {}) {
         const mappedStory = mapStoryRecord(createdStory);
         setStories((prevStories) => [mappedStory, ...prevStories.filter((story) => story.id !== mappedStory.id)]);
       } else {
-        setStoryCreateError("Story could not be posted right now.");
+        setStoryCreateError(t("story.postError"));
       }
     } catch (error) {
       console.error("Failed to create story", error);
-      setStoryCreateError("Story could not be posted right now.");
+      setStoryCreateError(t("story.postError"));
     } finally {
       window.clearInterval(progressInterval);
       setStoryCreateProgress(100);
@@ -1159,9 +1254,68 @@ export default function Feed(props: { embedded?: boolean } = {}) {
               likes={focusedPost.likes ?? 0}
               liked={Boolean(focusedPost.liked)}
               isSelected={true}
+              isCommentsOpen={commentsPostId === focusedPost.id}
               onToggleLike={() => undefined}
-              onSelectPost={() => undefined}
+              onOpenComments={() => {
+                const shouldOpen = commentsPostId !== focusedPost.id;
+                setCommentsPostId(shouldOpen ? focusedPost.id : null);
+                const params = new URLSearchParams(location.search);
+                if (shouldOpen) params.set("showComments", "1");
+                else params.delete("showComments");
+                const search = params.toString();
+                navigate({ pathname: location.pathname, search: search ? `?${search}` : "" }, { replace: true });
+              }}
+              onCloseComments={() => {
+                setCommentsPostId(null);
+                const params = new URLSearchParams(location.search);
+                params.delete("showComments");
+                const search = params.toString();
+                navigate({ pathname: location.pathname, search: search ? `?${search}` : "" }, { replace: true });
+              }}
+              onCommentInputFocusChange={handleCommentInputFocusChange}
               onClosePost={() => undefined}
+              onAddComment={async (comment) => {
+                const profile = currentUserProfile;
+                if (!profile) return;
+                const added = await addComment(String(focusedPost.id), profile.id, comment.text, comment.voice);
+                if (!added) return;
+
+                setFocusedPost((current) => current ? {
+                  ...current,
+                  comments: [
+                    ...(current.comments ?? []),
+                    {
+                      id: added.id,
+                      user: { id: profile.id, username: profile.username ?? profile.id },
+                      text: added.text ?? comment.text ?? undefined,
+                      voice: added.voice_url ?? comment.voice,
+                      likes: 0,
+                    },
+                  ],
+                  comments_count: Number(current.comments_count ?? 0) + 1,
+                } : current);
+              }}
+              onDeleteComment={async (commentId) => {
+                await deleteComment(String(commentId));
+                setFocusedPost((current) => current ? {
+                  ...current,
+                  comments: current.comments?.filter((comment) => String(comment.id) !== String(commentId)) ?? [],
+                  comments_count: Math.max(0, Number(current.comments_count ?? 0) - 1),
+                } : current);
+              }}
+              onEditComment={async (commentId, newText) => {
+                await editComment(String(commentId), newText);
+                setFocusedPost((current) => current ? {
+                  ...current,
+                  comments: current.comments?.map((comment) => String(comment.id) === String(commentId) ? { ...comment, text: newText } : comment) ?? [],
+                } : current);
+              }}
+              onLikeComment={(commentId) => {
+                setFocusedPost((current) => current ? {
+                  ...current,
+                  comments: current.comments?.map((comment) => String(comment.id) === String(commentId) ? { ...comment, likes: comment.likes + 1 } : comment) ?? [],
+                } : current);
+              }}
               onRepost={() => undefined}
               onSavePost={() => undefined}
               onMuteUser={() => undefined}
@@ -1176,7 +1330,7 @@ export default function Feed(props: { embedded?: boolean } = {}) {
           </div>
         ) : (
           <div className={`rounded-[32px] border p-8 text-center text-sm shadow-2xl backdrop-blur-md ${isVibesPro ? 'border-[#D4AF37]/20 bg-[#181818] text-white/80' : 'border-white/40 bg-white/70 text-slate-600'}`}>
-            Loading post...
+            {t("feed.loadingPost")}
           </div>
         )}
       </div>
@@ -1239,7 +1393,7 @@ export default function Feed(props: { embedded?: boolean } = {}) {
             style={storyCardStyle}
           >
             <span className="text-2xl md:text-3xl font-light mb-0.5 md:mb-1">+</span>
-            <span className="font-bold text-[10px] md:text-xs tracking-wide">Your Story</span>
+            <span className="font-bold text-[10px] md:text-xs tracking-wide">{t("story.yourStory")}</span>
           </button>
 
           {/* Render Active Stories */}
@@ -1257,7 +1411,7 @@ export default function Feed(props: { embedded?: boolean } = {}) {
               {story.image ? (
                 <img
                   src={story.image}
-                  alt="story"
+                  alt={t("story.contentAlt")}
                   loading="lazy"
                   className="w-full h-full object-cover"
                 />
@@ -1280,8 +1434,8 @@ export default function Feed(props: { embedded?: boolean } = {}) {
                         </p>
                       ) : (
                         <>
-                          <span className="text-[11px] md:text-xs uppercase tracking-[0.24em] text-white/70">Text Story</span>
-                          <p className="text-[10px] md:text-[12px] font-semibold leading-tight opacity-80">No text content yet.</p>
+                          <span className="text-[11px] md:text-xs uppercase tracking-[0.24em] text-white/70">{t("story.text")}</span>
+                          <p className="text-[10px] md:text-[12px] font-semibold leading-tight opacity-80">{t("story.noText")}</p>
                         </>
                       )}
                     </div>
@@ -1304,7 +1458,12 @@ export default function Feed(props: { embedded?: boolean } = {}) {
 
         {/* Dynamic Post Interaction Container */}
         <div
-          onClick={() => selectedPostId !== null && setSelectedPostId(null)}
+          onClick={() => {
+            if (selectedPostId !== null) {
+              setSelectedPostId(null);
+              setCommentsPostId(null);
+            }
+          }}
           className={`space-y-2 transition-all duration-300 ${selectedPostId !== null ? "relative z-10" : ""}`}
         >
           {selectedPostId !== null && (
@@ -1329,7 +1488,7 @@ export default function Feed(props: { embedded?: boolean } = {}) {
                       rowCount={filteredPosts.length}
                       rowHeight={cache.current.rowHeight}
                       deferredMeasurementCache={cache.current}
-                      overscanRowCount={8}
+                      overscanRowCount={4}
                       rowRenderer={({ index, parent, style }: { index: number; parent: unknown; style: CSSProperties }) => {
                         const post = filteredPosts[index];
                         const isSelected = selectedPostId === post.id;
@@ -1342,7 +1501,7 @@ export default function Feed(props: { embedded?: boolean } = {}) {
                             parent={parent}
                             rowIndex={index}
                           >
-                            {({ registerChild }: { registerChild: (node: Element | null) => void }) => (
+                            {({ registerChild, measure }: { registerChild: (node: Element | null) => void; measure: () => void }) => (
                               <div
                                 ref={registerChild}
                                 style={{ ...style, width: "100%" }}
@@ -1354,6 +1513,7 @@ export default function Feed(props: { embedded?: boolean } = {}) {
                                     e.stopPropagation();
                                     setAutoCloseSuppressed(true);
                                     setSelectedPostId(post.id);
+                                    setCommentsPostId(null);
                                   }}
                                   className={`transition-all duration-300 ${
                                     isSelected
@@ -1378,6 +1538,8 @@ export default function Feed(props: { embedded?: boolean } = {}) {
                                     likes={post.likes ?? 0}
                                     liked={Boolean(post.liked)}
                                     isSelected={isSelected}
+                                    isCommentsOpen={isSelected && commentsPostId === post.id}
+                                    onMediaLoad={() => window.requestAnimationFrame(measure)}
                                     onToggleLike={async () => {
                                       const profile = currentUserProfile;
                                       if (!profile) return;
@@ -1427,11 +1589,17 @@ export default function Feed(props: { embedded?: boolean } = {}) {
                                         );
                                       }
                                     }}
-                                    onSelectPost={() => {
+                                    onOpenComments={() => {
                                       setAutoCloseSuppressed(true);
                                       setSelectedPostId(post.id);
+                                      setCommentsPostId((current) => current === post.id ? null : post.id);
                                     }}
-                                    onClosePost={() => setSelectedPostId(null)}
+                                    onCloseComments={() => setCommentsPostId(null)}
+                                    onCommentInputFocusChange={handleCommentInputFocusChange}
+                                    onClosePost={() => {
+                                      setSelectedPostId(null);
+                                      setCommentsPostId(null);
+                                    }}
                                     onRepost={() => {
                                       setPosts((prev) => [
                                         {
@@ -1453,7 +1621,10 @@ export default function Feed(props: { embedded?: boolean } = {}) {
                                         }
                                       }
                                       setPosts((prev) => prev.filter((p) => p.id !== post.id));
-                                      if (selectedPostId === post.id) setSelectedPostId(null);
+                                      if (selectedPostId === post.id) {
+                                        setSelectedPostId(null);
+                                        setCommentsPostId(null);
+                                      }
                                     }}
                                     onRetryPost={() => {
                                       void retryPost(post.id);
@@ -1500,7 +1671,10 @@ export default function Feed(props: { embedded?: boolean } = {}) {
                                         setMutedUsers((prev) =>
                                           prev.includes(post.author.id) ? prev : [...prev, post.author.id]
                                         );
-                                        if (selectedPostId === post.id) setSelectedPostId(null);
+                                        if (selectedPostId === post.id) {
+                                          setSelectedPostId(null);
+                                          setCommentsPostId(null);
+                                        }
                                         alert("User blocked");
                                       } catch {
                                         alert("Unable to block this user right now.");
@@ -1650,8 +1824,8 @@ export default function Feed(props: { embedded?: boolean } = {}) {
             </div>
 
             <div className="absolute inset-0 z-40 flex">
-              <button type="button" className="h-full w-1/2" aria-label="Previous story" onClick={goToPreviousStory} />
-              <button type="button" className="h-full w-1/2" aria-label="Next story" onClick={goToNextStory} />
+              <button type="button" className="h-full w-1/2" aria-label={t("story.previous")} onClick={goToPreviousStory} />
+              <button type="button" className="h-full w-1/2" aria-label={t("story.next")} onClick={goToNextStory} />
             </div>
 
             <div className="absolute top-4 left-4 z-50">
@@ -1661,22 +1835,22 @@ export default function Feed(props: { embedded?: boolean } = {}) {
             {confirmDeleteStory && selectedStory && (
               <div className="fixed inset-0 z-10001 flex items-center justify-center bg-black/80 p-4">
                 <div className="w-full max-w-sm rounded-4xl border border-white/20 bg-slate-950 p-6 shadow-2xl shadow-black/60">
-                  <p className="text-lg font-semibold text-white">Delete this story?</p>
-                  <p className="mt-3 text-sm text-slate-300">This will permanently remove the story from your story tray. Are you sure?</p>
+                  <p className="text-lg font-semibold text-white">{t("story.deleteTitle")}</p>
+                  <p className="mt-3 text-sm text-slate-300">{t("story.deleteBody")}</p>
                   <div className="mt-6 flex flex-wrap gap-3 justify-end">
                     <button
                       type="button"
                       onClick={cancelDeleteStory}
                       className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10"
                     >
-                      Cancel
+                      {t("common.cancel")}
                     </button>
                     <button
                       type="button"
                       onClick={confirmDeleteStoryAction}
                       className="rounded-full bg-rose-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-400"
                     >
-                      Delete story
+                      {t("story.delete")}
                     </button>
                   </div>
                 </div>
@@ -1687,7 +1861,7 @@ export default function Feed(props: { embedded?: boolean } = {}) {
               <div className="flex items-center justify-center w-full h-full bg-slate-900 relative z-30">
                 <img
                   src={selectedStory.imageOriginal ?? selectedStory.image}
-                  alt="story content"
+                  alt={t("story.contentAlt")}
                   className="max-w-full max-h-full object-contain"
                 />
               </div>
@@ -1715,7 +1889,7 @@ export default function Feed(props: { embedded?: boolean } = {}) {
             <div className="absolute bottom-6 left-0 right-0 z-50 px-4 text-center text-white">
               <div className="mx-auto inline-flex items-center rounded-full border border-white/20 bg-white/10 px-4 py-3 shadow-[0_10px_30px_rgba(0,0,0,0.35)] backdrop-blur-md">
                 <h2 className="text-xl font-bold tracking-tight drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)]">
-                  {currentUserProfile?.username && selectedStory.name === currentUserProfile.username ? "Your Story" : selectedStory.name}
+                  {currentUserProfile?.username && selectedStory.name === currentUserProfile.username ? t("story.yourStory") : selectedStory.name}
                 </h2>
               </div>
             </div>
@@ -1730,29 +1904,29 @@ export default function Feed(props: { embedded?: boolean } = {}) {
 
           {isVibesPro ? (
             <div className="relative w-full max-w-xs rounded-3xl border border-white/10 bg-[#111111] p-5 text-white shadow-2xl">
-              <h2 className="text-lg font-bold">Create Story</h2>
-              <p className="mt-2 text-sm text-white/70">Choose the content type for your story.</p>
+              <h2 className="text-lg font-bold">{t("story.createTitle")}</h2>
+              <p className="mt-2 text-sm text-white/70">{t("story.chooseType")}</p>
               <div className="mt-4 grid gap-3">
                 <button
                   type="button"
                   onClick={() => openStoryEditor("text")}
                   className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm font-semibold text-white hover:bg-white/15"
                 >
-                  Text
+                  {t("story.text")}
                 </button>
                 <button
                   type="button"
                   onClick={() => openStoryEditor("photo")}
                   className="rounded-2xl bg-linear-to-r from-sky-500 via-cyan-500 to-blue-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-sky-500/20"
                 >
-                  Photo
+                  {t("story.photo")}
                 </button>
               </div>
             </div>
           ) : (
             <div className="relative w-full max-w-xs bg-white rounded-2xl p-4 shadow-2xl space-y-4">
-              <h3 className="text-center font-bold text-base text-slate-800">Create Story</h3>
-              <p className="text-sm text-center text-slate-500">Choose what you want to share.</p>
+              <h3 className="text-center font-bold text-base text-slate-800">{t("story.createTitle")}</h3>
+              <p className="text-sm text-center text-slate-500">{t("story.chooseShare")}</p>
 
               <div className="grid grid-cols-2 gap-2">
                 <button
@@ -1760,14 +1934,14 @@ export default function Feed(props: { embedded?: boolean } = {}) {
                   onClick={() => openStoryEditor("text")}
                   className="py-3 rounded-xl bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200 transition-colors"
                 >
-                  Text
+                  {t("story.text")}
                 </button>
                 <button
                   type="button"
                   onClick={() => openStoryEditor("photo")}
                   className="py-3 rounded-xl bg-linear-to-r from-sky-500 via-cyan-500 to-blue-500 text-white font-semibold shadow-md"
                 >
-                  Photo
+                  {t("story.photo")}
                 </button>
               </div>
             </div>
@@ -1778,8 +1952,8 @@ export default function Feed(props: { embedded?: boolean } = {}) {
       {storyNotice ? (
         <div className="fixed inset-0 z-70 flex items-center justify-center bg-black/55 px-4 backdrop-blur-sm">
           <div className="rounded-3xl border border-white/20 bg-white/95 px-6 py-5 text-center shadow-2xl">
-            <p className="text-lg font-black text-slate-900">Coming Soon</p>
-            <p className="mt-1 text-sm text-slate-600">Audio stories are being prepared for a future update.</p>
+            <p className="text-lg font-black text-slate-900">{t("story.comingSoon")}</p>
+            <p className="mt-1 text-sm text-slate-600">{t("story.audioComing")}</p>
           </div>
         </div>
       ) : null}
@@ -1788,8 +1962,8 @@ export default function Feed(props: { embedded?: boolean } = {}) {
         <div className="fixed inset-0 z-70 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-xs" onClick={() => setAudioChoiceOpen(false)} />
           <div className="relative w-full max-w-xs rounded-3xl border border-white/10 bg-[#111111] p-5 text-white shadow-2xl">
-            <h2 className="text-lg font-bold">Add Audio</h2>
-            <p className="mt-2 text-sm text-white/70">Choose how you want to add your voice story.</p>
+            <h2 className="text-lg font-bold">{t("story.addAudioTitle")}</h2>
+            <p className="mt-2 text-sm text-white/70">{t("story.chooseVoice")}</p>
             <div className="mt-4 grid gap-3">
               <button
                 type="button"
@@ -1821,13 +1995,13 @@ export default function Feed(props: { embedded?: boolean } = {}) {
                       setIsRecordingVoice(true);
                     } catch (error) {
                       console.error("Failed to start recording", error);
-                      setStoryCreateError("Microphone access was denied.");
+                      setStoryCreateError(t("story.recordingDenied"));
                     }
                   })();
                 }}
                 className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm font-semibold text-white hover:bg-white/15"
               >
-                Record Voice
+                {t("story.recordVoice")}
               </button>
               <button
                 type="button"
@@ -1838,7 +2012,7 @@ export default function Feed(props: { embedded?: boolean } = {}) {
                 }}
                 className="rounded-2xl bg-linear-to-r from-sky-500 via-cyan-500 to-blue-500 px-4 py-3 text-sm font-semibold text-white"
               >
-                Upload Audio
+                {t("story.uploadAudio")}
               </button>
             </div>
           </div>
@@ -1848,7 +2022,7 @@ export default function Feed(props: { embedded?: boolean } = {}) {
       {isRecordingVoice && isVibesPro && (
         <div className="fixed inset-x-0 bottom-6 z-75 flex justify-center px-4">
           <div className="rounded-full border border-white/10 bg-[#111111]/95 px-4 py-2 text-sm font-semibold text-white shadow-xl">
-            Recording… Tap the audio button again to stop
+            {t("story.recordingHint")}
           </div>
         </div>
       )}
@@ -1862,8 +2036,8 @@ export default function Feed(props: { embedded?: boolean } = {}) {
             <div className="relative w-full max-w-md rounded-3xl border border-white/10 bg-[#111111] p-5 text-white shadow-2xl">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-lg font-bold">Share Story</h2>
-                  <p className="mt-1 text-sm text-white/70">Add a photo or text story for your friends.</p>
+                  <h2 className="text-lg font-bold">{t("story.shareTitle")}</h2>
+                  <p className="mt-1 text-sm text-white/70">{t("story.shareDescription")}</p>
                 </div>
                 <button
                   type="button"
@@ -1879,21 +2053,21 @@ export default function Feed(props: { embedded?: boolean } = {}) {
                   }}
                   className="rounded-full border border-white/20 bg-white/10 px-3 py-2 text-sm text-white hover:bg-white/15"
                 >
-                  Close
+                  {t("story.close")}
                 </button>
               </div>
 
               <div className="mt-4 space-y-4">
                 {selectedImage ? (
                   <div className="flex max-h-[60vh] items-center justify-center overflow-hidden rounded-3xl bg-black/40">
-                    <img src={selectedImage} alt="Story preview" className="max-h-[60vh] w-full object-contain" />
+                    <img src={selectedImage} alt={t("story.preview")} className="max-h-[60vh] w-full object-contain" />
                   </div>
                 ) : (
                   <textarea
                     value={storyText}
                     onChange={(e) => setStoryText(e.target.value)}
                     rows={5}
-                    placeholder="Write your story..."
+                    placeholder={t("story.writePlaceholder")}
                     className="w-full rounded-3xl border border-white/10 bg-black/60 p-4 text-sm text-white outline-none placeholder:text-white/40"
                   />
                 )}
@@ -1906,8 +2080,8 @@ export default function Feed(props: { embedded?: boolean } = {}) {
                   <div className="rounded-2xl border border-white/10 bg-black/40 p-3">
                     <div className="flex items-center justify-between gap-2">
                       <div>
-                        <div className="text-[10px] uppercase tracking-[0.2em] text-[#E8C96F]/70">Audio clip</div>
-                        <div className="mt-1 text-xs text-white/70">Drag the handles to choose the part you want to upload.</div>
+                        <div className="text-[10px] uppercase tracking-[0.2em] text-[#E8C96F]/70">{t("story.audioClip")}</div>
+                        <div className="mt-1 text-xs text-white/70">{t("story.trimHint")}</div>
                       </div>
                       {selectedAudioFile ? (
                         <div className="text-[11px] text-white/60">{selectedAudioFile.name}</div>
@@ -1971,7 +2145,7 @@ export default function Feed(props: { embedded?: boolean } = {}) {
                         onClick={handleApplyAudioTrim}
                         className="w-full rounded-2xl border border-[#D4AF37]/30 bg-[#D4AF37]/15 px-3 py-2 text-sm font-semibold text-[#F7E7B2]"
                       >
-                        Apply trim
+                        {t("story.applyTrim")}
                       </button>
                     </div>
                   </div>
@@ -1983,7 +2157,7 @@ export default function Feed(props: { embedded?: boolean } = {}) {
 
                 <div className="space-y-2">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#E8C96F]/70">
-                    Story Duration
+                    {t("story.duration")}
                   </div>
                   <div className="grid grid-cols-5 gap-2">
                     {[2, 4, 8, 12, 24].map((hours) => (
@@ -2004,7 +2178,7 @@ export default function Feed(props: { embedded?: boolean } = {}) {
                 <div className="flex flex-col items-center gap-2 pt-2">
                   {storyVoice ? (
                     <div className="w-full rounded-2xl border border-white/10 bg-black/40 p-2">
-                      <div className="text-[10px] uppercase tracking-[0.2em] text-[#E8C96F]/70">Audio attached</div>
+                      <div className="text-[10px] uppercase tracking-[0.2em] text-[#E8C96F]/70">{t("story.audioAttached")}</div>
                       <audio controls src={storyVoice} className="mt-1 h-8 w-full" />
                     </div>
                   ) : null}
@@ -2022,7 +2196,7 @@ export default function Feed(props: { embedded?: boolean } = {}) {
                       }}
                       className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/15"
                     >
-                      🎙 {isRecordingVoice ? "Stop Recording" : "Add Audio"}
+                      🎙 {isRecordingVoice ? t("story.stopRecording") : t("story.addAudio")}
                     </button>
                     <button
                       type="button"
@@ -2030,7 +2204,7 @@ export default function Feed(props: { embedded?: boolean } = {}) {
                       disabled={storyCreating}
                       className="min-w-36 rounded-2xl bg-linear-to-r from-sky-500 via-cyan-500 to-blue-500 px-4 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {storyCreating ? "Posting..." : "Share Story"}
+                      {storyCreating ? t("story.posting") : t("story.share")}
                     </button>
                   </div>
                 </div>
@@ -2044,18 +2218,18 @@ export default function Feed(props: { embedded?: boolean } = {}) {
                 ) : (
                   <div className="w-full h-full bg-linear-to-br from-sky-500 via-cyan-500 to-blue-500 overflow-y-auto p-4 flex items-center justify-center text-white font-semibold text-center">
                     <div className="w-full whitespace-pre-wrap wrap-break-word text-xl leading-relaxed">
-                      {storyText.trim() ? storyText.trim() : "Text Story"}
+                      {storyText.trim() ? storyText.trim() : t("story.text")}
                     </div>
                   </div>
                 )}
               </div>
 
-              <h3 className="text-center font-bold text-base text-slate-800">Create Story</h3>
+              <h3 className="text-center font-bold text-base text-slate-800">{t("story.createTitle")}</h3>
 
               <textarea
                 value={storyText}
                 onChange={(e) => setStoryText(e.target.value)}
-                placeholder="Drop a vibe text onto your story..."
+                placeholder={t("story.writePlaceholder")}
                 className="w-full max-h-52 overflow-y-auto text-sm border border-slate-100 bg-slate-50/50 rounded-xl px-3 py-2.5 outline-none resize-none placeholder:text-slate-400 focus:border-sky-300 transition-colors"
                 rows={2}
               />
@@ -2068,7 +2242,7 @@ export default function Feed(props: { embedded?: boolean } = {}) {
                   }}
                   className="bg-sky-50 text-sky-600 py-2.5 rounded-xl hover:bg-sky-100 transition-colors"
                 >
-                  🎵 {storyMusic ? "Change Audio" : "Add Music"}
+                  🎵 {storyMusic ? t("story.changeAudio") : t("story.addMusic")}
                 </button>
                 <button
                   type="button"
@@ -2086,7 +2260,7 @@ export default function Feed(props: { embedded?: boolean } = {}) {
                   }}
                   className="py-2.5 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
                 >
-                  🎙 {isRecordingVoice ? "Stop Recording" : "Add Audio"}
+                  🎙 {isRecordingVoice ? t("story.stopRecording") : t("story.addAudio")}
                 </button>
               </div>
 
@@ -2101,7 +2275,7 @@ export default function Feed(props: { embedded?: boolean } = {}) {
 
               {/* Expiry Time Selectors */}
               <div className="space-y-1.5">
-                <span className="text-[11px] font-bold text-slate-400 block px-1">Story Lifespan</span>
+                <span className="text-[11px] font-bold text-slate-400 block px-1">{t("story.lifespan")}</span>
                 <div className="flex justify-between gap-1">
                   {[2, 4, 8, 12, 24].map((h) => (
                     <button
@@ -2149,7 +2323,7 @@ export default function Feed(props: { embedded?: boolean } = {}) {
                   className="flex-1 py-2.5 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
                   disabled={storyCreating}
                 >
-                  Cancel
+                  {t("common.cancel")}
                 </button>
                 <button
                   type="button"
@@ -2157,7 +2331,7 @@ export default function Feed(props: { embedded?: boolean } = {}) {
                   className="flex-1 py-2.5 rounded-xl bg-linear-to-r from-sky-500 via-cyan-500 to-blue-500 text-white shadow-md shadow-sky-200 active:scale-95 transition-transform"
                   disabled={storyCreating}
                 >
-                  {storyCreating ? "Working..." : "Post Story 🚀"}
+                  {storyCreating ? t("story.working") : t("story.share")}
                 </button>
               </div>
             </div>

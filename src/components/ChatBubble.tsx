@@ -4,6 +4,7 @@ import type { Message } from "../lib/messageApi";
 import { reactToMessage } from "../lib/messageApi";
 import { supabase } from "../lib/supabase";
 import { formatDisplayTime } from "../lib/time";
+import { useLanguage } from "../contexts/LanguageContext";
 
 type Props = {
   message: Message;
@@ -32,6 +33,7 @@ function formatDuration(seconds: number) {
 }
 
 export default function ChatBubble({ message, mine = false, onEdit, onDelete, onReply }: Props) {
+  const { t } = useLanguage();
   const hasImage = Boolean(message.image_url);
   const hasVideo = Boolean(message.video_url);
   const hasAudio = Boolean(message.audio_url);
@@ -286,7 +288,7 @@ export default function ChatBubble({ message, mine = false, onEdit, onDelete, on
               <button
                 onClick={() => setShowMenu(!showMenu)}
                 className="p-1 rounded hover:bg-white/20 transition-colors"
-                aria-label="Message options"
+                aria-label={t("chat.messageOptions")}
               >
                 <MoreVertical size={16} className="text-white/60" />
               </button>
@@ -301,7 +303,7 @@ export default function ChatBubble({ message, mine = false, onEdit, onDelete, on
                     className="w-full text-left px-3 py-2 text-sm hover:bg-white/10 flex items-center gap-2 text-white/80 first:rounded-t-lg"
                   >
                     <Edit2 size={14} />
-                    Edit
+                    {t("chat.edit")}
                   </button>
                   <button
                     onClick={() => {
@@ -311,7 +313,7 @@ export default function ChatBubble({ message, mine = false, onEdit, onDelete, on
                     className="w-full text-left px-3 py-2 text-sm hover:bg-white/10 flex items-center gap-2 text-white/80"
                   >
                     <Reply size={14} />
-                    Reply
+                    {t("chat.reply")}
                   </button>
                   <button
                     onClick={() => {
@@ -321,7 +323,7 @@ export default function ChatBubble({ message, mine = false, onEdit, onDelete, on
                     className="w-full text-left px-3 py-2 text-sm hover:bg-white/10 flex items-center gap-2 text-red-400/80 last:rounded-b-lg"
                   >
                     <Trash2 size={14} />
-                    Delete
+                    {t("chat.delete")}
                   </button>
                 </div>
               )}

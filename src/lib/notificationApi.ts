@@ -27,16 +27,35 @@ export type Notification = {
   read: boolean;
 };
 
+export function isSelfPostActivityNotification(type: string, actorId: string | null | undefined, userId: string) {
+  return actorId === userId && (type === "like" || type === "comment");
+}
+
+export function isMessageNotificationType(type: string) {
+  return type === "message" || type === "new_message" || type === "message_received";
+}
+
 export async function getUnreadNotificationCount(userId: string) {
   try {
-    const { count, error } = await supabase
-      .from("notifications")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", userId)
-      .eq("is_read", false);
+    const [{ count, error }, { count: selfActivityCount, error: selfActivityError }] = await Promise.all([
+      supabase
+        .from("notifications")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .eq("is_read", false)
+        .not("type", "in", "(message,new_message,message_received)"),
+      supabase
+        .from("notifications")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .eq("is_read", false)
+        .eq("actor_id", userId)
+        .in("type", ["like", "comment"]),
+    ]);
 
     if (error) throw error;
-    return count ?? 0;
+    if (selfActivityError) throw selfActivityError;
+    return Math.max(0, (count ?? 0) - (selfActivityCount ?? 0));
   } catch (e) {
     console.error("getUnreadNotificationCount error", e);
     return 0;
@@ -119,8 +138,12 @@ export function subscribeToNotifications(userId: string, onChange: () => void): 
       table: "notifications",
       filter: `user_id=eq.${userId}`,
     },
-    () => {
-      playMessageNotificationSound();
+    (payload) => {
+      const notification = payload.new as { type?: string; actor_id?: string | null };
+      if (isMessageNotificationType(notification.type ?? "")) return;
+      if (!isSelfPostActivityNotification(notification.type ?? "", notification.actor_id, userId)) {
+        playMessageNotificationSound();
+      }
       for (const handler of notificationChannels.get(userId)?.handlers ?? []) {
         handler();
       }
@@ -160,12 +183,16 @@ export async function getNotifications(userId: string) {
       .from("notifications")
       .select("id, type, message, created_at, is_read, actor_id, target_id")
       .eq("user_id", userId)
+      .or(`actor_id.is.null,actor_id.neq.${userId}`)
       .order("created_at", { ascending: false })
       .limit(50);
 
     if (error) throw error;
 
-    const notifications = (data || []) as any[];
+    const notifications = ((data || []) as any[]).filter((item) => (
+      !isMessageNotificationType(item.type ?? "") &&
+      !isSelfPostActivityNotification(item.type ?? "", item.actor_id, userId)
+    ));
     const actorIds = Array.from(new Set(notifications.map((item) => item.actor_id).filter(Boolean)));
 
     const profileMap = new Map<string, { username: string; profile_pic: string | null }>();

@@ -18,7 +18,7 @@ export function useChatNotifications(userId?: string | null) {
 
   const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>(() => {
     try {
-      return getUserPrefs().notifications ?? true;
+      return getUserPrefs().notifications ?? false;
     } catch {
       return true;
     }
@@ -38,17 +38,30 @@ export function useChatNotifications(userId?: string | null) {
     try {
       const permission = await requestNotificationPermission();
       if (permission !== "granted" || !import.meta.env.PROD) {
+        if (permission !== "granted") {
+          setNotificationsEnabled(false);
+          setUserPrefs({ notifications: false });
+        }
         return;
       }
 
       const registration = await registerNotificationsServiceWorker();
       if (!registration) {
+        setNotificationsEnabled(false);
+        setUserPrefs({ notifications: false });
         return;
       }
 
       const subscription = await subscribeToPushNotifications(registration);
       if (subscription) {
-        await sendPushSubscriptionToServer(subscription, userId ?? undefined);
+        const persisted = await sendPushSubscriptionToServer(subscription, userId ?? undefined);
+        if (!persisted) {
+          setNotificationsEnabled(false);
+          setUserPrefs({ notifications: false });
+        }
+      } else {
+        setNotificationsEnabled(false);
+        setUserPrefs({ notifications: false });
       }
     } catch (error) {
       console.warn("enable notifications error", error);

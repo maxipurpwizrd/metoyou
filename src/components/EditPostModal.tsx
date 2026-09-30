@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useLanguage } from "../contexts/LanguageContext";
 
 type Props = {
   isOpen: boolean;
@@ -15,6 +16,7 @@ export default function EditPostModal({
   onSave,
   isPremiumTheme = false,
 }: Props) {
+  const { t } = useLanguage();
   const [value, setValue] = useState(initialValue);
   const dialogRef = useRef<HTMLDivElement | null>(null);
 
@@ -67,14 +69,14 @@ export default function EditPostModal({
           }
         }}
         className="absolute inset-0 bg-slate-950/45 backdrop-blur-xl"
-        aria-label="Close editor"
+        aria-label={t("createPost.close")}
       />
 
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-label="Edit post"
+        aria-label={t("editPost.title")}
         onClick={(event) => event.stopPropagation()}
         className={`relative z-10 w-full max-w-xl rounded-[28px] border p-4 shadow-2xl sm:p-5 ${isPremiumTheme
           ? "border-amber-300/70 bg-[linear-gradient(135deg,rgba(255,251,235,0.97),rgba(255,244,183,0.9))]"
@@ -84,10 +86,10 @@ export default function EditPostModal({
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <p className={`text-sm font-semibold ${isPremiumTheme ? "text-amber-950" : "text-slate-800"}`}>
-              Edit your post
+              {t("editPost.title")}
             </p>
             <p className={`mt-1 text-xs ${isPremiumTheme ? "text-amber-800/80" : "text-slate-500"}`}>
-              {isPremiumTheme ? "Polish the moment with the same glow as your Vibes Pro feed." : "Keep the tone playful, polished, and on-brand."}
+              {isPremiumTheme ? t("editPost.descriptionPremium") : t("editPost.description")}
             </p>
           </div>
           <button
@@ -95,7 +97,7 @@ export default function EditPostModal({
             onClick={onClose}
             className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold ${isPremiumTheme ? "border-amber-300/80 bg-white/70 text-amber-900" : "border-slate-200 bg-white text-slate-600"}`}
           >
-            Close
+            {t("createPost.close")}
           </button>
         </div>
 
@@ -105,7 +107,7 @@ export default function EditPostModal({
           onChange={(event) => setValue(event.target.value)}
           rows={8}
           maxLength={500}
-          placeholder="Write something beautiful..."
+          placeholder={t("editPost.placeholder")}
           className={`w-full resize-none rounded-2xl border px-3 py-3 text-sm leading-6 outline-none transition ${isPremiumTheme
             ? "border-amber-200/80 bg-white/80 text-amber-950 placeholder:text-amber-700/60 focus:border-amber-400"
             : "border-slate-200 bg-slate-50/80 text-slate-700 placeholder:text-slate-400 focus:border-sky-300"
@@ -114,7 +116,7 @@ export default function EditPostModal({
 
         <div className="mt-4 flex items-center justify-between gap-3">
           <p className={`text-xs ${isPremiumTheme ? "text-amber-800/80" : "text-slate-500"}`}>
-            {value.length}/500 characters
+            {t("editPost.characterCount").replace("{count}", String(value.length))}
           </p>
 
           <div className="flex items-center gap-2">
@@ -123,14 +125,14 @@ export default function EditPostModal({
               onClick={onClose}
               className={`rounded-full px-3.5 py-2 text-sm font-semibold transition ${isPremiumTheme ? "bg-white/70 text-amber-900 hover:bg-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}
             >
-              Cancel
+              {t("common.cancel")}
             </button>
             <button
               type="button"
               onClick={() => onSave(value)}
               className={`rounded-full px-3.5 py-2 text-sm font-semibold text-white transition ${isPremiumTheme ? "bg-linear-to-r from-amber-500 via-yellow-500 to-orange-500 hover:opacity-90" : "bg-linear-to-r from-sky-500 via-cyan-400 to-blue-500 hover:opacity-90"}`}
             >
-              Save changes
+              {t("common.saveChanges")}
             </button>
           </div>
         </div>
