@@ -1144,7 +1144,7 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
               {isUploading && (
                 <div className="mt-6 md:mt-8 rounded-3xl border border-white/70 bg-white/70 p-4 shadow-lg backdrop-blur-xl">
                   <div className="flex items-center justify-between text-sm font-semibold text-slate-700">
-                    <span>Uploading profile picture</span>
+                    <span>{t("profile.uploadingProfilePicture")}</span>
                     <span>{uploadProgress}%</span>
                   </div>
                   <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-slate-200">

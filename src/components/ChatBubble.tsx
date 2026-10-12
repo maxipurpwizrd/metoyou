@@ -350,7 +350,7 @@ export default function ChatBubble({ message, mine = false, onEdit, onDelete, on
                 }}
                 className="flex-1 px-3 py-1 rounded-full bg-sky-500 text-white text-sm font-medium hover:bg-sky-600 transition"
               >
-                Save
+                {t("common.saveChanges")}
               </button>
               <button
                 onClick={() => {
@@ -359,7 +359,7 @@ export default function ChatBubble({ message, mine = false, onEdit, onDelete, on
                 }}
                 className="flex-1 px-3 py-1 rounded-full border border-slate-300 text-slate-800 text-sm font-medium hover:bg-slate-50 transition"
               >
-                Cancel
+                {t("common.cancel")}
               </button>
             </div>
           </div>
@@ -377,8 +377,8 @@ export default function ChatBubble({ message, mine = false, onEdit, onDelete, on
           <div className="flex flex-col gap-3">
             {hasReply && (
               <div className={`rounded-2xl border px-3 py-2 text-xs ${mine ? "border-white/20 bg-white/10 text-white/80" : "border-slate-300/70 bg-slate-50/80 text-slate-700"}`}>
-                <div className="font-medium opacity-70">Reply</div>
-                <div className="mt-1 wrap-break-word overflow-wrap-anywhere whitespace-pre-wrap">{replyText ?? "Quoted message"}</div>
+                <div className="font-medium opacity-70">{t("chat.reply")}</div>
+                <div className="mt-1 wrap-break-word overflow-wrap-anywhere whitespace-pre-wrap">{replyText ?? t("chat.quotedMessage")}</div>
               </div>
             )}
             {hasText && (
@@ -394,7 +394,7 @@ export default function ChatBubble({ message, mine = false, onEdit, onDelete, on
               >
                 <img
                   src={message.image_url ?? ""}
-                  alt={message.text ? message.text : "Image attachment"}
+                  alt={message.text ? message.text : t("chat.imageAttachment")}
                   className="block w-full h-auto object-cover"
                 />
               </a>

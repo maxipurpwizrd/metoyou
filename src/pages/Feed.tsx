@@ -1784,7 +1784,7 @@ export default function Feed(props: { embedded?: boolean } = {}) {
                 onClick={() => void loadMorePosts()}
                 className="font-semibold underline underline-offset-2"
               >
-                Retry
+                {t("post.retry")}
               </button>
             </div>
           )}
@@ -2214,7 +2214,7 @@ export default function Feed(props: { embedded?: boolean } = {}) {
             <div className="relative w-full max-w-xs bg-white rounded-2xl p-4 shadow-2xl space-y-4">
               <div className="w-full aspect-square overflow-hidden rounded-xl bg-slate-100">
                 {selectedImage ? (
-                  <img src={selectedImage} alt="preview" className="w-full h-full object-cover" />
+                    <img src={selectedImage} alt={t("story.preview")} className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full bg-linear-to-br from-sky-500 via-cyan-500 to-blue-500 overflow-y-auto p-4 flex items-center justify-center text-white font-semibold text-center">
                     <div className="w-full whitespace-pre-wrap wrap-break-word text-xl leading-relaxed">
@@ -2270,7 +2270,7 @@ export default function Feed(props: { embedded?: boolean } = {}) {
                 </p>
               ) : null}
 
-              {storyMusic && <p className="text-[11px] text-sky-600 font-medium truncate px-1">Selected: {storyMusic}</p>}
+              {storyMusic && <p className="text-[11px] text-sky-600 font-medium truncate px-1">{t("story.selectedMusic").replace("{music}", storyMusic)}</p>}
               {storyVoice && <audio controls src={storyVoice} className="w-full h-6 opacity-80" />}
 
               {/* Expiry Time Selectors */}

@@ -9,6 +9,7 @@ import {
   subscribeToNotifications,
   deleteNotification,
   deleteAllNotifications,
+  isCallNotificationType,
   isMessageNotificationType,
   isSelfPostActivityNotification,
   type Notification,
@@ -186,6 +187,7 @@ export default function Notifications({ embedded }: NotificationsProps) {
       if (raw) {
         const cached = JSON.parse(raw) as Notification[];
         const visibleCached = cached.filter((item) => (
+          !isCallNotificationType(item.type) &&
           !isMessageNotificationType(item.type) &&
           !isSelfPostActivityNotification(item.type, item.actorId, userId)
         ));

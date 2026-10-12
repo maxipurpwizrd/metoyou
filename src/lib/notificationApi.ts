@@ -35,6 +35,14 @@ export function isMessageNotificationType(type: string) {
   return type === "message" || type === "new_message" || type === "message_received";
 }
 
+export function isCallNotificationType(type: string) {
+  return type === "call";
+}
+
+function isNonSocialNotificationType(type: string) {
+  return isMessageNotificationType(type) || isCallNotificationType(type);
+}
+
 export async function getUnreadNotificationCount(userId: string) {
   try {
     const [{ count, error }, { count: selfActivityCount, error: selfActivityError }] = await Promise.all([
@@ -43,7 +51,7 @@ export async function getUnreadNotificationCount(userId: string) {
         .select("id", { count: "exact", head: true })
         .eq("user_id", userId)
         .eq("is_read", false)
-        .not("type", "in", "(message,new_message,message_received)"),
+        .not("type", "in", "(message,new_message,message_received,call)"),
       supabase
         .from("notifications")
         .select("id", { count: "exact", head: true })
@@ -140,7 +148,7 @@ export function subscribeToNotifications(userId: string, onChange: () => void): 
     },
     (payload) => {
       const notification = payload.new as { type?: string; actor_id?: string | null };
-      if (isMessageNotificationType(notification.type ?? "")) return;
+      if (isNonSocialNotificationType(notification.type ?? "")) return;
       if (!isSelfPostActivityNotification(notification.type ?? "", notification.actor_id, userId)) {
         playMessageNotificationSound();
       }
@@ -183,6 +191,7 @@ export async function getNotifications(userId: string) {
       .from("notifications")
       .select("id, type, message, created_at, is_read, actor_id, target_id")
       .eq("user_id", userId)
+      .not("type", "in", "(message,new_message,message_received,call)")
       .or(`actor_id.is.null,actor_id.neq.${userId}`)
       .order("created_at", { ascending: false })
       .limit(50);
@@ -190,7 +199,7 @@ export async function getNotifications(userId: string) {
     if (error) throw error;
 
     const notifications = ((data || []) as any[]).filter((item) => (
-      !isMessageNotificationType(item.type ?? "") &&
+      !isNonSocialNotificationType(item.type ?? "") &&
       !isSelfPostActivityNotification(item.type ?? "", item.actor_id, userId)
     ));
     const actorIds = Array.from(new Set(notifications.map((item) => item.actor_id).filter(Boolean)));
