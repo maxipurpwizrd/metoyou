@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "MeToYou",
+    "slug": "metoyou",
+    "version": "1.0.0",
+    "scheme": "metoyou",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      "expo-audio",
+      "expo-asset",
+      "expo-video",
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "cameraPermission": "Allow MeToYou to use your camera for video calls.",
+          "microphonePermission": "Allow MeToYou to use your microphone for calls and voice messages."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow MeToYou to save Flicks to your photo library.",
+          "savePhotosPermission": "Allow MeToYou to save media to your library.",
+          "isAccessMediaLocationEnabled": false,
+          "granularPermissions": ["photo", "video", "audio"]
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
