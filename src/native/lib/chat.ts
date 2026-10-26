@@ -18,6 +18,11 @@ export type NativeChatUpload = {
   attachmentMetadata?: Record<string, unknown>;
 };
 
+export type NativeMessageCursor = {
+  createdAt: string;
+  id: string;
+};
+
 const MAX_CHAT_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 
 function getSafeExtension(name: string, mimeType: string) {
@@ -125,16 +130,21 @@ export async function fetchNativeChatRecipient(userId: string) {
 
 export async function fetchNativeConversationMessages(
   conversationId: string,
-  beforeCreatedAt?: string,
+  before?: NativeMessageCursor,
   limit = 30,
 ): Promise<{ messages: Message[]; hasMore: boolean }> {
   let query = nativeSupabase
     .from("messages")
     .select("*")
     .eq("conversation_id", conversationId);
-  if (beforeCreatedAt) query = query.lt("created_at", beforeCreatedAt);
+  if (before) {
+    query = query.or(
+      `created_at.lt.${before.createdAt},and(created_at.eq.${before.createdAt},id.lt.${before.id})`,
+    );
+  }
   const { data, error } = await query
     .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
     .limit(limit + 1);
   if (error) throw error;
   const page = (data ?? []) as Message[];

@@ -4,6 +4,16 @@
     "slug": "metoyou",
     "version": "1.0.0",
     "scheme": "metoyou",
+    "android": {
+      "package": "com.wizrd.metoyou",
+      "adaptiveIcon": {
+        "foregroundImage": "./src/assets/adaptive-foreground.png",
+        "backgroundColor": "#000000"
+      }
+    },
+    "ios": {
+      "icon": "./src/assets/AppIcon.icon"
+    },
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "plugins": [
@@ -25,12 +35,23 @@
           "photosPermission": "Allow MeToYou to save Flicks to your photo library.",
           "savePhotosPermission": "Allow MeToYou to save media to your library.",
           "isAccessMediaLocationEnabled": false,
-          "granularPermissions": ["photo", "video", "audio"]
+          "granularPermissions": [
+            "photo",
+            "video",
+            "audio"
+          ]
         }
       ]
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "dc81f97d-7623-4ad2-84fa-2a52f2a89468"
+      }
+    },
+    "owner": "wizrd"
   }
 }

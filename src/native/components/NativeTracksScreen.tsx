@@ -45,8 +45,8 @@ import {
   Trash2,
 } from "lucide-react-native";
 import { useNativeAuth } from "../contexts/NativeAuthProvider";
+import { useNativeEntitlement } from "../contexts/NativeEntitlementProvider";
 import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
-import { nativeSupabase } from "../lib/supabase";
 import {
   fetchNativeTrackById,
   fetchNativeTracksPage,
@@ -58,6 +58,7 @@ import { deleteNativePost, reportNativePost, toggleNativePostLike } from "../lib
 import NativeBlurBackdrop, { NativeBlurTargetContext } from "./NativeBlurBackdrop";
 import NativeCommentsSheet from "./NativeCommentsSheet";
 import NativeConfirmDialog from "./NativeConfirmDialog";
+import { NativeTrackPlayerSkeleton, NativeTrackRowsSkeleton } from "./NativeScreenSkeletons";
 import NativeSurfaceDock from "./NativeSurfaceDock";
 
 const REPORT_REASONS = [
@@ -95,12 +96,14 @@ function formatTime(value: number) {
 export default function NativeTracksScreen() {
   const router = useRouter();
   const { session } = useNativeAuth();
+  const { entitlement, refresh: refreshEntitlement } = useNativeEntitlement();
   const { theme, setTheme } = useNativeTheme();
   const isBlueSky = theme === "bluesky";
   const userId = session?.user.id;
-  const params = useLocalSearchParams<{ postId?: string | string[]; showComments?: string | string[] }>();
+  const params = useLocalSearchParams<{ postId?: string | string[]; showComments?: string | string[]; openDeviceFiles?: string | string[] }>();
   const requestedPostId = Array.isArray(params.postId) ? params.postId[0] : params.postId;
   const requestedShowComments = (Array.isArray(params.showComments) ? params.showComments[0] : params.showComments) === "1";
+  const requestedDeviceFiles = (Array.isArray(params.openDeviceFiles) ? params.openDeviceFiles[0] : params.openDeviceFiles) === "1";
   const insets = useSafeAreaInsets();
   const blurTargetRef = useRef<View | null>(null);
   const progressWidth = useRef(0);
@@ -117,10 +120,8 @@ export default function NativeTracksScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [feedError, setFeedError] = useState<string | null>(null);
-  const [accessLoading, setAccessLoading] = useState(true);
-  const [hasVibesPro, setHasVibesPro] = useState(false);
-  const [accessError, setAccessError] = useState<string | null>(null);
-  const [accessRetry, setAccessRetry] = useState(0);
+  const hasVibesPro = entitlement.status === "vibesPro";
+  const accessLoading = entitlement.status === "loading" || entitlement.status === "unknown";
   const [playlistOpen, setPlaylistOpen] = useState(false);
   const [playlistTab, setPlaylistTab] = useState<PlaylistTab>("device");
   const [trackSource, setTrackSource] = useState<PlaylistTab>("vibespro");
@@ -257,7 +258,7 @@ export default function NativeTracksScreen() {
     void (async () => {
       try {
         const assetInfo = track?.assetId
-          ? await MediaLibrary.getAssetInfoAsync(track.assetId, { shouldDownloadFromNetwork: true })
+          ? await MediaLibrary.getAssetInfoAsync(track.assetId, { shouldDownloadFromNetwork: false })
           : null;
         const playableUri = assetInfo?.localUri ?? assetInfo?.uri ?? track?.audio_url;
         if (!playableUri) throw new Error("This MP3 file is not available for playback.");
@@ -276,52 +277,20 @@ export default function NativeTracksScreen() {
   };
 
   const openPlaylist = () => {
-    const initialTab = trackSource === "vibespro" && !hasVibesPro ? "device" : trackSource;
+    const initialTab = trackSource === "vibespro" && entitlement.status === "free" ? "device" : trackSource;
     setPlaylistTab(initialTab);
     setPlaylistOpen(true);
     if (initialTab === "device") void loadDeviceTracks();
   };
 
   useEffect(() => {
-    if (!userId) {
-      setAccessLoading(false);
-      setHasVibesPro(false);
-      return;
-    }
-
-    let active = true;
-    setAccessLoading(true);
-    setAccessError(null);
-    void (async () => {
-      try {
-        const { data, error } = await nativeSupabase
-          .from("profiles")
-          .select("*")
-          .eq("id", userId)
-          .maybeSingle();
-        if (error) throw error;
-        if (!data) throw new Error("Your profile could not be found.");
-        const profileFlags = data as {
-          is_vibespro?: boolean | null;
-          is_vibes_pro?: boolean | null;
-          vibes_pro?: boolean | null;
-        };
-        const hasAccess =
-          profileFlags.is_vibespro ??
-          profileFlags.is_vibes_pro ??
-          profileFlags.vibes_pro ??
-          false;
-        if (active) setHasVibesPro(hasAccess === true);
-      } catch (cause) {
-        if (active) setAccessError(errorMessage(cause, "VibesPro access could not be checked."));
-      } finally {
-        if (active) setAccessLoading(false);
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [accessRetry, userId]);
+    if (!requestedDeviceFiles || requestedPostId) return;
+    setTrackSource("device");
+    setPlaylistTab("device");
+    setPlaylistOpen(true);
+    void loadDeviceTracks();
+    router.setParams({ openDeviceFiles: undefined });
+  }, [requestedDeviceFiles, requestedPostId, router]);
 
   const loadFirstPage = useCallback(async () => {
     if (!userId || !hasVibesPro || requestedPostId) return;
@@ -519,19 +488,32 @@ export default function NativeTracksScreen() {
 
   const toggleLike = async () => {
     if (!userId || !currentTrack || isDeviceTrack || likingTrackIds.current.has(currentTrack.id)) return;
-    likingTrackIds.current.add(currentTrack.id);
+    const trackId = currentTrack.id;
+    const previousLiked = currentTrack.liked;
+    const previousLikesCount = currentTrack.likes_count;
+    likingTrackIds.current.add(trackId);
+    const updateTrack = (track: NativeTrack) =>
+      track.id === trackId ? {
+        ...track,
+        liked: !previousLiked,
+        likes_count: Math.max(0, previousLikesCount + (previousLiked ? -1 : 1)),
+      } : track;
+    setTracks((current) => current.map(updateTrack));
+    setFocusedTrack((track) => track ? updateTrack(track) : track);
     try {
-      const result = await toggleNativePostLike(currentTrack.id, userId);
-      const update = (track: NativeTrack) =>
-        track.id === currentTrack.id
-          ? { ...track, liked: result.liked, likes_count: result.likesCount }
-          : track;
-      setTracks((current) => current.map(update));
-      setFocusedTrack((track) => track ? update(track) : track);
+      const result = await toggleNativePostLike(trackId, userId);
+      const reconcileTrack = (track: NativeTrack) =>
+        track.id === trackId ? { ...track, liked: result.liked, likes_count: result.likesCount } : track;
+      setTracks((current) => current.map(reconcileTrack));
+      setFocusedTrack((track) => track ? reconcileTrack(track) : track);
     } catch (cause) {
+      const restoreTrack = (track: NativeTrack) =>
+        track.id === trackId ? { ...track, liked: previousLiked, likes_count: previousLikesCount } : track;
+      setTracks((current) => current.map(restoreTrack));
+      setFocusedTrack((track) => track ? restoreTrack(track) : track);
       setActionError(errorMessage(cause, "Unable to update this Track right now."));
     } finally {
-      likingTrackIds.current.delete(currentTrack.id);
+      likingTrackIds.current.delete(trackId);
     }
   };
 
@@ -589,7 +571,7 @@ export default function NativeTracksScreen() {
       setMenuOpen(false);
       if (requestedPostId) {
         setFocusedTrack(null);
-        router.replace("/(app)/tracks");
+        router.replace("/(app)/(tabs)/tracks");
       } else {
         const remaining = tracks.filter((track) => track.id !== currentTrack.id);
         setTracks(remaining);
@@ -606,9 +588,9 @@ export default function NativeTracksScreen() {
   };
 
   const shownTrack = currentTrack;
-  const busy = requestedPostId
-    ? accessLoading || focusedLoading
-    : initialLoading;
+  const busy = accessLoading || (hasVibesPro && (requestedPostId
+    ? focusedLoading && !focusedTrack
+    : initialLoading && tracks.length === 0));
 
   return (
     <LinearGradient
@@ -619,7 +601,7 @@ export default function NativeTracksScreen() {
         <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
           <BlurTargetView ref={blurTargetRef} style={styles.safeArea}>
             <View style={styles.header}>
-              <Pressable accessibilityLabel="Back to Feed" onPress={() => router.replace("/(app)")} style={styles.headerButton}>
+              <Pressable accessibilityLabel="Back to Feed" onPress={() => router.navigate("/(app)/(tabs)")} style={styles.headerButton}>
                 <Text style={styles.backText}>‹</Text>
               </Pressable>
               <View style={styles.heading}>
@@ -637,27 +619,29 @@ export default function NativeTracksScreen() {
             </View>
 
             {busy ? (
-              <View style={styles.center}>
-                <ActivityIndicator color="#0284c7" size="large" />
-                <Text style={styles.statusText}>{accessLoading ? "Checking your VibesPro access…" : "Loading Tracks…"}</Text>
-              </View>
-            ) : requestedPostId && accessError ? (
+              accessLoading ? (
+                <View style={styles.center}>
+                  <ActivityIndicator color="#0284c7" size="large" />
+                  <Text style={styles.statusText}>Checking your VibesPro access…</Text>
+                </View>
+              ) : <NativeTrackPlayerSkeleton />
+            ) : entitlement.status === "error" ? (
               <View style={styles.center}>
                 <Text style={styles.errorTitle}>Couldn’t check access</Text>
-                <Text style={styles.statusText}>{accessError}</Text>
-                <Pressable onPress={() => setAccessRetry((retry) => retry + 1)} style={styles.retryButton}>
+                <Text style={styles.statusText}>{entitlement.error.message}</Text>
+                <Pressable onPress={() => void refreshEntitlement()} style={styles.retryButton}>
                   <Text style={styles.retryText}>Try again</Text>
                 </Pressable>
-                <Pressable onPress={() => router.replace("/(app)")} style={styles.backToFeed}>
+                <Pressable onPress={() => router.navigate("/(app)/(tabs)")} style={styles.backToFeed}>
                   <Text style={styles.backToFeedText}>Back to Feed</Text>
                 </Pressable>
               </View>
-            ) : requestedPostId && !hasVibesPro ? (
+            ) : requestedPostId && entitlement.status === "free" ? (
               <View style={styles.center}>
                 <Text style={styles.lockEmoji}>🔒</Text>
                 <Text style={styles.emptyTitle}>Tracks are a VibesPro space</Text>
                 <Text style={styles.statusText}>VibesPro access is required to listen to Tracks.</Text>
-                <Pressable onPress={() => router.replace("/(app)")} style={styles.retryButton}>
+                <Pressable onPress={() => router.navigate("/(app)/(tabs)")} style={styles.retryButton}>
                   <Text style={styles.retryText}>Back to Feed</Text>
                 </Pressable>
               </View>
@@ -665,7 +649,7 @@ export default function NativeTracksScreen() {
               <View style={styles.center}>
                 <Text style={styles.errorTitle}>Tracks didn’t load</Text>
                 <Text style={styles.statusText}>{feedError}</Text>
-                <Pressable onPress={() => requestedPostId ? router.replace("/(app)/tracks") : void loadFirstPage()} style={styles.retryButton}>
+                <Pressable onPress={() => requestedPostId ? router.replace("/(app)/(tabs)/tracks") : void loadFirstPage()} style={styles.retryButton}>
                   <Text style={styles.retryText}>Try again</Text>
                 </Pressable>
               </View>
@@ -826,12 +810,12 @@ export default function NativeTracksScreen() {
 
             <NativeSurfaceDock
               activeSurface="tracks"
-              onClipsPress={() => router.push("/(app)/clips")}
-              onFeedPress={() => router.replace("/(app)")}
-              onFlicksPress={() => router.push("/(app)/flicks")}
+              onClipsPress={() => router.navigate("/(app)/(tabs)/clips")}
+              onFeedPress={() => router.navigate("/(app)/(tabs)")}
+              onFlicksPress={() => router.navigate("/(app)/(tabs)/flicks")}
               onTracksPress={() => {
                 if (requestedPostId) {
-                  router.replace("/(app)/tracks");
+                  router.replace("/(app)/(tabs)/tracks");
                 } else {
                   player.pause();
                   setCurrentIndex(0);
@@ -910,9 +894,9 @@ export default function NativeTracksScreen() {
                       ? `${deviceTracks.length} device ${deviceTracks.length === 1 ? "file" : "files"}`
                       : accessLoading
                         ? "Checking VibesPro access"
-                        : accessError
+                        : entitlement.status === "error"
                           ? "Access unavailable"
-                          : !hasVibesPro
+                          : entitlement.status === "free"
                             ? "VibesPro access required"
                             : `${tracks.length} VibesPro ${tracks.length === 1 ? "Track" : "Tracks"}`}
                   </Text>
@@ -1071,14 +1055,14 @@ export default function NativeTracksScreen() {
                     <ActivityIndicator color={isDark ? "#fbbf24" : "#0284c7"} size="large" />
                     <Text style={[styles.playlistMessageText, isDark && styles.darkSubtext]}>Checking VibesPro access…</Text>
                   </View>
-                ) : accessError ? (
+                ) : entitlement.status === "error" ? (
                   <View style={styles.playlistMessage}>
-                    <Text style={styles.playlistError}>{accessError}</Text>
-                    <Pressable onPress={() => setAccessRetry((retry) => retry + 1)} style={styles.playlistPermissionButton}>
+                    <Text style={styles.playlistError}>{entitlement.error.message}</Text>
+                    <Pressable onPress={() => void refreshEntitlement()} style={styles.playlistPermissionButton}>
                       <Text style={styles.retryText}>Try again</Text>
                     </Pressable>
                   </View>
-                ) : !hasVibesPro ? (
+                ) : entitlement.status === "free" ? (
                   <View style={styles.playlistMessage}>
                     <Text style={styles.lockEmoji}>🔒</Text>
                     <Text style={[styles.playlistMessageTitle, isDark && styles.darkTitle]}>VibesPro Tracks</Text>
@@ -1087,10 +1071,7 @@ export default function NativeTracksScreen() {
                     </Text>
                   </View>
                 ) : initialLoading && tracks.length === 0 ? (
-                  <View style={styles.playlistMessage}>
-                    <ActivityIndicator color={isDark ? "#fbbf24" : "#0284c7"} size="large" />
-                    <Text style={[styles.playlistMessageText, isDark && styles.darkSubtext]}>Loading VibesPro Tracks…</Text>
-                  </View>
+                  <NativeTrackRowsSkeleton count={5} />
                 ) : feedError && tracks.length === 0 ? (
                   <View style={styles.playlistMessage}>
                     <Text style={styles.playlistError}>{feedError}</Text>

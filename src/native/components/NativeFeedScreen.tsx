@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -13,6 +13,13 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams } from "expo-router";
+import {
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+  useQueries,
+  type InfiniteData,
+} from "@tanstack/react-query";
 import { BlurTargetView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import NativeBlurBackdrop, { NativeBlurTargetContext } from "./NativeBlurBackdrop";
@@ -26,6 +33,11 @@ import {
   type NativeFeedCursor,
 } from "../lib/feed";
 import {
+  nativeFeedLikesQueryKey,
+  nativeFeedPostQueryKey,
+  nativeFeedQueryKey,
+} from "../lib/queryKeys";
+import {
   blockNativeUser,
   createNativePost,
   deleteNativePost,
@@ -37,16 +49,11 @@ import {
 import NativeCreatePost, { type NativeSelectedImage } from "./NativeCreatePost";
 import NativeFeedHeader from "./NativeFeedHeader";
 import NativePostCard from "./NativePostCard";
+import NativeFeedSkeleton, { NativeFeedPostSkeleton } from "./NativeFeedSkeleton";
 import NativeSurfaceDock, { useNativeSurfaceDockVisibility } from "./NativeSurfaceDock";
 import NativeStories from "./NativeStories";
 
 const SAVED_POSTS_KEY = "metoyou-saved-posts";
-
-function mergeUniquePosts(current: PostRecord[], incoming: PostRecord[]) {
-  const ids = new Set(current.map((post) => post.id));
-  return [...current, ...incoming.filter((post) => !ids.has(post.id))];
-}
-
 export default function NativeFeedScreen() {
   const blurTargetRef = useRef<View | null>(null);
   const params = useLocalSearchParams<{ postId?: string | string[]; showComments?: string | string[] }>();
@@ -62,105 +69,105 @@ export default function NativeFeedScreen() {
       ? session.user.user_metadata.username
       : session?.user.email?.split("@")[0] ?? "MeToYou member";
   const insets = useSafeAreaInsets();
-  const [posts, setPosts] = useState<PostRecord[]>([]);
-  const [initialLoading, setInitialLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [feedError, setFeedError] = useState<string | null>(null);
   const [paginationError, setPaginationError] = useState<string | null>(null);
-  const [likedPostIds, setLikedPostIds] = useState<Set<string>>(() => new Set());
   const [savedPostIds, setSavedPostIds] = useState<Set<string>>(() => new Set());
   const [blockedPostAuthorIds, setBlockedPostAuthorIds] = useState<Set<string>>(() => new Set());
   const [focusedPostId, setFocusedPostId] = useState<string | null>(null);
-  const { visible: dockVisible, onScroll: handleDockScroll } = useNativeSurfaceDockVisibility();
-  const requestGeneration = useRef(0);
+  const {
+    visible: dockVisible,
+    onScroll: handleDockScroll,
+    scrollTranslation: dockScrollTranslation,
+  } = useNativeSurfaceDockVisibility(true, insets.bottom);
   const loadingMoreRef = useRef(false);
-  const hasMoreRef = useRef(true);
-  const cursorRef = useRef<NativeFeedCursor | undefined>(undefined);
   const listRef = useRef<FlatList<PostRecord>>(null);
-
-  const loadFirstPage = useCallback(
-    async (isRefresh = false) => {
-      if (!userId || requestedPostId) return;
-      const generation = ++requestGeneration.current;
-      loadingMoreRef.current = false;
-      setLoadingMore(false);
-      setPaginationError(null);
-      setFeedError(null);
-      if (isRefresh) setFocusedPostId(null);
-      setInitialLoading(!isRefresh);
-      setRefreshing(isRefresh);
-
-      try {
-        const page = await fetchNativeFeedPage();
-        if (requestGeneration.current !== generation) return;
-        setPosts(page);
-        cursorRef.current = page.length
-          ? { createdAt: page[page.length - 1].created_at, id: page[page.length - 1].id }
-          : undefined;
-        const nextHasMore = page.length === NATIVE_FEED_PAGE_SIZE;
-        hasMoreRef.current = nextHasMore;
-        setHasMore(nextHasMore);
-        try {
-          setLikedPostIds(await getNativeLikedPostIds(userId, page.map((post) => post.id)));
-        } catch (cause) {
-          Alert.alert(
-            "Like status unavailable",
-            cause instanceof Error ? cause.message : "Post likes could not be loaded.",
-          );
-        }
-      } catch (cause) {
-        if (requestGeneration.current !== generation) return;
-        setFeedError(
-          cause instanceof Error
-            ? cause.message
-            : "Unable to load the Feed. Check your connection and try again.",
-        );
-      } finally {
-        if (requestGeneration.current === generation) {
-          setInitialLoading(false);
-          setRefreshing(false);
-        }
-      }
+  const queryClient = useQueryClient();
+  const feedQueryKey = nativeFeedQueryKey(userId ?? "");
+  const feedQuery = useInfiniteQuery({
+    queryKey: feedQueryKey,
+    queryFn: ({ pageParam }) => fetchNativeFeedPage(pageParam),
+    initialPageParam: undefined as NativeFeedCursor | undefined,
+    getNextPageParam: (lastPage) => {
+      if (lastPage.length < NATIVE_FEED_PAGE_SIZE) return undefined;
+      const lastPost = lastPage[lastPage.length - 1];
+      return { createdAt: lastPost.created_at, id: lastPost.id };
     },
-    [requestedPostId, userId],
+    enabled: Boolean(userId && !requestedPostId),
+  });
+  const posts = feedQuery.data?.pages.flat() ?? [];
+  const focusedPostQuery = useQuery({
+    queryKey: nativeFeedPostQueryKey(userId ?? "", requestedPostId ?? ""),
+    queryFn: () => fetchNativeFeedPostById(requestedPostId!),
+    enabled: Boolean(userId && requestedPostId),
+  });
+  const focusedPostRecord = focusedPostQuery.data ?? null;
+  const likeGroups = useMemo(
+    () => [
+      ...(feedQuery.data?.pages ?? []).map((page) => page.map((post) => post.id).sort()),
+      ...(focusedPostRecord ? [[focusedPostRecord.id]] : []),
+    ],
+    [feedQuery.data?.pages, focusedPostRecord],
   );
+  const likesQueries = useQueries({
+    queries: likeGroups.map((postIds) => ({
+      queryKey: nativeFeedLikesQueryKey(userId ?? "", postIds),
+      queryFn: () => getNativeLikedPostIds(userId!, postIds),
+      enabled: Boolean(userId && postIds.length),
+    })),
+  });
+  const likedPostIds = new Set(likesQueries.flatMap((query) => [...(query.data ?? [])]));
+  const likeError = likesQueries.find((query) => query.error)?.error;
+  const initialLoading = requestedPostId
+    ? focusedPostQuery.isPending
+    : feedQuery.isPending && !feedQuery.data;
+  const feedError = requestedPostId
+    ? focusedPostQuery.error?.message ?? null
+    : feedQuery.isError && !feedQuery.data
+      ? feedQuery.error.message
+      : null;
+  const loadingMore = feedQuery.isFetchingNextPage;
+  const refreshing = feedQuery.isRefetching;
+  const showFeedSkeleton = Boolean(userId && !requestedPostId && feedQuery.isPending && !feedQuery.data);
+
+  const updateCachedPost = useCallback((postId: string, update: (post: PostRecord) => PostRecord) => {
+    if (!userId) return;
+    queryClient.setQueryData<InfiniteData<PostRecord[], NativeFeedCursor | undefined>>(
+      nativeFeedQueryKey(userId),
+      (current) => current && ({
+        ...current,
+        pages: current.pages.map((page) =>
+          page.map((post) => post.id === postId ? update(post) : post),
+        ),
+      }),
+    );
+    if (requestedPostId) {
+      queryClient.setQueryData<PostRecord | null>(
+        nativeFeedPostQueryKey(userId, requestedPostId),
+        (current) => current?.id === postId ? update(current) : current,
+      );
+    }
+  }, [queryClient, requestedPostId, userId]);
+
+  const loadFirstPage = useCallback(async (isRefresh = false) => {
+    if (!userId || requestedPostId) return;
+    setPaginationError(null);
+    if (isRefresh) setFocusedPostId(null);
+    await feedQuery.refetch();
+  }, [feedQuery.refetch, requestedPostId, userId]);
 
   useEffect(() => {
-    void loadFirstPage();
-    return () => {
-      requestGeneration.current += 1;
-    };
-  }, [loadFirstPage]);
+    if (focusedPostRecord) setFocusedPostId(focusedPostRecord.id);
+  }, [focusedPostRecord]);
 
   useEffect(() => {
-    if (!requestedPostId) return;
-    let active = true;
-    void fetchNativeFeedPostById(requestedPostId)
-      .then(async (post) => {
-        if (!active) return;
-        if (!post) throw new Error("This post could not be found.");
-        const likedIds = userId ? await getNativeLikedPostIds(userId, [post.id]) : new Set<string>();
-        if (!active) return;
-        if (likedIds.size > 0) {
-          setLikedPostIds((current) => new Set([...current, ...likedIds]));
-        }
-        setPosts((current) => [post, ...current.filter((item) => item.id !== post.id)]);
-        setFocusedPostId(post.id);
-      })
-      .catch((cause: unknown) => {
-        if (active) {
-          setFeedError(
-            cause instanceof Error ? cause.message : "This post could not be opened.",
-          );
-          setInitialLoading(false);
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [requestedPostId, userId]);
+    if (likeError) {
+      Alert.alert(
+        "Like status unavailable",
+        likeError instanceof Error
+          ? likeError.message
+          : "Post likes could not be loaded.",
+      );
+    }
+  }, [likeError]);
 
   useEffect(() => {
     let active = true;
@@ -184,49 +191,24 @@ export default function NativeFeedScreen() {
   }, []);
 
   const loadMorePosts = useCallback(async () => {
-    if (!userId || !hasMoreRef.current || loadingMoreRef.current || !cursorRef.current) return;
-    const generation = requestGeneration.current;
-    const cursor = cursorRef.current;
+    if (!userId || !feedQuery.hasNextPage || loadingMoreRef.current) return;
     loadingMoreRef.current = true;
-    setLoadingMore(true);
     setPaginationError(null);
-
     try {
-      const page = await fetchNativeFeedPage(cursor);
-      if (requestGeneration.current !== generation) return;
-      setPosts((current) => mergeUniquePosts(current, page));
-      if (page.length > 0) {
-        const lastPost = page[page.length - 1];
-        cursorRef.current = { createdAt: lastPost.created_at, id: lastPost.id };
-        try {
-          const nextLikedIds = await getNativeLikedPostIds(userId, page.map((post) => post.id));
-          if (requestGeneration.current === generation) {
-            setLikedPostIds((current) => new Set([...current, ...nextLikedIds]));
-          }
-        } catch (cause) {
-          Alert.alert(
-            "Like status unavailable",
-            cause instanceof Error ? cause.message : "Post likes could not be loaded.",
-          );
-        }
+      const result = await feedQuery.fetchNextPage();
+      if (result.isError) {
+        throw result.error;
       }
-      const nextHasMore = page.length === NATIVE_FEED_PAGE_SIZE;
-      hasMoreRef.current = nextHasMore;
-      setHasMore(nextHasMore);
     } catch (cause) {
-      if (requestGeneration.current !== generation) return;
       setPaginationError(
         cause instanceof Error
           ? cause.message
           : "Unable to load more posts. Check your connection and retry.",
       );
     } finally {
-      if (requestGeneration.current === generation) {
-        loadingMoreRef.current = false;
-        setLoadingMore(false);
-      }
+      loadingMoreRef.current = false;
     }
-  }, [userId]);
+  }, [feedQuery.fetchNextPage, feedQuery.hasNextPage, userId]);
 
   const publishPost = async (text: string, image?: NativeSelectedImage) => {
     if (!userId) throw new Error("Sign in to publish a post.");
@@ -245,11 +227,23 @@ export default function NativeFeedScreen() {
           typeof session?.user.user_metadata.avatar_url === "string"
             ? session.user.user_metadata.avatar_url
             : null,
-        vibes_pro: Boolean(session?.user.user_metadata.vibes_pro),
+        vibes_pro: isVibesPro,
       },
     };
     if (post.content_kind === "text" || post.content_kind === "image") {
-      setPosts((current) => [withAuthor, ...current.filter((item) => item.id !== post.id)]);
+      queryClient.setQueryData<InfiniteData<PostRecord[], NativeFeedCursor | undefined>>(
+        feedQueryKey,
+        (current) => current
+          ? {
+              ...current,
+              pages: [
+                [withAuthor, ...current.pages[0].filter((item) => item.id !== post.id)],
+                ...current.pages.slice(1),
+              ],
+            }
+          : current,
+      );
+      void queryClient.invalidateQueries({ queryKey: feedQueryKey });
     } else {
       await loadFirstPage(true);
     }
@@ -264,19 +258,33 @@ export default function NativeFeedScreen() {
 
   const deletePost = async (postId: string) => {
     await deleteNativePost(postId);
-    setPosts((current) => current.filter((post) => post.id !== postId));
+    if (userId) {
+      queryClient.setQueryData<InfiniteData<PostRecord[], NativeFeedCursor | undefined>>(
+        feedQueryKey,
+        (current) => current && ({
+          ...current,
+          pages: current.pages.map((page) => page.filter((post) => post.id !== postId)),
+        }),
+      );
+      queryClient.setQueryData<PostRecord | null>(
+        nativeFeedPostQueryKey(userId, postId),
+        null,
+      );
+    }
     setFocusedPostId(null);
   };
 
   const shareFeed = () => {
     listRef.current?.scrollToOffset({ offset: 0, animated: true });
-    void loadFirstPage(true);
+    setFocusedPostId(null);
   };
 
   const visiblePosts = requestedPostId
     ? []
     : posts.filter((post) => !blockedPostAuthorIds.has(post.author_id));
-  const focusedPost = posts.find((post) => post.id === focusedPostId) ?? null;
+  const focusedPost = requestedPostId
+    ? focusedPostRecord
+    : posts.find((post) => post.id === focusedPostId) ?? null;
 
   const renderPostCard = (item: PostRecord) => (
     <NativePostCard
@@ -289,23 +297,15 @@ export default function NativeFeedScreen() {
         if (focusedPostId === post.id) setFocusedPostId(null);
       }}
       onCommentCountChange={(postId, count) =>
-        setPosts((current) =>
-          current.map((post) => post.id === postId ? { ...post, comments_count: count } : post),
-        )
+        updateCachedPost(postId, (post) => ({ ...post, comments_count: count }))
       }
       onDelete={deletePost}
       onEdit={async (postId, text) => {
         await updateNativePostText(postId, text);
-        setPosts((current) =>
-          current.map((post) => post.id === postId ? { ...post, text } : post),
-        );
+        updateCachedPost(postId, (post) => ({ ...post, text }));
       }}
       onHighlight={async (postId) => {
-        setPosts((current) =>
-          current.map((post) =>
-            post.id === postId ? { ...post, highlighted: !post.highlighted } : post,
-          ),
-        );
+        updateCachedPost(postId, (post) => ({ ...post, highlighted: !post.highlighted }));
       }}
       onReport={async (post, reason) => {
         await reportNativePost({ postId: post.id, authorId: post.author_id, reason });
@@ -315,17 +315,19 @@ export default function NativeFeedScreen() {
       onToggleLike={async (post) => {
         if (!userId) throw new Error("Sign in to like a post.");
         const result = await toggleNativePostLike(post.id, userId);
-        setLikedPostIds((current) => {
-          const next = new Set(current);
-          if (result.liked) next.add(post.id);
-          else next.delete(post.id);
-          return next;
-        });
-        setPosts((current) =>
-          current.map((entry) =>
-            entry.id === post.id ? { ...entry, likes_count: result.likesCount } : entry,
-          ),
+        const postIds = feedQuery.data?.pages.find((page) =>
+          page.some((entry) => entry.id === post.id),
+        )?.map((entry) => entry.id).sort() ?? [post.id];
+        queryClient.setQueryData<Set<string>>(
+          nativeFeedLikesQueryKey(userId, postIds),
+          (current) => {
+            const next = new Set(current ?? likedPostIds);
+            if (result.liked) next.add(post.id);
+            else next.delete(post.id);
+            return next;
+          },
         );
+        updateCachedPost(post.id, (entry) => ({ ...entry, likes_count: result.likesCount }));
         return result;
       }}
       initialCommentsOpen={requestedPostId === item.id && requestedShowComments}
@@ -334,15 +336,15 @@ export default function NativeFeedScreen() {
   );
 
   const renderEmptyState = () => {
-    if (initialLoading) {
+    if (showFeedSkeleton) {
+      return <NativeFeedSkeleton />;
+    }
+    if (requestedPostId && initialLoading) {
       return (
         <View style={styles.emptyState}>
           <ActivityIndicator color={isVibesPro ? "#7C5CFF" : "#0284c7"} size="large" />
           <Text style={[styles.stateTitle, isVibesPro && styles.vibesProStateTitle, isBlueSky && styles.blueSkyText]}>
-            Loading your Feed
-          </Text>
-          <Text style={[styles.stateText, isVibesPro && styles.vibesProStateText, isBlueSky && styles.blueSkyMuted]}>
-            Fetching the latest posts for you.
+            Loading post
           </Text>
         </View>
       );
@@ -356,7 +358,7 @@ export default function NativeFeedScreen() {
           <Text style={[styles.stateText, isVibesPro && styles.vibesProStateText, isBlueSky && styles.blueSkyMuted]}>{feedError}</Text>
           <Pressable
             accessibilityRole="button"
-            onPress={() => void loadFirstPage()}
+            onPress={() => void (requestedPostId ? focusedPostQuery.refetch() : loadFirstPage())}
             style={({ pressed }) => [
               styles.retryButton,
               (isVibesPro || isBlueSky) && styles.vibesProRetryButton,
@@ -395,14 +397,16 @@ export default function NativeFeedScreen() {
         contentContainerStyle={
           visiblePosts.length
             ? [styles.listContent, isVibesPro && styles.vibesProListContent, isBlueSky && styles.blueSkyListContent, { paddingBottom: 90 + insets.bottom }]
-            : styles.emptyListContent
+            : showFeedSkeleton
+              ? styles.skeletonListContent
+              : styles.emptyListContent
         }
         data={visiblePosts}
         keyExtractor={(post) => post.id}
         onEndReached={() => void loadMorePosts()}
         onEndReachedThreshold={0.45}
         onScroll={handleDockScroll}
-        scrollEventThrottle={100}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             colors={["#0284c7"]}
@@ -413,10 +417,28 @@ export default function NativeFeedScreen() {
         }
         ref={listRef}
         ListHeaderComponent={
-          <View>
-            <NativeStories isVibesPro={isVibesPro} />
-            <NativeCreatePost authorName={username} isVibesPro={isVibesPro} onPublish={publishPost} />
-          </View>
+          showFeedSkeleton
+            ? null
+            : (
+              <View>
+                {feedQuery.isRefetching ? (
+                  <View style={styles.refreshIndicator}>
+                    <ActivityIndicator color={isVibesPro ? "#7C5CFF" : "#0284c7"} size="small" />
+                    <Text style={[styles.refreshIndicatorText, isBlueSky && styles.blueSkyMuted]}>Refreshing</Text>
+                  </View>
+                ) : null}
+                {feedQuery.isError && feedQuery.data && !feedQuery.isFetchNextPageError ? (
+                  <View style={styles.refreshError}>
+                    <Text style={styles.paginationErrorText}>Couldn’t refresh the Feed. Your saved posts are still available.</Text>
+                    <Pressable accessibilityRole="button" onPress={() => void loadFirstPage()}>
+                      <Text style={styles.retryText}>Retry</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+                <NativeStories isVibesPro={isVibesPro} />
+                <NativeCreatePost authorName={username} isVibesPro={isVibesPro} onPublish={publishPost} />
+              </View>
+            )
         }
         ListEmptyComponent={renderEmptyState}
         ListFooterComponent={
@@ -431,12 +453,15 @@ export default function NativeFeedScreen() {
                 <Text style={styles.retryText}>Retry</Text>
               </Pressable>
             </View>
-          ) : loadingMore ? (
-            <View style={styles.loadingFooter}>
-              <ActivityIndicator color={isVibesPro ? "#7C5CFF" : "#0284c7"} />
-              <Text style={[styles.stateText, isVibesPro && styles.vibesProStateText, isBlueSky && styles.blueSkyMuted]}>
-                Loading more posts…
-              </Text>
+          ) : loadingMore && feedQuery.hasNextPage ? (
+            <View style={styles.paginationSkeletons}>
+              {Array.from({ length: 2 }, (_, index) => (
+                <NativeFeedPostSkeleton
+                  compact
+                  key={index}
+                  showMedia={index === 0}
+                />
+              ))}
             </View>
           ) : null
         }
@@ -453,7 +478,9 @@ export default function NativeFeedScreen() {
         showsVerticalScrollIndicator={false}
         />
             <NativeSurfaceDock
+              bottomInset={insets.bottom}
               onFeedPress={shareFeed}
+              scrollTranslation={dockScrollTranslation}
               visible={dockVisible}
             />
           </BlurTargetView>
@@ -511,6 +538,7 @@ const styles = StyleSheet.create({
   vibesProListContent: { backgroundColor: "#0B0B0B" },
   blueSkyListContent: { backgroundColor: "#0b2d5b" },
   emptyListContent: { flexGrow: 1, paddingHorizontal: 20, paddingBottom: 100 },
+  skeletonListContent: { flexGrow: 1, paddingBottom: 90 },
   emptyState: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 50 },
   stateTitle: { marginTop: 12, color: "#0c4a6e", fontSize: 17, fontWeight: "800", textAlign: "center" },
   stateText: { marginTop: 7, color: "#64748b", fontSize: 14, lineHeight: 20, textAlign: "center" },
@@ -529,6 +557,9 @@ const styles = StyleSheet.create({
   retryText: { color: "#ffffff", fontSize: 14, fontWeight: "800" },
   paginationError: { alignItems: "center", paddingVertical: 18, paddingHorizontal: 24 },
   paginationErrorText: { color: "#be123c", fontSize: 13, textAlign: "center" },
-  loadingFooter: { alignItems: "center", gap: 8, paddingVertical: 20 },
+  refreshIndicator: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 6, paddingHorizontal: 14, paddingTop: 6 },
+  refreshIndicatorText: { color: "#64748b", fontSize: 11, fontWeight: "600" },
+  refreshError: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, marginHorizontal: 12, marginTop: 8, padding: 10, borderRadius: 12, backgroundColor: "rgba(254,226,226,0.85)" },
+  paginationSkeletons: { paddingTop: 8, paddingBottom: 12 },
   pressed: { opacity: 0.82 },
 });

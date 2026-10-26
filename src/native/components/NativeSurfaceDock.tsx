@@ -1,46 +1,30 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Animated, Pressable, StyleSheet, View } from "react-native";
+import { Alert, Animated, Pressable, StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import { useRouter } from "expo-router";
-import { Home, Image, Music2, Video } from "lucide-react-native";
+import { Gamepad2, Home, Image, Music2, ShoppingBag, Video } from "lucide-react-native";
 import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
 
-const DOCK_HIDE_DELAY_MS = 6000;
-const SCROLL_PAUSE_DELAY_MS = 180;
+export const NATIVE_SURFACE_DOCK_HEIGHT = 61;
 
-export function useNativeSurfaceDockVisibility() {
+export function useNativeSurfaceDockVisibility(enabled = false, bottomInset = 0) {
   const [visible, setVisible] = useState(true);
-  const showTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastOffsetY = useRef(0);
+  const translation = useRef(0);
+  const scrollTranslation = useRef(new Animated.Value(0)).current;
+  const hideDistance = NATIVE_SURFACE_DOCK_HEIGHT + bottomInset + 16;
+  const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (!enabled) return;
+    const offsetY = Math.max(0, event.nativeEvent.contentOffset.y);
+    const delta = offsetY - lastOffsetY.current;
+    translation.current = offsetY <= 12
+      ? 0
+      : Math.max(0, Math.min(hideDistance, translation.current + delta));
+    scrollTranslation.setValue(translation.current);
+    setVisible(translation.current < hideDistance);
+    lastOffsetY.current = offsetY;
+  }, [enabled, hideDistance, scrollTranslation]);
 
-  const clearTimers = useCallback(() => {
-    if (showTimer.current) clearTimeout(showTimer.current);
-    if (hideTimer.current) clearTimeout(hideTimer.current);
-    showTimer.current = null;
-    hideTimer.current = null;
-  }, []);
-
-  const onScroll = useCallback(() => {
-    clearTimers();
-    setVisible(false);
-    showTimer.current = setTimeout(() => {
-      setVisible(true);
-      hideTimer.current = setTimeout(() => {
-        setVisible(false);
-        hideTimer.current = null;
-      }, DOCK_HIDE_DELAY_MS);
-      showTimer.current = null;
-    }, SCROLL_PAUSE_DELAY_MS);
-  }, [clearTimers]);
-
-  useEffect(() => {
-    hideTimer.current = setTimeout(() => {
-      setVisible(false);
-      hideTimer.current = null;
-    }, DOCK_HIDE_DELAY_MS);
-    return clearTimers;
-  }, [clearTimers]);
-
-  return { visible, onScroll };
+  return { visible, onScroll, scrollTranslation };
 }
 
 const SURFACES = [
@@ -48,17 +32,23 @@ const SURFACES = [
   { key: "flicks", label: "Flicks", Icon: Image },
   { key: "clips", label: "Clips", Icon: Video },
   { key: "tracks", label: "Tracks", Icon: Music2 },
+  { key: "market", label: "Market, coming soon", Icon: ShoppingBag },
+  { key: "gaming", label: "Gaming, coming soon", Icon: Gamepad2 },
 ] as const;
 
 export default function NativeSurfaceDock({
-  visible,
+  visible = true,
   onFeedPress,
   onFlicksPress,
   onClipsPress,
   onTracksPress,
+  bottomInset = 0,
   activeSurface = "feed",
+  scrollTranslation,
 }: {
-  visible: boolean;
+  visible?: boolean;
+  bottomInset?: number;
+  scrollTranslation?: Animated.Value;
   onFeedPress: () => void;
   onFlicksPress?: () => void;
   onClipsPress?: () => void;
@@ -66,32 +56,31 @@ export default function NativeSurfaceDock({
   activeSurface?: "feed" | "flicks" | "clips" | "tracks";
 }) {
   const router = useRouter();
-  const { theme } = useNativeTheme();
+  const { theme, isVibesPro } = useNativeTheme();
   const colors = NATIVE_THEME_COLORS[theme];
-  const opacity = useRef(new Animated.Value(visible ? 1 : 0)).current;
-  const translateY = useRef(new Animated.Value(visible ? 0 : 26)).current;
+  const translateY = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(opacity, {
-        toValue: visible ? 1 : 0,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-      Animated.timing(translateY, {
-        toValue: visible ? 0 : 26,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [opacity, translateY, visible]);
+    if (scrollTranslation) return;
+    const animation = Animated.timing(translateY, {
+      toValue: visible ? 0 : NATIVE_SURFACE_DOCK_HEIGHT + bottomInset + 16,
+      duration: 220,
+      useNativeDriver: true,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [bottomInset, scrollTranslation, translateY, visible]);
 
   return (
     <Animated.View
       pointerEvents={visible ? "auto" : "none"}
-      style={[styles.position, { opacity, transform: [{ translateY }] }]}
+      style={[styles.position, { paddingBottom: 0, transform: [{ translateY: scrollTranslation ?? translateY }] }]}
     >
-      <View style={[styles.dock, { backgroundColor: theme === "bluesky" ? colors.control : "rgba(2,6,23,0.83)", borderColor: theme === "bluesky" ? colors.accent : "rgba(255,255,255,0.35)" }]}>
+      <View style={[styles.dock, {
+        backgroundColor: theme === "bluesky" ? colors.control : colors.surface,
+        borderColor: colors.border,
+        paddingBottom: Math.max(6, bottomInset + 4),
+      }]}>
         {SURFACES.map((surface) => {
           const Icon = surface.Icon;
           const active = surface.key === activeSurface;
@@ -101,40 +90,31 @@ export default function NativeSurfaceDock({
               accessibilityLabel={surface.label}
               accessibilityRole="button"
               onPress={() => {
-                if (active) {
-                  if (surface.key === "feed") onFeedPress();
-                  else if (surface.key === "flicks") onFlicksPress?.();
-                  else if (surface.key === "clips") onClipsPress?.();
-                  else onTracksPress?.();
-                  return;
-                }
-                if (surface.key === "feed") {
-                  onFeedPress();
-                  return;
-                }
-                if (surface.key === "clips") {
-                  if (onClipsPress) onClipsPress();
-                  else router.push("/(app)/clips");
-                  return;
-                }
-                if (surface.key === "flicks") {
-                  if (onFlicksPress) onFlicksPress();
-                  else router.push("/(app)/flicks");
-                  return;
-                }
-                if (surface.key === "tracks") {
-                  if (onTracksPress) onTracksPress();
-                  else router.push("/(app)/tracks");
-                  return;
+                switch (surface.key) {
+                  case "feed": onFeedPress(); break;
+                  case "flicks":
+                    if (onFlicksPress) onFlicksPress();
+                    else router.navigate("/(app)/(tabs)/flicks");
+                    break;
+                  case "clips":
+                    if (onClipsPress) onClipsPress();
+                    else router.navigate("/(app)/(tabs)/clips");
+                    break;
+                  case "tracks":
+                    if (onTracksPress) onTracksPress();
+                    else router.navigate("/(app)/(tabs)/tracks");
+                    break;
+                  case "market": Alert.alert("Market", "Coming soon."); break;
+                  case "gaming": Alert.alert("Gaming", "Coming soon."); break;
                 }
               }}
               style={({ pressed }) => [
                 styles.item,
-                active && [styles.activeItem, { backgroundColor: theme === "bluesky" ? "#54b8ff" : "#ffffff" }],
+                active && [styles.activeItem, { backgroundColor: theme === "bluesky" ? colors.accent : isVibesPro ? "#fbbf24" : "#ffffff" }],
                 pressed && styles.pressed,
               ]}
             >
-              <Icon color={active ? (theme === "bluesky" ? colors.text : "#0f172a") : colors.muted} size={20} strokeWidth={2} />
+              <Icon color={active ? (theme === "bluesky" ? colors.text : isVibesPro ? "#451a03" : "#0f172a") : colors.muted} size={20} strokeWidth={2} />
             </Pressable>
           );
         })}
@@ -148,31 +128,25 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     right: 0,
-    bottom: 12,
-    alignItems: "center",
+    bottom: 0,
   },
   dock: {
-    maxWidth: "92%",
+    width: "100%",
+    minHeight: NATIVE_SURFACE_DOCK_HEIGHT,
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
-    padding: 7,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.35)",
-    borderRadius: 999,
-    backgroundColor: "rgba(2,6,23,0.83)",
-    shadowColor: "#020617",
-    shadowOpacity: 0.26,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 12,
+    justifyContent: "space-around",
+    paddingHorizontal: 4,
+    paddingTop: 6,
+    borderTopWidth: 1,
   },
   item: {
-    width: 44,
-    height: 44,
+    flex: 1,
+    minWidth: 0,
+    height: 48,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 24,
+    borderRadius: 12,
   },
   activeItem: { backgroundColor: "#ffffff" },
   pressed: { opacity: 0.76 },

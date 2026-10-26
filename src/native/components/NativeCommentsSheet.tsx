@@ -191,7 +191,7 @@ export default function NativeCommentsSheet({
       setRecordingSeconds(0);
       setRecording(true);
       recordingInterval.current = setInterval(() => setRecordingSeconds((current) => current + 1), 1000);
-      recordingTimeout.current = setTimeout(() => void stopRecording(), 60_000);
+      recordingTimeout.current = setTimeout(() => void stopRecording(), 20_000);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to start voice recording.");
     }
@@ -434,7 +434,7 @@ export default function NativeCommentsSheet({
           {error && comments.length > 0 ? <Text style={styles.inlineError}>{error}</Text> : null}
           {recording ? (
             <View style={styles.recordingRow}>
-              <Text style={styles.recordingText}>Recording {formatDuration(recordingSeconds)} / 01:00</Text>
+              <Text style={styles.recordingText}>Recording {formatDuration(recordingSeconds)} / 00:20</Text>
               <Pressable accessibilityRole="button" onPress={() => void stopRecording()} style={styles.stopRecording}>
                 <Text style={styles.stopRecordingText}>Stop</Text>
               </Pressable>

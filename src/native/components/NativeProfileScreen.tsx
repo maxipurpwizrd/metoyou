@@ -13,10 +13,12 @@ import {
   View,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { MessageCircle } from "lucide-react-native";
 import { nativeSupabase } from "../lib/supabase";
 import {
   fetchNativeFollowInfo,
@@ -25,8 +27,14 @@ import {
   fetchNativeProfilePosts,
   setNativeFollow,
   type NativeProfile,
-  type NativeProfileConnection,
 } from "../lib/profile";
+import {
+  nativeChatConversationQueryKey,
+  nativeFollowInfoQueryKey,
+  nativeMessageThreadsQueryKey,
+  nativeProfilePostsQueryKey,
+  nativeProfileQueryKey,
+} from "../lib/queryKeys";
 import {
   blockNativeUser,
   deleteNativePost,
@@ -35,10 +43,13 @@ import {
   updateNativePostText,
 } from "../lib/posts";
 import { useNativeAuth } from "../contexts/NativeAuthProvider";
+import { useNativeEntitlement } from "../contexts/NativeEntitlementProvider";
 import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
 import type { PostRecord } from "../../types/post";
 import NativeConfirmDialog from "./NativeConfirmDialog";
 import NativePostCard from "./NativePostCard";
+import NativeSkeleton from "./NativeSkeleton";
+import { NativeProfilePostsSkeleton, NativeProfileSkeleton } from "./NativeScreenSkeletons";
 import NativeSurfaceDock from "./NativeSurfaceDock";
 import NativeVibesProProfile from "./NativeVibesProProfile";
 
@@ -94,28 +105,78 @@ export default function NativeProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { session } = useNativeAuth();
+  const { entitlement, refresh: refreshEntitlement } = useNativeEntitlement();
   const { theme } = useNativeTheme();
   const isBlueSky = theme === "bluesky";
   const viewerId = session?.user.id;
-  const [profile, setProfile] = useState<NativeProfile | null>(null);
-  const [posts, setPosts] = useState<Array<PostRecord & { liked?: boolean }>>([]);
-  const [hommies, setHommies] = useState<NativeProfileConnection[]>([]);
-  const [isFollowing, setIsFollowing] = useState(false);
-  const [isFollowedBy, setIsFollowedBy] = useState(false);
+  const queryClient = useQueryClient();
+  const ownUsername = typeof session?.user.user_metadata.username === "string"
+    ? session.user.user_metadata.username
+    : "";
+  const viewingSelf = !routeUsername || routeUsername.toLowerCase() === "me" ||
+    routeUsername.toLowerCase() === ownUsername.toLowerCase();
+  const profileKey = viewingSelf ? "self" : `username:${routeUsername}`;
+  const profileQueryKey = nativeProfileQueryKey(viewerId ?? "", profileKey);
+  const profileQuery = useQuery({
+    queryKey: profileQueryKey,
+    queryFn: () => viewingSelf
+      ? fetchNativeProfileById(viewerId!)
+      : fetchNativeProfileByUsername(routeUsername!),
+    enabled: Boolean(viewerId),
+    staleTime: 60_000,
+  });
+  const profile = profileQuery.data ?? null;
+  const profilePostsQueryKey = nativeProfilePostsQueryKey(viewerId ?? "", profile?.id ?? "");
+  const profilePostsQuery = useQuery({
+    queryKey: profilePostsQueryKey,
+    queryFn: () => fetchNativeProfilePosts(profile!.id, viewerId!, profile),
+    enabled: Boolean(viewerId && profile?.id),
+    staleTime: 30_000,
+  });
+  const followInfoQueryKey = nativeFollowInfoQueryKey(viewerId ?? "", profile?.id ?? "");
+  const followInfoQuery = useQuery({
+    queryKey: followInfoQueryKey,
+    queryFn: () => fetchNativeFollowInfo(viewerId!, profile!.id),
+    enabled: Boolean(viewerId && profile?.id),
+    staleTime: 15_000,
+  });
+  const posts = profilePostsQuery.data ?? [];
+  const followInfo = followInfoQuery.data;
+  const isFollowing = profile?.id !== viewerId && Boolean(followInfo?.isFollowing);
+  const isFollowedBy = profile?.id !== viewerId && Boolean(followInfo?.isFollowedBy);
   const [savedPostIds, setSavedPostIds] = useState<Set<string>>(() => new Set());
-  const [loading, setLoading] = useState(true);
   const [followLoading, setFollowLoading] = useState(false);
   const [photoLoading, setPhotoLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editBio, setEditBio] = useState("");
   const [editInterests, setEditInterests] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
-  const [hommiesOpen, setHommiesOpen] = useState(false);
   const [unfollowConfirmation, setUnfollowConfirmation] = useState(false);
+  const loading = profileQuery.isPending && !profile;
+  const postsLoading = Boolean(profile && profilePostsQuery.isPending && !profilePostsQuery.data);
+  const followInfoLoading = Boolean(profile && followInfoQuery.isPending && !followInfoQuery.data);
+  const error = profileQuery.isError && !profileQuery.data
+    ? profileQuery.error.message
+    : profilePostsQuery.isError && !profilePostsQuery.data
+      ? profilePostsQuery.error.message
+      : followInfoQuery.isError && !followInfoQuery.data
+        ? followInfoQuery.error.message
+        : null;
+  const updateProfileCache = useCallback((next: NativeProfile) => {
+    queryClient.setQueryData<NativeProfile | null>(profileQueryKey, next);
+  }, [profileQueryKey, queryClient]);
+  const updatePostsCache = useCallback((update: Array<PostRecord & { liked?: boolean }> | ((current: Array<PostRecord & { liked?: boolean }>) => Array<PostRecord & { liked?: boolean }>)) => {
+    queryClient.setQueryData<Array<PostRecord & { liked?: boolean }>>(
+      profilePostsQueryKey,
+      (current = []) => typeof update === "function" ? update(current) : update,
+    );
+  }, [profilePostsQueryKey, queryClient]);
   const isOwnProfile = !routeUsername || profile?.id === viewerId;
-  const vibesPro = isVibesPro(profile);
+  const ownEntitlementLoading = isOwnProfile &&
+    (entitlement.status === "loading" || entitlement.status === "unknown");
+  const ownEntitlementError = isOwnProfile && entitlement.status === "error";
+  const vibesPro = isOwnProfile ? entitlement.status === "vibesPro" : isVibesPro(profile);
   const displayPhoto = profile?.vibes_pro_portrait ?? profile?.profile_pic ?? null;
   const snapshotsCount = posts.filter((post) => Boolean(post.image_url)).length;
   const bio = profile?.bio?.trim() ?? "";
@@ -124,47 +185,20 @@ export default function NativeProfileScreen() {
     [profile?.interests],
   );
   const followLabel = isFollowing && isFollowedBy
-    ? "Homie"
+    ? "Friend"
     : isFollowing
       ? "Following"
       : isFollowedBy
         ? "Follow back"
         : "Follow";
 
-  const loadProfile = useCallback(async () => {
-    if (!viewerId) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const ownUsername = typeof session?.user.user_metadata.username === "string"
-        ? session.user.user_metadata.username
-        : "";
-      const viewingSelf = !routeUsername ||
-        routeUsername.toLowerCase() === "me" ||
-        routeUsername.toLowerCase() === ownUsername.toLowerCase();
-      const result = viewingSelf
-        ? await fetchNativeProfileById(viewerId)
-        : await fetchNativeProfileByUsername(routeUsername);
-      if (!result) throw new Error("This profile could not be found.");
-      setProfile(result);
-      const [profilePosts, followInfo] = await Promise.all([
-        fetchNativeProfilePosts(result.id, viewerId),
-        fetchNativeFollowInfo(viewerId, result.id),
-      ]);
-      setPosts(profilePosts);
-      setHommies(followInfo.hommies);
-      setIsFollowing(result.id === viewerId ? false : followInfo.isFollowing);
-      setIsFollowedBy(result.id === viewerId ? false : followInfo.isFollowedBy);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to load this profile.");
-    } finally {
-      setLoading(false);
-    }
-  }, [routeUsername, session?.user.user_metadata.username, viewerId]);
-
-  useEffect(() => {
-    void loadProfile();
-  }, [loadProfile]);
+  const refreshProfile = useCallback(async () => {
+    await Promise.all([
+      profileQuery.refetch(),
+      profilePostsQuery.refetch(),
+      followInfoQuery.refetch(),
+    ]);
+  }, [followInfoQuery.refetch, profilePostsQuery.refetch, profileQuery.refetch]);
 
   useEffect(() => {
     let active = true;
@@ -204,12 +238,13 @@ export default function NativeProfileScreen() {
     setFollowLoading(true);
     try {
       await setNativeFollow(viewerId, profile.id, !isFollowing);
-      const next = await fetchNativeFollowInfo(viewerId, profile.id);
-      setIsFollowing(next.isFollowing);
-      setIsFollowedBy(next.isFollowedBy);
-      setHommies(next.hommies);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: followInfoQueryKey, exact: true }),
+        queryClient.invalidateQueries({ queryKey: nativeMessageThreadsQueryKey(viewerId), exact: true }),
+        queryClient.invalidateQueries({ queryKey: nativeChatConversationQueryKey(viewerId, profile.id), exact: true }),
+      ]);
     } catch (cause) {
-      Alert.alert("Could not update hommies", cause instanceof Error ? cause.message : "Please try again.");
+      Alert.alert("Could not update following", cause instanceof Error ? cause.message : "Please try again.");
     } finally {
       setFollowLoading(false);
       setUnfollowConfirmation(false);
@@ -232,7 +267,7 @@ export default function NativeProfileScreen() {
         .update({ bio: editBio.trim(), interests: nextInterests })
         .eq("id", profile.id);
       if (updateError) throw updateError;
-      setProfile({ ...profile, bio: editBio.trim(), interests: nextInterests });
+      updateProfileCache({ ...profile, bio: editBio.trim(), interests: nextInterests });
       setEditOpen(false);
     } catch (cause) {
       Alert.alert("Could not save profile", cause instanceof Error ? cause.message : "Please try again.");
@@ -274,7 +309,7 @@ export default function NativeProfileScreen() {
         : { profile_pic: url };
       const { error: profileError } = await nativeSupabase.from("profiles").update(update).eq("id", profile.id);
       if (profileError) throw profileError;
-      setProfile({ ...profile, ...update });
+      updateProfileCache({ ...profile, ...update });
     } catch (cause) {
       Alert.alert("Could not update profile picture", cause instanceof Error ? cause.message : "Please try again.");
     } finally {
@@ -302,7 +337,7 @@ export default function NativeProfileScreen() {
   const likePost = async (post: PostRecord) => {
     if (!viewerId) throw new Error("Sign in to like a post.");
     const result = await toggleNativePostLike(post.id, viewerId);
-    setPosts((current) => current.map((item) =>
+    updatePostsCache((current) => current.map((item) =>
       item.id === post.id ? { ...item, likes_count: result.likesCount, liked: result.liked } : item,
     ));
     return result;
@@ -317,7 +352,7 @@ export default function NativeProfileScreen() {
       .update({ highlighted })
       .eq("id", postId);
     if (updateError) throw updateError;
-    setPosts((current) => current.map((item) => item.id === postId ? { ...item, highlighted } : item));
+    updatePostsCache((current) => current.map((item) => item.id === postId ? { ...item, highlighted } : item));
   };
 
   const renderPost = (post: PostRecord & { liked?: boolean }) => (
@@ -328,19 +363,19 @@ export default function NativeProfileScreen() {
       onBlock={async (item) => {
         await blockNativeUser(item.author_id);
         Alert.alert("User blocked", "Their profile and posts will no longer be shown.", [
-          { text: "Back to Feed", onPress: () => router.replace("/(app)") },
+          { text: "Back to Feed", onPress: () => router.navigate("/(app)/(tabs)") },
         ]);
       }}
       onCommentCountChange={(postId, count) => {
-        setPosts((current) => current.map((item) => item.id === postId ? { ...item, comments_count: count } : item));
+        updatePostsCache((current) => current.map((item) => item.id === postId ? { ...item, comments_count: count } : item));
       }}
       onDelete={async (postId) => {
         await deleteNativePost(postId);
-        setPosts((current) => current.filter((item) => item.id !== postId));
+        updatePostsCache((current) => current.filter((item) => item.id !== postId));
       }}
       onEdit={async (postId, text) => {
         await updateNativePostText(postId, text);
-        setPosts((current) => current.map((item) => item.id === postId ? { ...item, text } : item));
+        updatePostsCache((current) => current.map((item) => item.id === postId ? { ...item, text } : item));
       }}
       onHighlight={updateHighlight}
       onReport={async (item, reason) => {
@@ -357,22 +392,21 @@ export default function NativeProfileScreen() {
     return (
       <NativeVibesProProfile
         followLoading={followLoading}
-        hommies={hommies}
+        followerCount={followInfo?.followerCount ?? 0}
+        followerCountLoading={followInfoLoading}
         isFollowedBy={isFollowedBy}
         isFollowing={isFollowing}
-        onBack={() => router.back()}
+        onBack={() => router.navigate("/(app)/(tabs)")}
         onFollow={() => void toggleFollow()}
         onOpenPost={(post) => {
           if (!post.image_url) return;
           router.push({
-            pathname: "/(app)/flicks",
+            pathname: "/(app)/(tabs)/flicks",
             params: { image: post.image_url, postId: post.id },
           });
         }}
-        onOpenProfile={(username) =>
-          router.push({ pathname: "/(app)/profile/[username]", params: { username } })
-        }
-        onProfileUpdated={setProfile}
+        onProfileUpdated={updateProfileCache}
+        postsLoading={postsLoading}
         posts={posts}
         profile={profile}
         viewerId={viewerId}
@@ -387,19 +421,34 @@ export default function NativeProfileScreen() {
     >
       <SafeAreaView edges={["top"]} style={styles.safeArea}>
         <View style={[styles.header, isBlueSky && styles.blueSkyHeader]}>
-          <Pressable accessibilityLabel="Go back" onPress={() => router.back()} style={styles.headerButton}>
+          <Pressable
+            accessibilityLabel="Go back"
+            onPress={() => isOwnProfile
+              ? router.navigate("/(app)/(tabs)")
+              : router.canGoBack() ? router.back() : router.navigate("/(app)/(tabs)")}
+            style={styles.headerButton}
+          >
             <Text style={[styles.backText, isBlueSky && styles.blueSkyText]}>‹</Text>
           </Pressable>
           <Text style={[styles.headerTitle, vibesPro && styles.goldText, isBlueSky && styles.blueSkyText]}>Profile</Text>
           <View style={styles.headerSpacer} />
         </View>
 
-        {loading ? (
-          <View style={styles.center}><ActivityIndicator color="#0284c7" size="large" /></View>
-        ) : error ? (
+        {loading || ownEntitlementLoading ? (
+          <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+            <NativeProfileSkeleton />
+          </ScrollView>
+        ) : ownEntitlementError ? (
+          <View style={styles.center}>
+            <Text style={styles.error}>VibesPro status could not be checked: {entitlement.error.message}</Text>
+            <Pressable onPress={() => void refreshEntitlement()} style={styles.primaryButton}>
+              <Text style={styles.primaryButtonText}>Retry account status</Text>
+            </Pressable>
+          </View>
+        ) : error && !profile ? (
           <View style={styles.center}>
             <Text style={styles.error}>{error}</Text>
-            <Pressable onPress={() => void loadProfile()} style={styles.primaryButton}>
+            <Pressable onPress={() => void refreshProfile()} style={styles.primaryButton}>
               <Text style={styles.primaryButtonText}>Try again</Text>
             </Pressable>
           </View>
@@ -408,6 +457,14 @@ export default function NativeProfileScreen() {
             contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, 20) + 100 }]}
             showsVerticalScrollIndicator={false}
           >
+            {error ? (
+              <View style={styles.center}>
+                <Text style={styles.error}>{error}</Text>
+                <Pressable onPress={() => void refreshProfile()} style={styles.primaryButton}>
+                  <Text style={styles.primaryButtonText}>Retry</Text>
+                </Pressable>
+              </View>
+            ) : null}
             <LinearGradient
               colors={isBlueSky ? ["#0b2d5b", "#104078"] : vibesPro ? ["#fcd34d", "#f59e0b", "#d97706"] : ["rgba(255,255,255,0.96)", "rgba(240,249,255,0.94)"]}
               style={[styles.profileCard, vibesPro && styles.premiumCard, isBlueSky && styles.blueSkyCard]}
@@ -476,6 +533,18 @@ export default function NativeProfileScreen() {
                 <View style={styles.profileActions}>
                   <Pressable
                     accessibilityRole="button"
+                    accessibilityLabel={`Message ${profile.username}`}
+                    onPress={() => router.push({
+                      pathname: "/messages/[recipientId]",
+                      params: { recipientId: profile.id },
+                    })}
+                    style={styles.messageButton}
+                  >
+                    <MessageCircle color="#0369a1" size={17} />
+                    <Text style={styles.messageButtonText}>Message</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
                     disabled={followLoading}
                     onPress={() => void toggleFollow()}
                     style={[styles.primaryButton, followLoading && styles.disabled]}
@@ -490,9 +559,20 @@ export default function NativeProfileScreen() {
               )}
 
               <View style={styles.stats}>
-                <Pressable accessibilityRole="button" onPress={() => setHommiesOpen(true)} style={styles.stat}>
-                  <Text style={[styles.statValue, vibesPro && styles.premiumText]}>{hommies.length}</Text>
-                  <Text style={[styles.statLabel, vibesPro && styles.premiumSubtext]}>Hommies</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => router.push({
+                    pathname: "/profile/followers",
+                    params: { profileId: profile.id, username: profile.username },
+                  })}
+                  style={styles.stat}
+                >
+                  {followInfoLoading ? <NativeSkeleton style={styles.statSkeleton} /> : (
+                    <Text style={[styles.statValue, vibesPro && styles.premiumText]}>
+                      {followInfoQuery.isError && !followInfo ? "—" : followInfo?.followerCount ?? 0}
+                    </Text>
+                  )}
+                  <Text style={[styles.statLabel, vibesPro && styles.premiumSubtext]}>Followers</Text>
                 </Pressable>
                 <View style={styles.stat}>
                   <Text style={[styles.statValue, vibesPro && styles.premiumText]}>{snapshotsCount}</Text>
@@ -507,7 +587,7 @@ export default function NativeProfileScreen() {
 
             <View style={styles.section}>
               <Text style={[styles.sectionTitle, vibesPro && styles.goldText]}>Highlights</Text>
-              {posts.some((post) => post.highlighted) ? (
+              {postsLoading ? <NativeProfilePostsSkeleton /> : posts.some((post) => post.highlighted) ? (
                 posts.filter((post) => post.highlighted).map((post) => (
                   <View key={`highlight-${post.id}`} style={[styles.highlightCard, vibesPro && styles.highlightCardGold]}>
                     {post.image_url ? <Image source={{ uri: post.image_url }} style={styles.highlightImage} /> : null}
@@ -516,16 +596,16 @@ export default function NativeProfileScreen() {
                     </Text>
                   </View>
                 ))
-              ) : (
+              ) : posts.length === 0 && !profilePostsQuery.isError ? (
                 <Text style={[styles.emptyText, vibesPro && styles.darkSubtext]}>No highlights yet.</Text>
-              )}
+              ) : null}
             </View>
 
             <View style={styles.section}>
               <Text style={[styles.sectionTitle, vibesPro && styles.goldText]}>
                 {isOwnProfile ? "My Snapshots" : "Snapshots"}
               </Text>
-              {posts.length === 0 ? (
+              {postsLoading ? <NativeProfilePostsSkeleton /> : posts.length === 0 && !profilePostsQuery.isError ? (
                 <Text style={[styles.emptyText, vibesPro && styles.darkSubtext]}>No posts to show yet.</Text>
               ) : posts.map((post) => <View key={post.id} style={styles.postWrap}>{renderPost(post)}</View>)}
             </View>
@@ -535,10 +615,11 @@ export default function NativeProfileScreen() {
 
       <NativeSurfaceDock
         activeSurface="feed"
-        onClipsPress={() => router.push("/(app)/clips")}
-        onFeedPress={() => router.replace("/(app)")}
-        onFlicksPress={() => router.push("/(app)/flicks")}
-        onTracksPress={() => router.push("/(app)/tracks")}
+        bottomInset={insets.bottom}
+        onClipsPress={() => router.navigate("/(app)/(tabs)/clips")}
+        onFeedPress={() => router.navigate("/(app)/(tabs)")}
+        onFlicksPress={() => router.navigate("/(app)/(tabs)/flicks")}
+        onTracksPress={() => router.navigate("/(app)/(tabs)/tracks")}
         visible
       />
 
@@ -601,8 +682,11 @@ export default function NativeProfileScreen() {
                   />
                   <ProfileMenuTile
                     icon="♡"
-                    label="Hommies"
-                    onPress={() => runProfileMenuAction(() => setHommiesOpen(true))}
+                    label="Followers"
+                    onPress={() => runProfileMenuAction(() => router.push({
+                      pathname: "/profile/followers",
+                      params: { profileId: profile!.id, username: profile!.username },
+                    }))}
                   />
                 </>
               )}
@@ -643,45 +727,13 @@ export default function NativeProfileScreen() {
         </View>
       </Modal>
 
-      <Modal animationType="fade" onRequestClose={() => setHommiesOpen(false)} transparent visible={hommiesOpen}>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.hommiesCard}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.editTitle}>Hommies</Text>
-              <Pressable accessibilityLabel="Close Hommies" onPress={() => setHommiesOpen(false)}>
-                <Text style={styles.modalClose}>×</Text>
-              </Pressable>
-            </View>
-            <ScrollView>
-              {hommies.length === 0 ? (
-                <Text style={styles.emptyText}>No mutual connections yet.</Text>
-              ) : hommies.map((homie) => (
-                <Pressable
-                  key={homie.id}
-                  onPress={() => {
-                    setHommiesOpen(false);
-                    router.push({ pathname: "/(app)/profile/[username]", params: { username: homie.username } });
-                  }}
-                  style={styles.hommieRow}
-                >
-                  {homie.profile_pic
-                    ? <Image source={{ uri: homie.profile_pic }} style={styles.hommieAvatar} />
-                    : <View style={styles.hommieAvatarFallback}><Text style={styles.hommieInitial}>{homie.username.slice(0, 1).toUpperCase()}</Text></View>}
-                  <Text style={styles.hommieName}>@{homie.username}</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
       <NativeConfirmDialog
         confirmLabel="Unfollow"
         emoji="💔"
-        message={`${profile?.username ?? "This person"} is your homie. Would you like to unfollow them?`}
+        message={`${profile?.username ?? "This person"} is your friend. Would you like to unfollow them?`}
         onCancel={() => setUnfollowConfirmation(false)}
         onConfirm={updateFollowStatus}
-        title="Unfollow your homie?"
+        title="Unfollow your friend?"
         visible={unfollowConfirmation}
       />
     </LinearGradient>
@@ -734,6 +786,8 @@ const styles = StyleSheet.create({
   interests: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 7, marginTop: 14 },
   interest: { overflow: "hidden", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 99, color: "#0369a1", backgroundColor: "#e0f2fe", fontSize: 11, fontWeight: "700" },
   profileActions: { alignSelf: "stretch", flexDirection: "row", justifyContent: "center", gap: 9, marginTop: 18 },
+  messageButton: { minHeight: 44, minWidth: 118, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, paddingHorizontal: 16, borderWidth: 1, borderColor: "#bae6fd", borderRadius: 14, backgroundColor: "#ffffff" },
+  messageButtonText: { color: "#0369a1", fontSize: 13, fontWeight: "800" },
   primaryButton: { minHeight: 44, minWidth: 118, alignItems: "center", justifyContent: "center", paddingHorizontal: 16, borderRadius: 14, backgroundColor: "#0284c7" },
   primaryButtonText: { color: "#ffffff", fontSize: 13, fontWeight: "800" },
   secondaryButton: { minHeight: 44, alignItems: "center", justifyContent: "center", marginTop: 15, paddingHorizontal: 18, borderWidth: 1, borderColor: "#bae6fd", borderRadius: 14, backgroundColor: "#ffffff" },
@@ -742,6 +796,7 @@ const styles = StyleSheet.create({
   stats: { flexDirection: "row", justifyContent: "space-around", alignSelf: "stretch", marginTop: 22, paddingTop: 18, borderTopWidth: 1, borderTopColor: "rgba(15,23,42,0.1)" },
   stat: { minWidth: 74, alignItems: "center" },
   statValue: { color: "#0f172a", fontSize: 19, fontWeight: "900" },
+  statSkeleton: { width: 42, height: 22, borderRadius: 8 },
   statLabel: { marginTop: 4, color: "#64748b", fontSize: 11, fontWeight: "700" },
   section: { gap: 10 },
   sectionTitle: { color: "#0c4a6e", fontSize: 20, fontWeight: "900" },

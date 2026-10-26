@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   Image,
   Pressable,
@@ -25,6 +24,7 @@ import {
   type NativeNotification,
 } from "../lib/notifications";
 import NativeConfirmDialog from "./NativeConfirmDialog";
+import { NativeNotificationRowsSkeleton } from "./NativeScreenSkeletons";
 
 type NotificationGroup = NativeNotification & {
   notificationIds: string[];
@@ -179,14 +179,14 @@ export default function NativeNotificationsScreen() {
       const post = await fetchNativeNotificationPost(notification.postId);
       if (!post) throw new Error("The post could not be found.");
       const params = { postId: notification.postId, ...(notification.type === "comment" ? { showComments: "1" } : {}) };
-      if (post.video_url) router.push({ pathname: "/(app)/clips", params });
-      else if (post.audio_url) router.push({ pathname: "/(app)/tracks", params });
+      if (post.video_url) router.push({ pathname: "/(app)/(tabs)/clips", params });
+      else if (post.audio_url) router.push({ pathname: "/(app)/(tabs)/tracks", params });
       else if (post.image_url || post.image_original_url) {
         router.push({
-          pathname: "/(app)/flicks",
+          pathname: "/(app)/(tabs)/flicks",
           params: { ...params, image: post.image_original_url ?? post.image_url ?? "" },
         });
-      } else router.push({ pathname: "/(app)", params });
+      } else router.push({ pathname: "/(app)/(tabs)", params });
     } catch (cause) {
       Alert.alert(
         "Post unavailable",
@@ -226,7 +226,7 @@ export default function NativeNotificationsScreen() {
         <View style={[styles.header, isVibesPro && styles.vibesProHeader, isBlueSky && styles.blueSkyHeader]}>
           <Pressable
             accessibilityLabel="Go back"
-            onPress={() => router.back()}
+            onPress={() => router.canGoBack() ? router.back() : router.navigate("/(app)/(tabs)")}
             style={[styles.headerButton, isVibesPro && styles.vibesProButton, isBlueSky && styles.blueSkyButton]}
           >
             <Text style={[styles.backIcon, isVibesPro && styles.vibesProText, isBlueSky && styles.blueSkyText]}>‹</Text>
@@ -245,9 +245,7 @@ export default function NativeNotificationsScreen() {
           </Pressable>
         </View>
         {loading && notifications.length === 0 ? (
-          <View style={styles.center}>
-            <ActivityIndicator color={isBlueSky ? "#54b8ff" : isVibesPro ? "#D4AF37" : "#0284c7"} size="large" />
-          </View>
+          <NativeNotificationRowsSkeleton count={5} />
         ) : error && notifications.length === 0 ? (
           <View style={styles.center}>
             <Text style={[styles.bodyText, isVibesPro && styles.vibesProBodyText]}>{error}</Text>

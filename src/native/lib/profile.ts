@@ -1,4 +1,5 @@
 import type { PostRecord } from "../../types/post";
+import { normalizeNativeVibesProEntitlement, type NativeVibesProEntitlement } from "./entitlement";
 import { nativeSupabase } from "./supabase";
 
 export type NativeProfile = {
@@ -27,10 +28,13 @@ export type NativeProfileConnection = {
 export type NativeFollowInfo = {
   isFollowing: boolean;
   isFollowedBy: boolean;
-  hommies: NativeProfileConnection[];
+  followerCount: number;
+  followingCount: number;
 };
 
-export async function fetchNativeVibesProStatus(userId: string): Promise<boolean> {
+export type NativeConnectionTab = "friends" | "following" | "followers";
+
+export async function fetchNativeVibesProEntitlement(userId: string): Promise<NativeVibesProEntitlement> {
   const { data, error } = await nativeSupabase
     .from("profiles")
     .select("*")
@@ -43,8 +47,9 @@ export async function fetchNativeVibesProStatus(userId: string): Promise<boolean
     is_vibes_pro?: boolean | null;
     is_vibespro?: boolean | null;
     vibes_pro?: boolean | null;
+    vibes_pro_until?: string | null;
   };
-  return profile.is_vibes_pro ?? profile.is_vibespro ?? profile.vibes_pro ?? false;
+  return normalizeNativeVibesProEntitlement(profile);
 }
 
 export async function fetchNativeProfileById(userId: string): Promise<NativeProfile | null> {
@@ -67,7 +72,11 @@ export async function fetchNativeProfileByUsername(username: string): Promise<Na
   return data as NativeProfile | null;
 }
 
-export async function fetchNativeProfilePosts(authorId: string, viewerId: string): Promise<PostRecord[]> {
+export async function fetchNativeProfilePosts(
+  authorId: string,
+  viewerId: string,
+  authorProfile?: NativeProfile | null,
+): Promise<PostRecord[]> {
   const { data, error } = await nativeSupabase
     .from("posts")
     .select("id, author_id, text, image_url, image_original_url, video_url, audio_url, content_kind, likes_count, comments_count, highlighted, created_at")
@@ -79,12 +88,16 @@ export async function fetchNativeProfilePosts(authorId: string, viewerId: string
   const posts = (data ?? []) as PostRecord[];
   if (posts.length === 0) return posts;
 
-  const { data: authorProfiles, error: profilesError } = await nativeSupabase
-    .from("public_profiles")
-    .select("*")
-    .eq("id", authorId)
-    .maybeSingle();
-  if (profilesError) throw profilesError;
+  let author = authorProfile;
+  if (author === undefined) {
+    const { data, error: profilesError } = await nativeSupabase
+      .from("public_profiles")
+      .select("*")
+      .eq("id", authorId)
+      .maybeSingle();
+    if (profilesError) throw profilesError;
+    author = data as NativeProfile | null;
+  }
 
   const { data: likes, error: likesError } = await nativeSupabase
     .from("post_likes")
@@ -94,7 +107,6 @@ export async function fetchNativeProfilePosts(authorId: string, viewerId: string
   if (likesError) throw likesError;
 
   const likedIds = new Set((likes ?? []).map((like) => like.post_id));
-  const author = authorProfiles as NativeProfile | null;
   return posts.map((post) => ({
     ...post,
     profiles: author
@@ -110,35 +122,94 @@ export async function fetchNativeProfilePosts(authorId: string, viewerId: string
 }
 
 export async function fetchNativeFollowInfo(viewerId: string, profileId: string): Promise<NativeFollowInfo> {
-  const [{ data: followers, error: followersError }, { data: following, error: followingError }] = await Promise.all([
-    nativeSupabase.from("followers").select("follower_id").eq("following_id", profileId),
-    nativeSupabase.from("followers").select("following_id").eq("follower_id", profileId),
+  const [
+    { data: followsProfile, error: followsProfileError },
+    { data: profileFollowsViewer, error: profileFollowsViewerError },
+    { count: followerCount, error: followerCountError },
+    { count: followingCount, error: followingCountError },
+  ] = await Promise.all([
+    nativeSupabase
+      .from("followers")
+      .select("follower_id")
+      .eq("follower_id", viewerId)
+      .eq("following_id", profileId)
+      .maybeSingle(),
+    nativeSupabase
+      .from("followers")
+      .select("follower_id")
+      .eq("follower_id", profileId)
+      .eq("following_id", viewerId)
+      .maybeSingle(),
+    nativeSupabase
+      .from("followers")
+      .select("follower_id", { count: "exact", head: true })
+      .eq("following_id", profileId),
+    nativeSupabase
+      .from("followers")
+      .select("following_id", { count: "exact", head: true })
+      .eq("follower_id", profileId),
   ]);
-  if (followersError) throw followersError;
-  if (followingError) throw followingError;
+  if (followsProfileError) throw followsProfileError;
+  if (profileFollowsViewerError) throw profileFollowsViewerError;
+  if (followerCountError) throw followerCountError;
+  if (followingCountError) throw followingCountError;
 
-  const followerIds = new Set((followers ?? []).map((row) => row.follower_id as string));
-  const followingIds = new Set((following ?? []).map((row) => row.following_id as string));
-  const mutualIds = [...followerIds].filter((id) => followingIds.has(id));
-  let hommies: NativeProfileConnection[] = [];
-  if (mutualIds.length > 0) {
-    const { data, error } = await nativeSupabase
-      .from("public_profiles")
-      .select("id, username, profile_pic")
-      .in("id", mutualIds);
-    if (error) throw error;
-    hommies = (data ?? []).map((profile) => ({
+  return {
+    isFollowing: Boolean(followsProfile),
+    isFollowedBy: Boolean(profileFollowsViewer),
+    followerCount: followerCount ?? 0,
+    followingCount: followingCount ?? 0,
+  };
+}
+
+export async function fetchNativeConnections(
+  profileId: string,
+  tab: NativeConnectionTab,
+): Promise<NativeProfileConnection[]> {
+  const [followersResult, followingResult] = await Promise.all([
+    tab === "following"
+      ? Promise.resolve(null)
+      : nativeSupabase
+          .from("followers")
+          .select("follower_id, created_at")
+          .eq("following_id", profileId)
+          .order("created_at", { ascending: false }),
+    tab === "followers"
+      ? Promise.resolve(null)
+      : nativeSupabase
+          .from("followers")
+          .select("following_id, created_at")
+          .eq("follower_id", profileId)
+          .order("created_at", { ascending: false }),
+  ]);
+  if (followersResult?.error) throw followersResult.error;
+  if (followingResult?.error) throw followingResult.error;
+
+  const followerIds = [...new Set((followersResult?.data ?? []).map((row) => row.follower_id as string))];
+  const followingIds = [...new Set((followingResult?.data ?? []).map((row) => row.following_id as string))];
+  const followingIdSet = new Set(followingIds);
+  const ids = tab === "friends"
+    ? followerIds.filter((id) => followingIdSet.has(id))
+    : tab === "followers"
+      ? followerIds
+      : followingIds;
+  if (!ids.length) return [];
+
+  const { data, error } = await nativeSupabase
+    .from("public_profiles")
+    .select("id, username, profile_pic")
+    .in("id", ids);
+  if (error) throw error;
+
+  const profileById = new Map((data ?? []).map((profile) => [profile.id, profile]));
+  return ids.flatMap((id) => {
+    const profile = profileById.get(id);
+    return profile ? [{
       id: profile.id,
       username: profile.username ?? profile.id,
       profile_pic: profile.profile_pic ?? null,
-    }));
-  }
-
-  return {
-    isFollowing: followerIds.has(viewerId),
-    isFollowedBy: followingIds.has(viewerId),
-    hommies,
-  };
+    }] : [];
+  });
 }
 
 export async function setNativeFollow(viewerId: string, profileId: string, follow: boolean) {

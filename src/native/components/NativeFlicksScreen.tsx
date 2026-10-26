@@ -35,7 +35,8 @@ import { blockNativeUser, deleteNativePost, reportNativePost, toggleNativePostLi
 import NativeBlurBackdrop, { NativeBlurTargetContext } from "./NativeBlurBackdrop";
 import NativeCommentsSheet from "./NativeCommentsSheet";
 import NativeConfirmDialog from "./NativeConfirmDialog";
-import NativeSurfaceDock, { useNativeSurfaceDockVisibility } from "./NativeSurfaceDock";
+import { NativeVerticalMediaSkeleton } from "./NativeScreenSkeletons";
+import NativeSurfaceDock, { NATIVE_SURFACE_DOCK_HEIGHT, useNativeSurfaceDockVisibility } from "./NativeSurfaceDock";
 
 const REPORT_REASONS = [
   "Bullying or abuse",
@@ -76,7 +77,7 @@ export default function NativeFlicksScreen() {
   const loadingMoreRef = useRef(false);
   const hasMoreRef = useRef(true);
   const likingFlickIds = useRef(new Set<string>());
-  const [pageHeight, setPageHeight] = useState(Math.max(1, window.height - insets.top - insets.bottom));
+  const [pageHeight, setPageHeight] = useState(Math.max(1, window.height - insets.top - insets.bottom - NATIVE_SURFACE_DOCK_HEIGHT));
   const [flicks, setFlicks] = useState<NativeFlick[]>([]);
   const [focusedFlick, setFocusedFlick] = useState<NativeFlick | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -196,10 +197,17 @@ export default function NativeFlicksScreen() {
   const toggleLike = async (flick: NativeFlick) => {
     if (!userId || likingFlickIds.current.has(flick.id)) return;
     likingFlickIds.current.add(flick.id);
+    const previousLiked = flick.liked;
+    const previousLikesCount = flick.likes_count;
+    updateFlick(flick.id, {
+      liked: !previousLiked,
+      likes_count: Math.max(0, previousLikesCount + (previousLiked ? -1 : 1)),
+    });
     try {
       const result = await toggleNativePostLike(flick.id, userId);
       updateFlick(flick.id, { liked: result.liked, likes_count: result.likesCount });
     } catch (cause) {
+      updateFlick(flick.id, { liked: previousLiked, likes_count: previousLikesCount });
       setActionError(errorMessage(cause, "Unable to update this Flick right now."));
     } finally {
       likingFlickIds.current.delete(flick.id);
@@ -275,7 +283,11 @@ export default function NativeFlicksScreen() {
     return (
       <View style={[styles.imageViewer, theme === "bluesky" && styles.imageViewerBlue]}>
         <Image resizeMode="contain" source={{ uri: requestedImage }} style={StyleSheet.absoluteFill} />
-        <Pressable accessibilityLabel="Close image" onPress={() => router.back()} style={styles.viewerClose}>
+        <Pressable
+          accessibilityLabel="Close image"
+          onPress={() => router.canGoBack() ? router.back() : router.replace("/(app)/(tabs)/flicks")}
+          style={styles.viewerClose}
+        >
           <Text style={styles.viewerCloseText}>‹</Text>
         </Pressable>
       </View>
@@ -290,7 +302,6 @@ export default function NativeFlicksScreen() {
       <NativeBlurTargetContext.Provider value={blurTargetRef}>
         <SafeAreaView
           edges={["top", "bottom"]}
-          onLayout={(event) => setPageHeight(event.nativeEvent.layout.height)}
           style={styles.safeArea}
         >
           <BlurTargetView ref={blurTargetRef} style={styles.safeArea}>
@@ -394,28 +405,27 @@ export default function NativeFlicksScreen() {
               maxToRenderPerBatch={2}
               removeClippedSubviews={false}
               ListEmptyComponent={
-                <View style={[styles.emptyState, { height: pageHeight }]}>
-                  {pageLoading ? (
-                    <>
-                      <ActivityIndicator color="#0284c7" size="large" />
-                      <Text style={styles.statusText}>Finding your next Flick…</Text>
-                    </>
-                  ) : feedError ? (
+                pageLoading ? (
+                  <NativeVerticalMediaSkeleton height={pageHeight} />
+                ) : (
+                  <View style={[styles.emptyState, { height: pageHeight }]}>
+                    {feedError ? (
                     <>
                       <Text style={styles.errorTitle}>Flicks didn’t load</Text>
                       <Text style={styles.statusText}>{feedError}</Text>
-                      <Pressable onPress={() => requestedPostId ? router.replace("/(app)/flicks") : void loadFirstPage()} style={styles.retryButton}>
+                      <Pressable onPress={() => requestedPostId ? router.replace("/(app)/(tabs)/flicks") : void loadFirstPage()} style={styles.retryButton}>
                         <Text style={styles.retryText}>Try again</Text>
                       </Pressable>
                     </>
-                  ) : (
-                    <>
-                      <Text style={styles.emptyEmoji}>🖼️</Text>
-                      <Text style={styles.emptyTitle}>No Flicks yet</Text>
-                      <Text style={styles.statusText}>There aren’t any Flicks to see right now.</Text>
-                    </>
-                  )}
-                </View>
+                    ) : (
+                      <>
+                        <Text style={styles.emptyEmoji}>🖼️</Text>
+                        <Text style={styles.emptyTitle}>No Flicks yet</Text>
+                        <Text style={styles.statusText}>There aren’t any Flicks to see right now.</Text>
+                      </>
+                    )}
+                  </View>
+                )
               }
               ListFooterComponent={
                 loadingMore ? (
@@ -433,7 +443,7 @@ export default function NativeFlicksScreen() {
             />
 
             <View pointerEvents="box-none" style={styles.header}>
-              <Pressable accessibilityLabel="Back to Feed" onPress={() => router.replace("/(app)")} style={styles.headerButton}>
+              <Pressable accessibilityLabel="Back to Feed" onPress={() => router.navigate("/(app)/(tabs)")} style={styles.headerButton}>
                 <Text style={styles.headerButtonText}>‹</Text>
               </Pressable>
               <View style={styles.heading}>
@@ -453,8 +463,8 @@ export default function NativeFlicksScreen() {
 
             <NativeSurfaceDock
               activeSurface="flicks"
-              onClipsPress={() => router.push("/(app)/clips")}
-              onFeedPress={() => router.replace("/(app)")}
+              onClipsPress={() => router.navigate("/(app)/(tabs)/clips")}
+              onFeedPress={() => router.navigate("/(app)/(tabs)")}
               onFlicksPress={() => listRef.current?.scrollToOffset({ offset: 0, animated: true })}
               visible={dockVisible}
             />
@@ -577,7 +587,7 @@ function MenuButton({
 const styles = StyleSheet.create({
   root: { flex: 1 },
   safeArea: { flex: 1, backgroundColor: "transparent" },
-  list: { flex: 1 },
+    list: { flex: 1, marginBottom: NATIVE_SURFACE_DOCK_HEIGHT },
   page: { position: "relative", width: "100%", overflow: "hidden", backgroundColor: "#020617" },
   photo: { width: "100%", height: "100%" },
   pageContent: { ...StyleSheet.absoluteFill, flexDirection: "row", alignItems: "flex-end", gap: 12, paddingHorizontal: 17, paddingBottom: 92 },

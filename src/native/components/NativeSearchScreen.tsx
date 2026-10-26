@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Image,
   Keyboard,
   Pressable,
@@ -13,14 +12,14 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { useNativeAuth } from "../contexts/NativeAuthProvider";
+import { useNativeEntitlement } from "../contexts/NativeEntitlementProvider";
 import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
-import { fetchNativeVibesProStatus } from "../lib/profile";
 import { searchNativeUsersByUsername, type NativeSearchUser } from "../lib/search";
+import { NativeSearchRowsSkeleton } from "./NativeScreenSkeletons";
 
 export default function NativeSearchScreen() {
   const router = useRouter();
-  const { session } = useNativeAuth();
+  const { entitlement, refresh: refreshEntitlement } = useNativeEntitlement();
   const { theme } = useNativeTheme();
   const isBlueSky = theme === "bluesky";
   const [query, setQuery] = useState("");
@@ -28,36 +27,8 @@ export default function NativeSearchScreen() {
   const [searching, setSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
-  const [isVibesPro, setIsVibesPro] = useState(false);
-  const [themeLoading, setThemeLoading] = useState(true);
-  const [themeError, setThemeError] = useState<string | null>(null);
   const requestId = useRef(0);
-  const userId = session?.user.id;
-
-  const loadTheme = useCallback(async () => {
-    if (!userId) {
-      setIsVibesPro(false);
-      setThemeLoading(false);
-      setThemeError(null);
-      return;
-    }
-
-    setThemeLoading(true);
-    setThemeError(null);
-    try {
-      setIsVibesPro(await fetchNativeVibesProStatus(userId));
-    } catch (cause) {
-      setThemeError(
-        cause instanceof Error ? cause.message : "Your account appearance could not be loaded.",
-      );
-    } finally {
-      setThemeLoading(false);
-    }
-  }, [userId]);
-
-  useEffect(() => {
-    void loadTheme();
-  }, [loadTheme]);
+  const isVibesPro = entitlement.status === "vibesPro";
 
   const runSearch = useCallback(async (value: string, currentRequest: number) => {
     const normalizedQuery = value.trim();
@@ -79,7 +50,6 @@ export default function NativeSearchScreen() {
     } catch (cause) {
       if (requestId.current !== currentRequest) return;
       setSearchError(cause instanceof Error ? cause.message : "Search failed. Please try again.");
-      setUsers([]);
       setHasSearched(true);
     } finally {
       if (requestId.current === currentRequest) setSearching(false);
@@ -100,29 +70,6 @@ export default function NativeSearchScreen() {
     });
   };
 
-  if (themeLoading || themeError) {
-    return (
-      <View style={[styles.statusScreen, isVibesPro && styles.vibesProStatusScreen, isBlueSky && styles.blueSkyStatusScreen]}>
-        <SafeAreaView edges={["top", "bottom"]} style={styles.statusContent}>
-          {themeLoading ? (
-            <ActivityIndicator color={isVibesPro ? "#7C5CFF" : "#0284c7"} size="large" />
-          ) : (
-            <>
-              <Text style={[styles.statusText, isVibesPro && styles.vibesProText, isBlueSky && styles.blueSkyText]}>{themeError}</Text>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => void loadTheme()}
-                style={styles.retryButton}
-              >
-                <Text style={styles.retryText}>Try again</Text>
-              </Pressable>
-            </>
-          )}
-        </SafeAreaView>
-      </View>
-    );
-  }
-
   return (
     <LinearGradient
       colors={isBlueSky ? NATIVE_THEME_COLORS.bluesky.background : isVibesPro ? NATIVE_THEME_COLORS.dark.background : ["#d9f3ff", "#eefaff", "#ffffff"]}
@@ -135,7 +82,7 @@ export default function NativeSearchScreen() {
           <Pressable
             accessibilityLabel="Go back"
             accessibilityRole="button"
-            onPress={() => router.back()}
+            onPress={() => router.canGoBack() ? router.back() : router.navigate("/(app)/(tabs)")}
             style={[styles.backButton, isVibesPro && styles.vibesProBackButton]}
           >
             <Text style={[styles.backText, isVibesPro && styles.vibesProText]}>‹</Text>
@@ -149,6 +96,16 @@ export default function NativeSearchScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          {entitlement.status === "error" ? (
+            <View style={[styles.messageCard, isVibesPro && styles.vibesProCard, isBlueSky && styles.blueSkyCard]}>
+              <Text style={[styles.messageText, isBlueSky && styles.blueSkyText]}>
+                VibesPro appearance could not be checked.
+              </Text>
+              <Pressable accessibilityRole="button" onPress={() => void refreshEntitlement()} style={styles.retryButton}>
+                <Text style={styles.retryText}>Retry account status</Text>
+              </Pressable>
+            </View>
+          ) : null}
           <TextInput
             accessibilityLabel="Search people by username"
             autoCapitalize="none"
@@ -171,7 +128,7 @@ export default function NativeSearchScreen() {
                 Search for people by their username
               </Text>
             </View>
-          ) : searchError ? (
+          ) : searchError && users.length === 0 ? (
             <View style={[styles.messageCard, isVibesPro && styles.vibesProCard, isBlueSky && styles.blueSkyCard]}>
               <Text accessibilityRole="alert" style={[styles.errorText, isBlueSky && styles.blueSkyText]}>{searchError}</Text>
               <Pressable
@@ -185,13 +142,8 @@ export default function NativeSearchScreen() {
                 <Text style={styles.retryText}>Try again</Text>
               </Pressable>
             </View>
-          ) : searching ? (
-            <View style={styles.loadingState}>
-              <ActivityIndicator color={isVibesPro ? "#D4AF37" : "#0284c7"} />
-              <Text style={[styles.messageText, isVibesPro && styles.vibesProMutedText, isBlueSky && styles.blueSkyMuted]}>
-                Searching people…
-              </Text>
-            </View>
+          ) : searching && users.length === 0 ? (
+            <NativeSearchRowsSkeleton count={4} />
           ) : users.length === 0 ? (
             <View style={[styles.messageCard, isVibesPro && styles.vibesProCard, isBlueSky && styles.blueSkyCard]}>
               <Text style={[styles.messageText, isVibesPro && styles.vibesProMutedText, isBlueSky && styles.blueSkyMuted]}>
@@ -202,7 +154,9 @@ export default function NativeSearchScreen() {
             <View>
               <Text style={[styles.resultsTitle, isVibesPro && styles.vibesProText, isBlueSky && styles.blueSkyText]}>
                 👥 {users.length} {users.length === 1 ? "person" : "people"}
+                {searching ? " · Updating" : ""}
               </Text>
+              {searchError ? <Text accessibilityRole="alert" style={styles.errorText}>{searchError}</Text> : null}
               <View style={styles.resultsList}>
                 {users.map((user) => (
                   <Pressable

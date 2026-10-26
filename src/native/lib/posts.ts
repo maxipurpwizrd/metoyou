@@ -173,13 +173,22 @@ export async function blockNativeUser(blockedUserId: string) {
 }
 
 export async function toggleNativePostLike(postId: string, userId: string) {
-  const { data: existing, error: lookupError } = await nativeSupabase
-    .from("post_likes")
-    .select("id")
-    .eq("post_id", postId)
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (lookupError) throw lookupError;
+  const [existingResult, postResult] = await Promise.all([
+    nativeSupabase
+      .from("post_likes")
+      .select("id")
+      .eq("post_id", postId)
+      .eq("user_id", userId)
+      .maybeSingle(),
+    nativeSupabase
+      .from("posts")
+      .select("likes_count")
+      .eq("id", postId)
+      .maybeSingle(),
+  ]);
+  if (existingResult.error) throw existingResult.error;
+  if (postResult.error) throw postResult.error;
+  const existing = existingResult.data;
 
   if (existing) {
     const { error } = await nativeSupabase
@@ -194,15 +203,26 @@ export async function toggleNativePostLike(postId: string, userId: string) {
     if (error) throw error;
   }
 
-  const { data: likes, error: likesError } = await nativeSupabase
+  const { count: likesCount, error: likesError } = await nativeSupabase
     .from("post_likes")
-    .select("user_id")
+    .select("user_id", { count: "exact", head: true })
     .eq("post_id", postId);
-  if (likesError) throw likesError;
+  const nextLiked = !existing;
+  if (likesError) console.warn("Could not refresh the post like count.", likesError);
+  const resolvedLikesCount = likesError
+    ? Math.max(0, Number(postResult.data?.likes_count ?? 0) + (nextLiked ? 1 : -1))
+    : likesCount ?? 0;
+  if (!likesError) {
+    const { error: countError } = await nativeSupabase
+      .from("posts")
+      .update({ likes_count: resolvedLikesCount })
+      .eq("id", postId);
+    if (countError) console.warn("Could not sync the post like count.", countError);
+  }
 
   return {
-    liked: (likes ?? []).some((like) => like.user_id === userId),
-    likesCount: likes?.length ?? 0,
+    liked: nextLiked,
+    likesCount: resolvedLikesCount,
   };
 }
 

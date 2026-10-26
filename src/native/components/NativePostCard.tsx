@@ -75,10 +75,15 @@ export default function NativePostCard({
   const [imageOpen, setImageOpen] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
-  const [imageAspect, setImageAspect] = useState<number | null>(null);
+  const [captionHasScrolled, setCaptionHasScrolled] = useState(false);
+  const [captionScrollSize, setCaptionScrollSize] = useState({ contentHeight: 0, viewportHeight: 0 });
   const [commentCount, setCommentCount] = useState(post.comments_count ?? 0);
-  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const { width: screenWidth } = useWindowDimensions();
   const wideLayout = screenWidth >= 768;
+  const captionLineHeight = wideLayout ? 25 : 22;
+  const imageCaptionHeight = captionLineHeight * 5 + 22;
+  const imagePostHeight = imageCaptionHeight + 9 + 36 * 2 + 8;
+  const imageOnlyHeight = 360;
   const router = useRouter();
   const isVibesPro = isVibesProEnabled({
     is_vibes_pro: post.profiles?.is_vibes_pro ?? undefined,
@@ -88,16 +93,23 @@ export default function NativePostCard({
   const avatar = post.profiles?.profile_pic;
   const text = post.text?.trim() ?? "";
   const longText = text.length > 220 || text.split(/\r?\n/).length > 5;
-  const previewText = longText
-    ? text.length > 220
-      ? `${text.slice(0, 220).trimEnd()}…`
-      : `${text.split(/\r?\n/).slice(0, 7).join("\n")}…`
-    : text;
+
+  useEffect(() => {
+    setCaptionHasScrolled(false);
+    setCaptionScrollSize({ contentHeight: 0, viewportHeight: 0 });
+  }, [post.id, text]);
+
+  const captionScrollable = captionScrollSize.contentHeight > captionScrollSize.viewportHeight + 1;
+  const updateCaptionViewport = (viewportHeight: number) => {
+    setCaptionScrollSize((current) => ({ ...current, viewportHeight }));
+  };
+  const updateCaptionContent = (contentHeight: number) => {
+    setCaptionScrollSize((current) => ({ ...current, contentHeight }));
+  };
 
   useEffect(() => {
     setImageLoaded(false);
     setImageFailed(false);
-    setImageAspect(null);
   }, [post.image_url]);
 
   useEffect(() => {
@@ -140,12 +152,19 @@ export default function NativePostCard({
 
   const toggleLike = async () => {
     if (likeBusy) return;
+    const previousLiked = liked;
+    const previousLikesCount = likesCount;
+    const nextLiked = !previousLiked;
+    setLiked(nextLiked);
+    setLikesCount(Math.max(0, previousLikesCount + (nextLiked ? 1 : -1)));
     setLikeBusy(true);
     try {
       const result = await onToggleLike(post);
       setLiked(result.liked);
       setLikesCount(result.likesCount);
     } catch (cause) {
+      setLiked(previousLiked);
+      setLikesCount(previousLikesCount);
       Alert.alert("Could not update like", cause instanceof Error ? cause.message : "Please try again.");
     } finally {
       setLikeBusy(false);
@@ -295,14 +314,21 @@ export default function NativePostCard({
         </View>
 
         {post.image_url ? (
-          <View style={[styles.imagePostLayout, wideLayout && styles.imagePostLayoutWide]}>
+          <View
+            style={[
+              styles.imagePostLayout,
+              wideLayout && styles.imagePostLayoutWide,
+              !text && styles.imageOnlyPostLayout,
+            ]}
+          >
             <View
               style={[
                 styles.imageFrame,
                 {
-                  width: wideLayout ? "100%" : "45%",
-                  aspectRatio: imageAspect ?? 4 / 3,
-                  maxHeight: screenHeight * 0.7,
+                  width: wideLayout || !text ? "100%" : "45%",
+                  ...(text
+                    ? { height: imagePostHeight }
+                    : { height: imageOnlyHeight }),
                 },
                 isVibesPro && styles.goldenImageFrame,
               ]}
@@ -327,12 +353,8 @@ export default function NativePostCard({
                       setImageLoaded(true);
                       setImageFailed(true);
                     }}
-                    onLoad={(event) => {
-                      const { width: imageWidth, height: imageHeight } = event.nativeEvent.source;
-                      setImageLoaded(true);
-                      if (imageWidth > 0 && imageHeight > 0) setImageAspect(imageWidth / imageHeight);
-                    }}
-                    resizeMode="contain"
+                    onLoad={() => setImageLoaded(true)}
+                    resizeMode="cover"
                     source={{ uri: post.image_url }}
                     style={styles.postImage}
                   />
@@ -340,31 +362,63 @@ export default function NativePostCard({
               )}
             </View>
 
-            <View style={[styles.imageDetails, wideLayout && styles.imageDetailsWide]}>
+            <View
+              style={[
+                styles.imageDetails,
+                text && { height: imagePostHeight },
+                !text && styles.imageOnlyDetails,
+                wideLayout && styles.imageDetailsWide,
+              ]}
+            >
               {text ? (
-                <View style={[styles.captionFrame, styles.imageCaptionFrame, isVibesPro && styles.goldenCaptionFrame]}>
-                  <ScrollView
-                    nestedScrollEnabled
-                    showsVerticalScrollIndicator
-                    style={[styles.imageCaptionScroll, wideLayout && styles.imageCaptionScrollWide]}
-                  >
-                    <Text style={[styles.captionText, wideLayout && styles.captionTextWide, isVibesPro && styles.goldenCaptionText]}>
-                      {longText ? previewText : text}
-                    </Text>
-                    {longText ? (
-                      <Pressable
-                        accessibilityLabel="Read full post text"
-                        accessibilityRole="button"
-                        onPress={() => setReadingOpen(true)}
-                        style={styles.moreButton}
-                      >
-                        <Text style={styles.moreText}>More</Text>
-                      </Pressable>
+                <View
+                  style={[
+                    styles.captionFrame,
+                    styles.imageCaptionFrame,
+                    { height: imageCaptionHeight },
+                    isVibesPro && styles.goldenCaptionFrame,
+                  ]}
+                >
+                  <View style={styles.imageCaptionContent}>
+                    <ScrollView
+                      nestedScrollEnabled
+                      scrollEnabled={captionScrollable}
+                      onContentSizeChange={(_, height) => updateCaptionContent(height)}
+                      onLayout={({ nativeEvent }) => updateCaptionViewport(nativeEvent.layout.height)}
+                      onScroll={({ nativeEvent }) => {
+                        if (nativeEvent.contentOffset.y > 4) setCaptionHasScrolled(true);
+                      }}
+                      scrollEventThrottle={16}
+                      showsVerticalScrollIndicator
+                      style={styles.imageCaptionScroll}
+                    >
+                      <Text style={[styles.captionText, wideLayout && styles.captionTextWide, isVibesPro && styles.goldenCaptionText]}>
+                        {text}
+                      </Text>
+                    </ScrollView>
+                    {longText && captionHasScrolled ? (
+                      <View pointerEvents="box-none" style={styles.moreOverlay}>
+                        <Pressable
+                          accessibilityLabel="Read full post text"
+                          accessibilityRole="button"
+                          onPress={() => setReadingOpen(true)}
+                          style={styles.moreButton}
+                        >
+                          <Text style={styles.moreText}>More</Text>
+                        </Pressable>
+                      </View>
                     ) : null}
-                  </ScrollView>
+                  </View>
                 </View>
               ) : null}
-              <View style={styles.imageInteractions}>
+              <View
+                style={[
+                  styles.imageInteractions,
+                  !text && styles.imageOnlyInteractions,
+                  !text && styles.interactions,
+                  !text && isVibesPro && styles.goldenInteractions,
+                ]}
+              >
                 <Pressable
                   accessibilityLabel={`${liked ? "Unlike" : "Like"} post, ${likesCount} likes`}
                   accessibilityRole="button"
@@ -372,17 +426,14 @@ export default function NativePostCard({
                   onPress={() => void toggleLike()}
                   style={({ pressed }) => [
                     styles.imageInteractionButton,
+                    !text && styles.imageOnlyInteractionButton,
                     isVibesPro && styles.goldenInteraction,
                     pressed && styles.pressed,
                   ]}
                 >
-                  {likeBusy ? (
-                    <ActivityIndicator color={isVibesPro ? "#78350f" : "#0284c7"} size="small" />
-                  ) : (
-                    <Text style={[styles.interactionText, isVibesPro && styles.goldenInteractionText]}>
-                      {liked ? "❤️" : "🤍"} {likesCount}
-                    </Text>
-                  )}
+                  <Text style={[styles.interactionText, isVibesPro && styles.goldenInteractionText]}>
+                    {liked ? "❤️" : "🤍"} {likesCount}{!text ? " likes" : ""}
+                  </Text>
                 </Pressable>
                 <Pressable
                   accessibilityLabel={`Open ${commentCount} comments`}
@@ -390,12 +441,13 @@ export default function NativePostCard({
                   onPress={() => setCommentsOpen(true)}
                   style={({ pressed }) => [
                     styles.imageInteractionButton,
+                    !text && styles.imageOnlyInteractionButton,
                     isVibesPro && styles.goldenInteraction,
                     pressed && styles.pressed,
                   ]}
                 >
                   <Text style={[styles.interactionText, isVibesPro && styles.goldenInteractionText]}>
-                    💬 {commentCount}
+                    💬 {commentCount}{!text ? " comments" : ""}
                   </Text>
                 </Pressable>
               </View>
@@ -404,7 +456,14 @@ export default function NativePostCard({
         ) : text ? (
           <>
             <View style={[styles.captionFrame, styles.textOnlyFrame, isVibesPro && styles.goldenCaptionFrame]}>
-              <ScrollView nestedScrollEnabled showsVerticalScrollIndicator style={styles.textOnlyScroll}>
+              <ScrollView
+                nestedScrollEnabled
+                onContentSizeChange={(_, height) => updateCaptionContent(height)}
+                onLayout={({ nativeEvent }) => updateCaptionViewport(nativeEvent.layout.height)}
+                scrollEnabled={captionScrollable}
+                showsVerticalScrollIndicator
+                style={styles.textOnlyScroll}
+              >
                 <Text style={[styles.captionText, wideLayout && styles.captionTextWide, isVibesPro && styles.goldenCaptionText]}>
                   {text}
                 </Text>
@@ -418,13 +477,9 @@ export default function NativePostCard({
                 onPress={() => void toggleLike()}
                 style={({ pressed }) => [styles.interactionButton, isVibesPro && styles.goldenInteraction, pressed && styles.pressed]}
               >
-                {likeBusy ? (
-                  <ActivityIndicator color={isVibesPro ? "#78350f" : "#0284c7"} size="small" />
-                ) : (
-                  <Text style={[styles.interactionText, isVibesPro && styles.goldenInteractionText]}>
-                    {liked ? "❤️" : "🤍"} {likesCount} likes
-                  </Text>
-                )}
+                <Text style={[styles.interactionText, isVibesPro && styles.goldenInteractionText]}>
+                  {liked ? "❤️" : "🤍"} {likesCount} likes
+                </Text>
               </Pressable>
               <Pressable
                 accessibilityLabel={`Open ${commentCount} comments`}
@@ -609,6 +664,8 @@ const styles = StyleSheet.create({
   imagePostLayoutWide: { flexDirection: "column", gap: 12 },
   imageDetails: { width: "55%", justifyContent: "space-between", minHeight: 136 },
   imageDetailsWide: { width: "100%" },
+  imageOnlyPostLayout: { flexDirection: "column", gap: 0 },
+  imageOnlyDetails: { width: "100%", minHeight: 0 },
   imageFrame: {
     flexShrink: 0,
     overflow: "hidden",
@@ -638,9 +695,10 @@ const styles = StyleSheet.create({
     borderColor: "#a16207",
     backgroundColor: "#ffe17a",
   },
-  imageCaptionFrame: { flex: 1, minHeight: 0, padding: 10, backgroundColor: "rgba(255,255,255,0.72)" },
-  imageCaptionScroll: { maxHeight: 144 },
-  imageCaptionScrollWide: { maxHeight: 240 },
+  imageCaptionFrame: { minHeight: 0, padding: 10, backgroundColor: "rgba(255,255,255,0.72)" },
+  imageCaptionContent: { flex: 1, minHeight: 0, position: "relative" },
+  imageCaptionScroll: { flex: 1, minHeight: 0 },
+  moreOverlay: { position: "absolute", left: 0, bottom: 0, right: 0, alignItems: "flex-start" },
   textOnlyFrame: { minHeight: 80, maxHeight: 240 },
   textOnlyScroll: { maxHeight: 240 },
   captionText: { color: "#334155", fontSize: 15, fontWeight: "500", lineHeight: 22 },
@@ -648,7 +706,6 @@ const styles = StyleSheet.create({
   goldenCaptionText: { color: "#3b1b00" },
   moreButton: {
     alignSelf: "flex-start",
-    marginTop: 8,
     paddingHorizontal: 11,
     paddingVertical: 5,
     overflow: "hidden",
@@ -662,6 +719,14 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   imageInteractions: { flexDirection: "column", gap: 8, marginTop: 9 },
+  imageOnlyInteractions: { flexDirection: "row", gap: 0, marginTop: 13 },
+  imageOnlyInteractionButton: {
+    flex: 1,
+    minHeight: 42,
+    borderWidth: 0,
+    borderRadius: 0,
+    backgroundColor: "transparent",
+  },
   imageInteractionButton: {
     minHeight: 36,
     alignItems: "center",

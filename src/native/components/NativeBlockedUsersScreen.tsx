@@ -15,6 +15,7 @@ import { useRouter } from "expo-router";
 import { nativeSupabase } from "../lib/supabase";
 import { useNativeAuth } from "../contexts/NativeAuthProvider";
 import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
+import { NativePeopleRowsSkeleton } from "./NativeScreenSkeletons";
 
 type BlockedUser = { id: string; username: string; profile_pic: string | null };
 
@@ -72,7 +73,11 @@ export default function NativeBlockedUsersScreen() {
     <LinearGradient colors={NATIVE_THEME_COLORS[theme].background} style={styles.root}>
       <SafeAreaView edges={["top"]} style={styles.safeArea}>
         <View style={[styles.header, isBlueSky && styles.blueSkyHeader]}>
-          <Pressable accessibilityLabel="Go back" onPress={() => router.back()} style={[styles.backButton, isBlueSky && styles.blueSkyControl]}>
+          <Pressable
+            accessibilityLabel="Go back"
+            onPress={() => router.replace("/(app)/settings")}
+            style={[styles.backButton, isBlueSky && styles.blueSkyControl]}
+          >
             <Text style={[styles.backText, isBlueSky && styles.blueSkyText]}>‹</Text>
           </Pressable>
           <View style={styles.headerCopy}>
@@ -81,9 +86,9 @@ export default function NativeBlockedUsersScreen() {
           </View>
           <View style={styles.spacer} />
         </View>
-        {loading ? (
-          <View style={styles.center}><ActivityIndicator color="#0284c7" size="large" /></View>
-        ) : error ? (
+        {loading && users.length === 0 ? (
+          <NativePeopleRowsSkeleton blocked count={5} />
+        ) : error && users.length === 0 ? (
           <View style={styles.center}>
             <Text style={[styles.errorText, isBlueSky && styles.blueSkyText]}>{error}</Text>
             <Pressable onPress={() => void loadUsers()} style={styles.retryButton}>
@@ -98,6 +103,11 @@ export default function NativeBlockedUsersScreen() {
           </View>
         ) : (
           <ScrollView contentContainerStyle={styles.content}>
+            {error ? (
+              <Pressable accessibilityRole="button" onPress={() => void loadUsers()}>
+                <Text style={[styles.errorText, isBlueSky && styles.blueSkyText]}>{error} · Tap to retry</Text>
+              </Pressable>
+            ) : null}
             {users.map((user) => (
               <View key={user.id} style={[styles.userRow, isBlueSky && styles.blueSkyCard]}>
                 {user.profile_pic ? (

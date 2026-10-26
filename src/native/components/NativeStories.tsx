@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -17,15 +17,18 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import { LinearGradient } from "expo-linear-gradient";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import NativeBlurBackdrop from "./NativeBlurBackdrop";
 import NativeConfirmDialog from "./NativeConfirmDialog";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNativeAuth } from "../contexts/NativeAuthProvider";
 import { useNativeTheme } from "../contexts/NativeThemeProvider";
 import { createNativeStory, deleteNativeStory, fetchNativeStories, type NativeStory } from "../lib/stories";
+import { nativeStoriesQueryKey } from "../lib/queryKeys";
 
 const SAVED_STORIES_KEY = "metoyou-saved-stories";
 const STORY_DURATIONS = [2, 4, 8, 12, 24];
+const EMPTY_STORIES: NativeStory[] = [];
 
 function getTimeLeft(expiresAt: string) {
   const hours = Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 3_600_000));
@@ -51,9 +54,18 @@ export default function NativeStories({
     typeof session?.user.user_metadata.avatar_url === "string"
       ? session.user.user_metadata.avatar_url
       : null;
-  const [stories, setStories] = useState<NativeStory[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const storiesQuery = useQuery({
+    queryKey: nativeStoriesQueryKey(authorId ?? ""),
+    queryFn: fetchNativeStories,
+    enabled: Boolean(authorId),
+    staleTime: 20_000,
+  });
+  const stories = (storiesQuery.data ?? EMPTY_STORIES).filter(
+    (story) => new Date(story.expires_at).getTime() > Date.now(),
+  );
+  const loading = storiesQuery.isPending;
+  const loadError = storiesQuery.error?.message ?? null;
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [progress, setProgress] = useState(0);
   const [composerOpen, setComposerOpen] = useState(false);
@@ -73,19 +85,7 @@ export default function NativeStories({
   const selectedStory = selectedIndex === null ? null : stories[selectedIndex] ?? null;
   const isOwner = Boolean(selectedStory && selectedStory.author_id === authorId);
 
-  const loadStories = useCallback(async () => {
-    setLoadError(null);
-    try {
-      setStories(await fetchNativeStories());
-    } catch (cause) {
-      setLoadError(cause instanceof Error ? cause.message : "Stories could not be loaded.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    void loadStories();
     void AsyncStorage.getItem(SAVED_STORIES_KEY)
       .then((raw) => {
         if (!raw) return;
@@ -100,14 +100,20 @@ export default function NativeStories({
           cause instanceof Error ? cause.message : "Saved stories could not be loaded.",
         );
       });
-  }, [loadStories]);
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setStories((current) => current.filter((story) => new Date(story.expires_at).getTime() > Date.now()));
+      if (!authorId) return;
+      queryClient.setQueryData<NativeStory[]>(
+        nativeStoriesQueryKey(authorId),
+        (current) => current?.filter(
+          (story) => new Date(story.expires_at).getTime() > Date.now(),
+        ),
+      );
     }, 60_000);
     return () => clearInterval(interval);
-  }, []);
+  }, [authorId, queryClient]);
 
   useEffect(() => {
     if (!selectedStory || selectedIndex === null) return;
@@ -213,7 +219,14 @@ export default function NativeStories({
         originalImageMimeType: image?.originalMimeType,
         durationHours: duration,
       });
-      setStories((current) => [story, ...current.filter((item) => item.id !== story.id)]);
+      if (authorId) {
+        const key = nativeStoriesQueryKey(authorId);
+        queryClient.setQueryData<NativeStory[]>(key, (current) => [
+          story,
+          ...(current ?? []).filter((item) => item.id !== story.id),
+        ]);
+        void queryClient.invalidateQueries({ queryKey: key });
+      }
       setComposerOpen(false);
     } catch (cause) {
       setComposerError(cause instanceof Error ? cause.message : "Unable to publish this story.");
@@ -251,7 +264,14 @@ export default function NativeStories({
     if (!storyToDelete || !authorId) return;
     const storyId = storyToDelete;
     await deleteNativeStory(storyId, authorId);
-    setStories((current) => current.filter((story) => story.id !== storyId));
+    if (authorId) {
+      const key = nativeStoriesQueryKey(authorId);
+      queryClient.setQueryData<NativeStory[]>(
+        key,
+        (current) => current?.filter((story) => story.id !== storyId),
+      );
+      void queryClient.invalidateQueries({ queryKey: key });
+    }
     setSelectedIndex(null);
     setMenuOpen(false);
     setStoryToDelete(null);
@@ -384,7 +404,7 @@ export default function NativeStories({
             >
               {loadError}
             </Text>
-            <Pressable accessibilityRole="button" onPress={() => void loadStories()}>
+            <Pressable accessibilityRole="button" onPress={() => void storiesQuery.refetch()}>
               <Text style={[styles.retryText, isVibesPro && styles.vibesProRetryText]}>Retry</Text>
             </Pressable>
           </View>

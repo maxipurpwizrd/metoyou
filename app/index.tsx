@@ -13,7 +13,7 @@ export default function IndexRoute() {
     );
   }
 
-  return <Redirect href={session ? "/(app)" : "/(auth)/login"} />;
+  return <Redirect href={session ? "/(app)/(tabs)" : "/(auth)/login"} />;
 }
 
 const styles = StyleSheet.create({

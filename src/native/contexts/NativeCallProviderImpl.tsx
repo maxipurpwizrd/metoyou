@@ -152,8 +152,8 @@ export function NativeCallProviderImpl({ children }: { children: ReactNode }) {
       duration_seconds: connected && startedAt
         ? Math.max(0, Math.round((endedAt.getTime() - startedAt.getTime()) / 1000))
         : 0,
-    });
-  }, []);
+    }, [userId ?? "", targetUserIdRef.current ?? ""]);
+  }, [userId]);
 
   const addPendingCandidates = useCallback(async (peerConnection: RTCPeerConnection) => {
     const candidates = pendingCandidatesRef.current;
@@ -191,7 +191,7 @@ export function NativeCallProviderImpl({ children }: { children: ReactNode }) {
         void updateNativeCallHistory(callHistoryIdRef.current, {
           status: "connected",
           answered_at: new Date().toISOString(),
-        });
+        }, [userId ?? "", targetUserIdRef.current ?? ""]);
       } else if (peerConnection.connectionState === "failed") {
         setCallError("The call connection failed. Check your network and try again.");
         updateHistoryForEnd("failed");
@@ -390,7 +390,7 @@ export function NativeCallProviderImpl({ children }: { children: ReactNode }) {
           status: "missed",
           ended_at: new Date().toISOString(),
           duration_seconds: 0,
-        });
+        }, [userId, signal.senderId ?? ""]);
         updateIncomingCall(null);
         targetUserIdRef.current = null;
         targetConversationIdRef.current = null;
@@ -639,7 +639,7 @@ export function NativeCallProviderImpl({ children }: { children: ReactNode }) {
       status: "declined",
       ended_at: new Date().toISOString(),
       duration_seconds: 0,
-    });
+    }, [userId, offer.senderId]);
     updateIncomingCall(null);
     targetUserIdRef.current = null;
     targetConversationIdRef.current = null;

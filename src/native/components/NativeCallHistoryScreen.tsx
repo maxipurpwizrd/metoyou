@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import {
   ActivityIndicator,
   Alert,
@@ -20,12 +21,15 @@ import { useNativeAuth } from "../contexts/NativeAuthProvider";
 import { useNativeCalls } from "../contexts/NativeCallContext";
 import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
 import {
-  fetchNativeCallHistory,
+  fetchNativeCallHistoryPage,
+  fetchNativeCallParticipantNames,
   type CallHistoryStatus,
-  type NativeCallHistoryRecord,
+  type NativeCallHistoryCursor,
 } from "../lib/calls";
 import { resolveNativeConversation } from "../lib/chat";
-import { nativeSupabase } from "../lib/supabase";
+import { nativeCallHistoryQueryKey, nativeCallParticipantProfilesQueryKey } from "../lib/queryKeys";
+import NativeSkeleton from "./NativeSkeleton";
+import { NativeCallHistoryRowsSkeleton } from "./NativeScreenSkeletons";
 
 type CallTarget = { id: string; username: string };
 
@@ -52,51 +56,41 @@ export default function NativeCallHistoryScreen() {
   const { theme } = useNativeTheme();
   const isBlueSky = theme === "bluesky";
   const userId = session?.user.id;
-  const [calls, setCalls] = useState<NativeCallHistoryRecord[]>([]);
-  const [usernames, setUsernames] = useState<Record<string, string>>({});
   const [pendingTarget, setPendingTarget] = useState<CallTarget | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const callsQuery = useInfiniteQuery({
+    queryKey: nativeCallHistoryQueryKey(userId ?? ""),
+    queryFn: ({ pageParam }) => fetchNativeCallHistoryPage(userId!, pageParam),
+    enabled: Boolean(userId),
+    initialPageParam: undefined as NativeCallHistoryCursor | undefined,
+    getNextPageParam: (lastPage) => {
+      const oldestRecord = lastPage.records.at(-1);
+      return lastPage.hasMore && oldestRecord
+        ? { createdAt: oldestRecord.created_at, id: oldestRecord.id }
+        : undefined;
+    },
+    staleTime: 15_000,
+  });
+  const calls = callsQuery.data?.pages.flatMap((page) => page.records) ?? [];
+  const participantIds = useMemo(
+    () => [...new Set(calls.map((call) =>
+      call.caller_id === userId ? call.recipient_id : call.caller_id
+    ))].sort(),
+    [calls, userId],
+  );
+  const participantProfilesQuery = useQuery({
+    queryKey: nativeCallParticipantProfilesQueryKey(userId ?? "", participantIds),
+    queryFn: () => fetchNativeCallParticipantNames(participantIds),
+    enabled: Boolean(userId && participantIds.length),
+    staleTime: 5 * 60_000,
+  });
+  const usernames = participantProfilesQuery.data ?? {};
+  const loading = callsQuery.isPending;
+  const refreshing = callsQuery.isRefetching || participantProfilesQuery.isRefetching;
+  const error = callsQuery.error?.message ?? participantProfilesQuery.error?.message ?? null;
 
-  const loadCalls = useCallback(async (refresh = false) => {
-    if (!userId) {
-      setCalls([]);
-      setLoading(false);
-      return;
-    }
-    if (refresh) setRefreshing(true);
-    else setLoading(true);
-    setError(null);
-    try {
-      const records = await fetchNativeCallHistory(userId);
-      const otherIds = [...new Set(records.map((record) =>
-        record.caller_id === userId ? record.recipient_id : record.caller_id
-      ))];
-      let nextUsernames: Record<string, string> = {};
-      if (otherIds.length > 0) {
-        const { data, error: profileError } = await nativeSupabase
-          .from("public_profiles")
-          .select("id, username")
-          .in("id", otherIds);
-        if (profileError) throw profileError;
-        nextUsernames = Object.fromEntries(
-          (data ?? []).map((profile) => [profile.id, profile.username]),
-        );
-      }
-      setCalls(records);
-      setUsernames(nextUsernames);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Call history could not be loaded.");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [userId]);
-
-  useEffect(() => {
-    void loadCalls();
-  }, [loadCalls]);
+  const loadCalls = useCallback(async () => {
+    await Promise.all([callsQuery.refetch(), participantProfilesQuery.refetch()]);
+  }, [callsQuery.refetch, participantProfilesQuery.refetch]);
 
   const redial = async (callType: "audio" | "video") => {
     if (!pendingTarget) return;
@@ -130,7 +124,12 @@ export default function NativeCallHistoryScreen() {
     <LinearGradient colors={NATIVE_THEME_COLORS[theme].background} style={styles.root}>
       <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
         <View style={[styles.header, isBlueSky && styles.blueSkyHeader]}>
-          <Pressable accessibilityLabel="Back to messages" accessibilityRole="button" onPress={() => router.replace("/(app)/messages")} style={[styles.backButton, isBlueSky && styles.blueSkyControl]}>
+          <Pressable
+            accessibilityLabel="Back to messages"
+            accessibilityRole="button"
+            onPress={() => router.replace("/(app)/(tabs)/messages")}
+            style={[styles.backButton, isBlueSky && styles.blueSkyControl]}
+          >
             <Text style={styles.backText}>‹</Text>
           </Pressable>
           <View style={styles.headerCopy}>
@@ -142,11 +141,8 @@ export default function NativeCallHistoryScreen() {
         </View>
 
         {loading ? (
-          <View style={styles.stateCard}>
-            <ActivityIndicator color="#ffffff" />
-            <Text style={styles.stateText}>Loading call history…</Text>
-          </View>
-        ) : error ? (
+          <NativeCallHistoryRowsSkeleton count={5} />
+        ) : error && calls.length === 0 ? (
           <View style={styles.stateCard}>
             <Text accessibilityRole="alert" style={styles.errorText}>{error}</Text>
             <Pressable onPress={() => void loadCalls()} style={styles.retryButton}>
@@ -165,17 +161,25 @@ export default function NativeCallHistoryScreen() {
             refreshControl={
               <RefreshControl
                 colors={["#ffffff"]}
-                onRefresh={() => void loadCalls(true)}
+                onRefresh={() => void loadCalls()}
                 refreshing={refreshing}
                 tintColor="#ffffff"
               />
             }
             showsVerticalScrollIndicator={false}
           >
+            {error ? (
+              <View style={styles.stateCard}>
+                <Text accessibilityRole="alert" style={styles.errorText}>{error}</Text>
+                <Pressable onPress={() => void loadCalls()} style={styles.retryButton}>
+                  <Text style={styles.retryText}>Retry</Text>
+                </Pressable>
+              </View>
+            ) : null}
             {calls.map((call) => {
               const otherId = call.caller_id === userId ? call.recipient_id : call.caller_id;
               const isOutgoing = call.caller_id === userId;
-              const username = usernames[otherId] ?? "MeToYou user";
+              const username = usernames[otherId];
               return (
                 <Pressable
                   accessibilityLabel={`Call ${username}, ${isOutgoing ? "outgoing" : "incoming"}, ${statusLabel(call.status)}`}
@@ -190,7 +194,11 @@ export default function NativeCallHistoryScreen() {
                       : <PhoneCall color="#ffffff" size={20} />}
                   </View>
                   <View style={styles.callCopy}>
-                    <Text numberOfLines={1} style={styles.username}>{username}</Text>
+                    {participantProfilesQuery.isPending && !participantProfilesQuery.data ? (
+                      <NativeSkeleton style={styles.usernameSkeleton} />
+                    ) : (
+                      <Text numberOfLines={1} style={styles.username}>{username ?? "MeToYou user"}</Text>
+                    )}
                     <Text numberOfLines={1} style={styles.callMeta}>
                       {isOutgoing ? "Outgoing" : "Incoming"} · {statusLabel(call.status)}
                     </Text>
@@ -204,6 +212,18 @@ export default function NativeCallHistoryScreen() {
                 </Pressable>
               );
             })}
+            {callsQuery.hasNextPage ? (
+              <Pressable
+                accessibilityRole="button"
+                disabled={callsQuery.isFetchingNextPage}
+                onPress={() => void callsQuery.fetchNextPage()}
+                style={styles.retryButton}
+              >
+                {callsQuery.isFetchingNextPage
+                  ? <ActivityIndicator color="#ffffff" />
+                  : <Text style={styles.retryText}>Load older calls</Text>}
+              </Pressable>
+            ) : null}
           </ScrollView>
         )}
 
@@ -252,6 +272,7 @@ const styles = StyleSheet.create({
   callIcon: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 15, backgroundColor: "#252b35" },
   callCopy: { flex: 1, minWidth: 0 },
   username: { color: "#ffffff", fontSize: 14, fontWeight: "800" },
+  usernameSkeleton: { width: "60%", height: 14 },
   callMeta: { color: "#ffffff", fontSize: 11, marginTop: 3 },
   callTime: { alignItems: "flex-end", maxWidth: "40%" },
   timestamp: { color: "#ffffff", fontSize: 10 },

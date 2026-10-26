@@ -36,4 +36,6 @@ export type MessageThread = {
   lastText?: string | null;
   lastTime?: string;
   hasOutgoingMessages?: boolean;
+  hasIncomingMessages?: boolean;
+  isSpam?: boolean;
 };

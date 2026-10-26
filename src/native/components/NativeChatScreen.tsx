@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import {
   ActivityIndicator,
   Alert,
@@ -36,10 +37,10 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import type { Message, MessageThread } from "../../types/message";
 import { formatDisplayTime } from "../../lib/time";
 import { useNativeAuth } from "../contexts/NativeAuthProvider";
+import { useNativeEntitlement } from "../contexts/NativeEntitlementProvider";
 import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
 import { useNativeCalls } from "../contexts/NativeCallContext";
 import { useNativePresence } from "../contexts/NativePresenceProvider";
-import { fetchNativeVibesProStatus } from "../lib/profile";
 import { nativeSupabase } from "../lib/supabase";
 import {
   deleteNativeMessage,
@@ -47,6 +48,7 @@ import {
   fetchNativeChatRecipient,
   fetchNativeConversationMessages,
   markNativeMessagesAsRead,
+  type NativeMessageCursor,
   type NativeChatAttachment,
   type NativeChatUpload,
   reactToNativeMessage,
@@ -56,7 +58,13 @@ import {
   uploadNativeChatAttachment,
   uploadNativeVoiceNote,
 } from "../lib/chat";
-import { fetchNativeMessageThreads } from "../lib/messages";
+import { fetchNativeConversationRequestStatus, fetchNativeMessageThreads } from "../lib/messages";
+import {
+  nativeChatConversationQueryKey,
+  nativeConversationMessagesQueryKey,
+  nativeMessageThreadsQueryKey,
+} from "../lib/queryKeys";
+import { NativeChatSkeleton } from "./NativeScreenSkeletons";
 import { getPresenceLabel } from "../../lib/presenceStatus";
 
 const EMOJIS = ["😀", "😂", "❤️", "🔥", "👍", "🎉", "😍", "🤔", "😎", "🙏", "😢", "👏"];
@@ -67,6 +75,56 @@ type Recipient = {
   username: string;
   profile_pic: string | null;
 };
+
+type NativeConversationMessagePage = Awaited<ReturnType<typeof fetchNativeConversationMessages>>;
+type NativeConversationMessageCache = InfiniteData<NativeConversationMessagePage, NativeMessageCursor | undefined>;
+
+function upsertMessageCache(
+  cache: NativeConversationMessageCache | undefined,
+  message: Message,
+): NativeConversationMessageCache | undefined {
+  if (!cache || cache.pages.length === 0) return cache;
+  const exists = cache.pages.some((page) => page.messages.some((item) => item.id === message.id));
+  return {
+    ...cache,
+    pages: cache.pages.map((page, index) => ({
+      ...page,
+      messages: exists
+        ? page.messages.map((item) => item.id === message.id ? message : item)
+        : index === 0
+          ? [...page.messages, message].sort((left, right) => left.created_at.localeCompare(right.created_at))
+          : page.messages,
+    })),
+  };
+}
+
+function updateMessageCache(
+  cache: NativeConversationMessageCache | undefined,
+  update: (message: Message) => Message,
+): NativeConversationMessageCache | undefined {
+  if (!cache) return cache;
+  return {
+    ...cache,
+    pages: cache.pages.map((page) => ({
+      ...page,
+      messages: page.messages.map(update),
+    })),
+  };
+}
+
+function removeMessageFromCache(
+  cache: NativeConversationMessageCache | undefined,
+  messageId: string,
+): NativeConversationMessageCache | undefined {
+  if (!cache) return cache;
+  return {
+    ...cache,
+    pages: cache.pages.map((page) => ({
+      ...page,
+      messages: page.messages.filter((message) => message.id !== messageId),
+    })),
+  };
+}
 
 function getReplyText(message: Message) {
   const metadata = message.metadata;
@@ -162,10 +220,12 @@ export default function NativeChatScreen() {
   const recipientId = Array.isArray(routeRecipientId) ? routeRecipientId[0] : routeRecipientId;
   const router = useRouter();
   const { session, loading: authLoading } = useNativeAuth();
+  const { entitlement } = useNativeEntitlement();
   const { theme } = useNativeTheme();
   const isBlueSky = theme === "bluesky";
   const { startCall } = useNativeCalls();
   const userId = session?.user.id;
+  const queryClient = useQueryClient();
   const recipientPresence = useNativePresence(recipientId);
   const listRef = useRef<FlatList<Message>>(null);
   const suppressAutoScrollRef = useRef(false);
@@ -180,15 +240,90 @@ export default function NativeChatScreen() {
   const recordingRef = useRef(false);
   const recordingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recordingSecondsRef = useRef(0);
-  const [recipient, setRecipient] = useState<Recipient | null>(null);
-  const [conversationId, setConversationId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const conversationQuery = useQuery({
+    queryKey: nativeChatConversationQueryKey(userId ?? "", recipientId ?? ""),
+    queryFn: async () => {
+      const [profile, conversation] = await Promise.all([
+        fetchNativeChatRecipient(recipientId!),
+        resolveNativeConversation(recipientId!),
+      ]);
+      if (conversation.user_1 !== userId && conversation.user_2 !== userId) {
+        throw new Error("You are not a member of this conversation.");
+      }
+      const requestStatus = await fetchNativeConversationRequestStatus(conversation.id, userId!, recipientId!);
+      return { recipient: profile as Recipient, conversation, requestStatus };
+    },
+    enabled: Boolean(!authLoading && userId && recipientId),
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
+  });
+  const recipient = conversationQuery.data?.recipient ?? null;
+  const conversationId = conversationQuery.data?.conversation.id ?? null;
+  const messagesQueryKey = nativeConversationMessagesQueryKey(userId ?? "", conversationId ?? "");
+  const messagesQuery = useInfiniteQuery({
+    queryKey: messagesQueryKey,
+    queryFn: ({ pageParam }) => fetchNativeConversationMessages(conversationId!, pageParam),
+    enabled: Boolean(userId && conversationId),
+    initialPageParam: undefined as NativeMessageCursor | undefined,
+    getNextPageParam: (lastPage) => {
+      const oldestMessage = lastPage.messages[0];
+      return lastPage.hasMore && oldestMessage
+        ? { createdAt: oldestMessage.created_at, id: oldestMessage.id }
+        : undefined;
+    },
+    staleTime: 15_000,
+    gcTime: 10 * 60_000,
+  });
+  const messages = useMemo(
+    () => (messagesQuery.data?.pages ?? [])
+      .flatMap((page) => page.messages)
+      .sort((left, right) => left.created_at.localeCompare(right.created_at)),
+    [messagesQuery.data],
+  );
+  const hasOlderMessages = Boolean(messagesQuery.hasNextPage);
+  const loadingOlderMessages = messagesQuery.isFetchingNextPage;
+  const hasOutgoingMessages = Boolean(conversationQuery.data?.requestStatus.hasOutgoingMessages || messages.some((message) => message.sender_id === userId));
+  const hasIncomingMessages = Boolean(conversationQuery.data?.requestStatus.hasIncomingMessages || messages.some((message) => message.sender_id === recipientId));
+  const isPendingMessageRequest = Boolean(
+    conversationQuery.data &&
+    !conversationQuery.data.requestStatus.isMutualFollow &&
+    !(hasOutgoingMessages && hasIncomingMessages),
+  );
+  const loading = authLoading || Boolean(
+    userId && recipientId && (
+      conversationQuery.isPending || (conversationId && messagesQuery.isPending)
+    ),
+  );
+  const initialLoadError = !conversationQuery.data && conversationQuery.isError
+    ? conversationQuery.error
+    : !messagesQuery.data && messagesQuery.isError
+      ? messagesQuery.error
+      : null;
+  const updateCachedMessages = useCallback((update: (message: Message) => Message) => {
+    queryClient.setQueryData<NativeConversationMessageCache>(
+      messagesQueryKey,
+      (current) => updateMessageCache(current, update),
+    );
+  }, [messagesQueryKey, queryClient]);
+  const cacheMessage = useCallback((message: Message) => {
+    queryClient.setQueryData<NativeConversationMessageCache>(
+      messagesQueryKey,
+      (current) => upsertMessageCache(current, message),
+    );
+  }, [messagesQueryKey, queryClient]);
+  const invalidateThreads = useCallback(() => {
+    if (!userId) return Promise.resolve();
+    return queryClient.invalidateQueries({
+      queryKey: nativeMessageThreadsQueryKey(userId),
+      exact: true,
+    });
+  }, [queryClient, userId]);
+  const readMarkedConversationRef = useRef<string | null>(null);
   const [input, setInput] = useState("");
   const [inputFocused, setInputFocused] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isVibesPro, setIsVibesPro] = useState(false);
+  const isVibesPro = entitlement.status === "vibesPro";
   const [emojiPickerVisible, setEmojiPickerVisible] = useState(false);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [editTarget, setEditTarget] = useState<Message | null>(null);
@@ -199,8 +334,6 @@ export default function NativeChatScreen() {
   const [forwardingToId, setForwardingToId] = useState<string | null>(null);
   const [messageActionError, setMessageActionError] = useState<string | null>(null);
   const [typing, setTyping] = useState(false);
-  const [hasOlderMessages, setHasOlderMessages] = useState(false);
-  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [attachment, setAttachment] = useState<NativeChatAttachment | null>(null);
   const [attachmentPickerVisible, setAttachmentPickerVisible] = useState(false);
   const [pendingVoiceUri, setPendingVoiceUri] = useState<string | null>(null);
@@ -248,9 +381,8 @@ export default function NativeChatScreen() {
         upload: { audioUrl },
         messageType: "audio",
       });
-      setMessages((current) => current.some((item) => item.id === message.id)
-        ? current
-        : [...current, message].sort((left, right) => left.created_at.localeCompare(right.created_at)));
+      cacheMessage(message);
+      void invalidateThreads();
       setInput("");
       setReplyTo(null);
       setPendingVoiceUri(null);
@@ -261,7 +393,7 @@ export default function NativeChatScreen() {
     } finally {
       setSending(false);
     }
-  }, [conversationId, input, replyTo, userId]);
+  }, [cacheMessage, conversationId, input, invalidateThreads, replyTo, userId]);
 
   const stopRecording = useCallback(async (sendImmediately = false) => {
     clearRecordingTimers();
@@ -358,78 +490,47 @@ export default function NativeChatScreen() {
   }, [clearRecordingTimers]);
 
   useEffect(() => {
-    if (!userId) return;
-    let active = true;
-    void fetchNativeVibesProStatus(userId)
-      .then((status) => {
-        if (active) setIsVibesPro(status);
-      })
-      .catch((cause: unknown) => {
-        if (active) setError(cause instanceof Error ? cause.message : "Your chat appearance could not be loaded.");
-      });
-    return () => {
-      active = false;
-    };
-  }, [userId]);
-
-  useEffect(() => {
     if (authLoading) return;
     if (!userId || !recipientId) {
-      setLoading(false);
       setError("A valid signed-in account and conversation recipient are required.");
       return;
     }
-    let active = true;
-    setLoading(true);
-    setError(null);
-    setMessages([]);
-    setConversationId(null);
+    const queryError = conversationQuery.error ?? messagesQuery.error;
+    if (queryError) setError(queryError.message || "This conversation could not be opened.");
+  }, [authLoading, conversationQuery.error, messagesQuery.error, recipientId, userId]);
 
-    void Promise.all([
-      fetchNativeChatRecipient(recipientId),
-      resolveNativeConversation(recipientId),
-    ]).then(async ([profile, conversation]) => {
-      if (!active) return;
-      if (conversation.user_1 !== userId && conversation.user_2 !== userId) {
-        throw new Error("You are not a member of this conversation.");
-      }
-      setRecipient(profile as Recipient);
-      setConversationId(conversation.id);
-      const initialPage = await fetchNativeConversationMessages(conversation.id);
-      if (!active) return;
-      setMessages((current) => {
-        const byId = new Map(current.map((message) => [message.id, message]));
-        for (const message of initialPage.messages) byId.set(message.id, message);
-        return [...byId.values()].sort((left, right) => left.created_at.localeCompare(right.created_at));
-      });
-      setHasOlderMessages(initialPage.hasMore);
-      await markNativeMessagesAsRead(conversation.id, userId);
-    }).catch((cause: unknown) => {
-      if (active) {
-        setError(cause instanceof Error ? cause.message : "This conversation could not be opened.");
-      }
-    }).finally(() => {
-      if (active) setLoading(false);
+  useEffect(() => {
+    if (!conversationId || !userId || !messagesQuery.data) return;
+    const marker = `${userId}:${conversationId}`;
+    if (readMarkedConversationRef.current === marker) return;
+    readMarkedConversationRef.current = marker;
+    void markNativeMessagesAsRead(conversationId, userId).catch((cause: unknown) => {
+      setError(cause instanceof Error ? cause.message : "Messages could not be marked as read.");
     });
-
-    return () => {
-      active = false;
-    };
-  }, [authLoading, recipientId, userId]);
+  }, [conversationId, messagesQuery.data, userId]);
 
   useEffect(() => {
     if (!conversationId || !userId) return;
     const messageChannel = subscribeToNativeMessages(conversationId, (message, event) => {
       if (event === "DELETE") {
-        setMessages((current) => current.filter((item) => item.id !== message.id));
+        queryClient.setQueryData<NativeConversationMessageCache>(
+          messagesQueryKey,
+          (current) => removeMessageFromCache(current, message.id),
+        );
+        void invalidateThreads();
         return;
       }
-      setMessages((current) => {
-        const existing = current.some((item) => item.id === message.id);
-        return existing
-          ? current.map((item) => item.id === message.id ? message : item)
-          : [...current, message].sort((left, right) => left.created_at.localeCompare(right.created_at));
-      });
+      if (event === "INSERT") {
+        cacheMessage(message);
+        void invalidateThreads();
+      } else {
+        const currentCache = queryClient.getQueryData<NativeConversationMessageCache>(messagesQueryKey);
+        const currentMessage = currentCache?.pages
+          .flatMap((page) => page.messages)
+          .find((item) => item.id === message.id);
+        updateCachedMessages((item) => item.id === message.id ? message : item);
+        if (currentMessage && currentMessage.text !== message.text) void invalidateThreads();
+      }
       if (event === "INSERT" && message.sender_id !== userId) {
         void markNativeMessagesAsRead(conversationId, userId).catch((cause: unknown) => {
           console.warn("Could not mark incoming messages as read.", cause);
@@ -452,7 +553,45 @@ export default function NativeChatScreen() {
       void nativeSupabase.removeChannel(messageChannel);
       void nativeSupabase.removeChannel(typingChannel);
     };
-  }, [conversationId, recipientId, userId]);
+  }, [cacheMessage, conversationId, invalidateThreads, messagesQueryKey, queryClient, recipientId, userId]);
+
+  useEffect(() => {
+    if (!userId || !recipientId) return;
+    const invalidateConversation = () => {
+      void queryClient.invalidateQueries({
+        queryKey: nativeChatConversationQueryKey(userId, recipientId),
+        exact: true,
+      });
+    };
+    const channel = nativeSupabase
+      .channel(`native-chat-follow-status:${userId}:${recipientId}`)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "followers",
+        filter: `follower_id=eq.${userId}`,
+      }, invalidateConversation)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "followers",
+        filter: `following_id=eq.${userId}`,
+      }, invalidateConversation)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "followers",
+        filter: `follower_id=eq.${recipientId}`,
+      }, invalidateConversation)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "followers",
+        filter: `following_id=eq.${recipientId}`,
+      }, invalidateConversation)
+      .subscribe();
+    return () => { void nativeSupabase.removeChannel(channel); };
+  }, [queryClient, recipientId, userId]);
 
   const sendTyping = useCallback((value: string) => {
     if (!conversationId || !userId || !typingChannelRef.current) return;
@@ -555,9 +694,8 @@ export default function NativeChatScreen() {
         upload,
         messageType,
       });
-      setMessages((current) => current.some((item) => item.id === message.id)
-        ? current
-        : [...current, message].sort((left, right) => left.created_at.localeCompare(right.created_at)));
+      cacheMessage(message);
+      void invalidateThreads();
       setInput("");
       setReplyTo(null);
       setAttachment(null);
@@ -573,26 +711,16 @@ export default function NativeChatScreen() {
   };
 
   const loadOlderMessages = async () => {
-    const oldestMessage = messages[0];
-    if (!conversationId || !oldestMessage || !hasOlderMessages || loadingOlderMessages) return;
-    setLoadingOlderMessages(true);
+    if (!conversationId || !hasOlderMessages || loadingOlderMessages) return;
     setError(null);
     try {
-      const page = await fetchNativeConversationMessages(
-        conversationId,
-        oldestMessage.created_at,
-      );
-      suppressAutoScrollRef.current = page.messages.length > 0;
-      setMessages((current) => {
-        const byId = new Map(page.messages.map((message) => [message.id, message]));
-        for (const message of current) byId.set(message.id, message);
-        return [...byId.values()].sort((left, right) => left.created_at.localeCompare(right.created_at));
-      });
-      setHasOlderMessages(page.hasMore);
+      suppressAutoScrollRef.current = true;
+      const result = await messagesQuery.fetchNextPage();
+      if (result.isError) throw result.error;
+      if (!result.data?.pages.at(-1)?.messages.length) suppressAutoScrollRef.current = false;
     } catch (cause) {
+      suppressAutoScrollRef.current = false;
       setError(cause instanceof Error ? cause.message : "Older messages could not be loaded.");
-    } finally {
-      setLoadingOlderMessages(false);
     }
   };
 
@@ -603,7 +731,8 @@ export default function NativeChatScreen() {
     setError(null);
     try {
       const updated = await editNativeMessage(editTarget.id, userId, text);
-      setMessages((current) => current.map((message) => message.id === updated.id ? updated : message));
+      updateCachedMessages((message) => message.id === updated.id ? updated : message);
+      void invalidateThreads();
       setEditTarget(null);
       setInput("");
     } catch (cause) {
@@ -622,7 +751,13 @@ export default function NativeChatScreen() {
         style: "destructive",
         onPress: () => {
           void deleteNativeMessage(message.id, userId)
-            .then(() => setMessages((current) => current.filter((item) => item.id !== message.id)))
+            .then(() => {
+              queryClient.setQueryData<NativeConversationMessageCache>(
+                messagesQueryKey,
+                (current) => removeMessageFromCache(current, message.id),
+              );
+              void invalidateThreads();
+            })
             .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "The message could not be deleted."));
         },
       },
@@ -660,7 +795,11 @@ export default function NativeChatScreen() {
     setLoadingForwardThreads(true);
     setMessageActionError(null);
     try {
-      const threads = await fetchNativeMessageThreads(userId);
+      const threads = await queryClient.fetchQuery({
+        queryKey: nativeMessageThreadsQueryKey(userId),
+        queryFn: () => fetchNativeMessageThreads(userId),
+        staleTime: 20_000,
+      });
       setForwardThreads(threads.filter((thread) => thread.conversationId !== conversationId));
     } catch (cause) {
       setMessageActionError(cause instanceof Error ? cause.message : "Chats could not be loaded.");
@@ -693,6 +832,7 @@ export default function NativeChatScreen() {
         messageType: message.message_type ?? undefined,
         forwarded: true,
       });
+      void invalidateThreads();
       closeMessageActions();
       Alert.alert("Message forwarded", `Sent to ${thread.otherUsername}.`);
     } catch (cause) {
@@ -708,9 +848,9 @@ export default function NativeChatScreen() {
     const action = existing.includes(userId) ? "remove" : "add";
     try {
       const result = await reactToNativeMessage(message.id, emoji, action);
-      setMessages((current) => current.map((item) => item.id === message.id
+      updateCachedMessages((item) => item.id === message.id
         ? { ...item, reactions: result.reactions }
-        : item));
+        : item);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The reaction could not be saved.");
     }
@@ -737,7 +877,12 @@ export default function NativeChatScreen() {
           style={styles.keyboard}
         >
           <View style={[styles.header, isVibesPro && styles.premiumHeader, isBlueSky && styles.blueSkyHeader]}>
-            <Pressable accessibilityLabel="Back to messages" accessibilityRole="button" onPress={() => router.replace("/(app)/messages")} style={styles.backButton}>
+            <Pressable
+              accessibilityLabel="Back to messages"
+              accessibilityRole="button"
+              onPress={() => router.canGoBack() ? router.back() : router.replace("/messages")}
+              style={styles.backButton}
+            >
               <Text style={[styles.backText, primaryText]}>‹</Text>
             </Pressable>
             {recipient?.profile_pic ? (
@@ -764,7 +909,7 @@ export default function NativeChatScreen() {
             </Pressable>
           </View>
 
-          {error ? (
+          {error && !initialLoadError ? (
             <View accessibilityRole="alert" style={styles.errorBanner}>
               <Text style={styles.errorText}>{error}</Text>
               <Pressable accessibilityLabel="Dismiss error" onPress={() => setError(null)}>
@@ -773,10 +918,33 @@ export default function NativeChatScreen() {
             </View>
           ) : null}
 
+          {isPendingMessageRequest && recipient ? (
+            <View accessibilityRole="alert" style={[styles.messageRequestNotice, isVibesPro && styles.premiumMessageRequestNotice, isBlueSky && styles.blueSkyMessageRequestNotice]}>
+              <Text style={[styles.messageRequestTitle, isVibesPro && styles.premiumRequestText]}>
+                {hasIncomingMessages ? "Message request" : "Not mutual followers"}
+              </Text>
+              <Text style={[styles.messageRequestText, isVibesPro && styles.premiumRequestText]}>
+                {hasIncomingMessages
+                  ? `Messages from @${recipient.username} are in Spam. Reply or follow them back to move this conversation to Messages.`
+                  : `You are not mutual followers. Messages you send will go to @${recipient.username}'s Spam until they reply or follow you back.`}
+              </Text>
+            </View>
+          ) : null}
+
           {loading ? (
+            <NativeChatSkeleton />
+          ) : initialLoadError ? (
             <View style={styles.loading}>
-              <ActivityIndicator color="#ffffff" />
-              <Text style={[styles.loadingText, mutedText]}>Opening conversation…</Text>
+              <Text style={[styles.loadingText, mutedText]}>{initialLoadError.message}</Text>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => conversationQuery.data
+                  ? void messagesQuery.refetch()
+                  : void conversationQuery.refetch()}
+                style={styles.loadOlderButton}
+              >
+                <Text style={[styles.loadOlderText, mutedText]}>Try again</Text>
+              </Pressable>
             </View>
           ) : (
             <FlatList
@@ -1294,6 +1462,12 @@ const styles = StyleSheet.create({
   errorBanner: { flexDirection: "row", alignItems: "center", gap: 10, marginHorizontal: 14, marginTop: 10, padding: 10, borderWidth: 1, borderColor: "#454b55", borderRadius: 15, backgroundColor: "#151a22" },
   errorText: { flex: 1, color: "#fda4af", fontSize: 12 },
   errorDismiss: { color: "#fda4af", fontSize: 22, paddingHorizontal: 4 },
+  messageRequestNotice: { gap: 4, marginHorizontal: 14, marginTop: 10, padding: 12, borderWidth: 1, borderColor: "#f59e0b", borderRadius: 14, backgroundColor: "#fffbeb" },
+  premiumMessageRequestNotice: { borderColor: "#854d0e", backgroundColor: "#2a1a08" },
+  blueSkyMessageRequestNotice: { borderColor: "#54b8ff", backgroundColor: "#0b2d5b" },
+  messageRequestTitle: { color: "#92400e", fontSize: 13, fontWeight: "900" },
+  messageRequestText: { color: "#78350f", fontSize: 12, lineHeight: 18 },
+  premiumRequestText: { color: "#fde68a" },
   loading: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10 },
   loadingText: { fontSize: 13 },
   messageList: { flexGrow: 1, justifyContent: "flex-end", paddingHorizontal: 14, paddingVertical: 18, gap: 12 },

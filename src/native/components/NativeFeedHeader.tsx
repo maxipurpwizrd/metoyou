@@ -3,7 +3,6 @@ import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-nativ
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { UserRound } from "lucide-react-native";
-import { useNativeAuth } from "../contexts/NativeAuthProvider";
 import { useNativeTheme } from "../contexts/NativeThemeProvider";
 
 const VIBES_PRO_BRAND_COLORS = ["#7C5CFF", "#00D4FF", "#D4AF37", "#FF5CC8"];
@@ -76,13 +75,8 @@ export default function NativeFeedHeader({
   isVibesPro?: boolean;
 }) {
   const router = useRouter();
-  const { session } = useNativeAuth();
   const { theme } = useNativeTheme();
   const isBlueSky = theme === "bluesky";
-  const profileRouteUsername =
-    typeof session?.user.user_metadata.username === "string"
-      ? session.user.user_metadata.username
-      : "me";
 
   const navButton = (
     label: string,
@@ -97,7 +91,7 @@ export default function NativeFeedHeader({
       onPress={onPress}
       style={({ pressed }) => [
         styles.navButton,
-        active && (isVibesPro ? styles.vibesProNavButtonActive : isBlueSky ? styles.blueSkyNavButtonActive : styles.navButtonActive),
+        active && (isBlueSky ? styles.blueSkyNavButtonActive : isVibesPro ? styles.vibesProNavButtonActive : styles.navButtonActive),
         pressed && styles.pressed,
       ]}
     >
@@ -116,10 +110,10 @@ export default function NativeFeedHeader({
   return (
     <>
       <LinearGradient
-        colors={isVibesPro ? ["#0B0B0B", "#101016", "#0B0B0B"] : isBlueSky ? ["#061a3a", "#0b3b78", "#125baa"] : ["#e0f2fe", "#ffffff", "#cffafe"]}
+        colors={isBlueSky ? ["#061a3a", "#0b3b78", "#125baa"] : isVibesPro ? ["#0B0B0B", "#101016", "#0B0B0B"] : ["#e0f2fe", "#ffffff", "#cffafe"]}
         end={{ x: 1, y: 1 }}
         start={{ x: 0, y: 0 }}
-        style={[styles.header, isVibesPro && styles.vibesProHeader, !isVibesPro && isBlueSky && styles.blueSkyHeader]}
+        style={[styles.header, isVibesPro && !isBlueSky && styles.vibesProHeader, isBlueSky && styles.blueSkyHeader]}
       >
         {isVibesPro ? (
           <VibesProBrand />
@@ -133,22 +127,16 @@ export default function NativeFeedHeader({
             <>
               {navButton("Home", "🏠", onFeedPress, true)}
               {navButton("Search", "🔍", () => router.push("/(app)/search"))}
-              {navButton("Messages", "💬", () => router.push("/(app)/messages"))}
+              {navButton("Messages", "💬", () => router.navigate("/(app)/(tabs)/messages"))}
               {navButton("Notifications", "🔔", () => router.push("/(app)/notifications"))}
-              {navButton("Profile", null, () => router.push({
-                pathname: "/(app)/profile/[username]",
-                params: { username: profileRouteUsername },
-              }))}
+              {navButton("Profile", null, () => router.navigate("/(app)/(tabs)/profile"))}
             </>
           ) : (
             <>
               {navButton("Search", "🔍", () => router.push("/(app)/search"))}
               {navButton("Feed", "🏠", onFeedPress, true)}
-              {navButton("Profile", null, () => router.push({
-                pathname: "/(app)/profile/[username]",
-                params: { username: profileRouteUsername },
-              }))}
-              {navButton("Messages", "💬", () => router.push("/(app)/messages"))}
+              {navButton("Profile", null, () => router.navigate("/(app)/(tabs)/profile"))}
+              {navButton("Messages", "💬", () => router.navigate("/(app)/(tabs)/messages"))}
               {navButton("Notifications", "🔔", () => router.push("/(app)/notifications"))}
             </>
           )}

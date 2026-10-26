@@ -19,8 +19,8 @@ import { BlurTargetView } from "expo-blur";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
 import { useNativeAuth } from "../contexts/NativeAuthProvider";
+import { useNativeEntitlement } from "../contexts/NativeEntitlementProvider";
 import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
-import { nativeSupabase } from "../lib/supabase";
 import {
   fetchNativeClipById,
   fetchNativeClipsPage,
@@ -39,7 +39,8 @@ import NativeBlurBackdrop, { NativeBlurTargetContext } from "./NativeBlurBackdro
 import NativeClipCard from "./NativeClipCard";
 import NativeCommentsSheet from "./NativeCommentsSheet";
 import NativeConfirmDialog from "./NativeConfirmDialog";
-import NativeSurfaceDock, { useNativeSurfaceDockVisibility } from "./NativeSurfaceDock";
+import { NativeVerticalMediaSkeleton } from "./NativeScreenSkeletons";
+import NativeSurfaceDock, { NATIVE_SURFACE_DOCK_HEIGHT, useNativeSurfaceDockVisibility } from "./NativeSurfaceDock";
 
 const REPORT_REASONS = [
   "Bullying or abuse",
@@ -55,6 +56,7 @@ export default function NativeClipsScreen() {
   const isFocused = useIsFocused();
   const blurTargetRef = useRef<View | null>(null);
   const { session } = useNativeAuth();
+  const { entitlement, refresh: refreshEntitlement } = useNativeEntitlement();
   const { theme, setTheme } = useNativeTheme();
   const darkTheme = theme === "dark";
   const userId = session?.user.id;
@@ -71,7 +73,7 @@ export default function NativeClipsScreen() {
   const likingClipIds = useRef(new Set<string>());
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 75 }).current;
   const [pageHeight, setPageHeight] = useState(
-    Math.max(1, window.height - insets.top - insets.bottom),
+    Math.max(1, window.height - insets.top - insets.bottom - NATIVE_SURFACE_DOCK_HEIGHT),
   );
   const [clips, setClips] = useState<NativeClip[]>([]);
   const [activeClipId, setActiveClipId] = useState<string | null>(null);
@@ -80,10 +82,7 @@ export default function NativeClipsScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [feedError, setFeedError] = useState<string | null>(null);
-  const [profileLoading, setProfileLoading] = useState(true);
-  const [isVibesPro, setIsVibesPro] = useState(false);
-  const [profileError, setProfileError] = useState<string | null>(null);
-  const [profileRetry, setProfileRetry] = useState(0);
+  const isVibesPro = entitlement.status === "vibesPro";
   const [commentsClipId, setCommentsClipId] = useState<string | null>(
     () => requestedPostId && requestedShowComments ? requestedPostId : null,
   );
@@ -94,49 +93,6 @@ export default function NativeClipsScreen() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [blockedAuthorIds, setBlockedAuthorIds] = useState<Set<string>>(() => new Set());
   const { visible: dockVisible, onScroll: handleDockScroll } = useNativeSurfaceDockVisibility();
-
-  useEffect(() => {
-    if (!userId) {
-      setProfileLoading(false);
-      setIsVibesPro(false);
-      return;
-    }
-
-    let active = true;
-    setProfileLoading(true);
-    setProfileError(null);
-    void (async () => {
-      try {
-        const { data, error } = await nativeSupabase
-          .from("profiles")
-          .select("*")
-          .eq("id", userId)
-          .maybeSingle();
-        if (error) throw error;
-        if (!data) throw new Error("Your profile could not be found.");
-        const profileFlags = data as {
-          is_vibespro?: boolean | null;
-          is_vibes_pro?: boolean | null;
-          vibes_pro?: boolean | null;
-        };
-        const hasVibesPro =
-          profileFlags.is_vibespro ??
-          profileFlags.is_vibes_pro ??
-          profileFlags.vibes_pro ??
-          false;
-        if (active) setIsVibesPro(hasVibesPro === true);
-      } catch (cause) {
-        if (active) {
-          setProfileError(cause instanceof Error ? cause.message : "VibesPro access could not be checked.");
-        }
-      } finally {
-        if (active) setProfileLoading(false);
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [profileRetry, userId]);
 
   const loadFirstPage = useCallback(async (refresh = false) => {
     if (!userId || !isVibesPro || requestedPostId) return;
@@ -252,10 +208,17 @@ export default function NativeClipsScreen() {
   const toggleLike = async (clip: NativeClip) => {
     if (!userId || likingClipIds.current.has(clip.id)) return;
     likingClipIds.current.add(clip.id);
+    const previousLiked = clip.liked;
+    const previousLikesCount = clip.likes_count;
+    updateClip(clip.id, {
+      liked: !previousLiked,
+      likes_count: Math.max(0, previousLikesCount + (previousLiked ? -1 : 1)),
+    });
     try {
       const result = await toggleNativePostLike(clip.id, userId);
       updateClip(clip.id, { liked: result.liked, likes_count: result.likesCount });
     } catch (cause) {
+      updateClip(clip.id, { liked: previousLiked, likes_count: previousLikesCount });
       Alert.alert("Could not update like", cause instanceof Error ? cause.message : "Please try again.");
     } finally {
       likingClipIds.current.delete(clip.id);
@@ -345,32 +308,31 @@ export default function NativeClipsScreen() {
       <NativeBlurTargetContext.Provider value={blurTargetRef}>
       <SafeAreaView
         edges={["top", "bottom"]}
-        onLayout={(event) => setPageHeight(event.nativeEvent.layout.height)}
         style={styles.safeArea}
       >
         <BlurTargetView ref={blurTargetRef} style={styles.safeArea}>
-        {profileLoading ? (
+        {entitlement.status === "loading" || entitlement.status === "unknown" ? (
           <View style={styles.center}>
             <ActivityIndicator color="#0284c7" size="large" />
             <Text style={styles.statusText}>Checking your VibesPro access…</Text>
           </View>
-        ) : profileError ? (
+        ) : entitlement.status === "error" ? (
           <View style={styles.center}>
             <Text style={styles.errorTitle}>Couldn’t check access</Text>
-            <Text style={styles.statusText}>{profileError}</Text>
-            <Pressable onPress={() => setProfileRetry((retry) => retry + 1)} style={styles.retryButton}>
+            <Text style={styles.statusText}>{entitlement.error.message}</Text>
+            <Pressable onPress={() => void refreshEntitlement()} style={styles.retryButton}>
               <Text style={styles.retryText}>Try again</Text>
             </Pressable>
-            <Pressable onPress={() => router.replace("/(app)")} style={styles.secondaryButton}>
+            <Pressable onPress={() => router.navigate("/(app)/(tabs)")} style={styles.secondaryButton}>
               <Text style={styles.secondaryButtonText}>Back to Feed</Text>
             </Pressable>
           </View>
-        ) : !isVibesPro ? (
+        ) : entitlement.status === "free" ? (
           <View style={styles.center}>
             <Text style={styles.lockEmoji}>🔒</Text>
             <Text style={styles.gateTitle}>Clips are a VibesPro space</Text>
             <Text style={styles.statusText}>VibesPro access is required to watch Clips.</Text>
-            <Pressable onPress={() => router.replace("/(app)")} style={styles.retryButton}>
+            <Pressable onPress={() => router.navigate("/(app)/(tabs)")} style={styles.retryButton}>
               <Text style={styles.retryText}>Back to Feed</Text>
             </Pressable>
           </View>
@@ -429,10 +391,7 @@ export default function NativeClipsScreen() {
               removeClippedSubviews={false}
               ListEmptyComponent={
                 initialLoading ? (
-                  <View style={[styles.center, { height: pageHeight }]}>
-                    <ActivityIndicator color="#ffffff" size="large" />
-                    <Text style={styles.loadingText}>Finding your next Clip…</Text>
-                  </View>
+                  <NativeVerticalMediaSkeleton height={pageHeight} />
                 ) : feedError ? (
                   <View style={[styles.center, { height: pageHeight }]}>
                     <Text style={styles.errorTitle}>Clips didn’t load</Text>
@@ -465,7 +424,7 @@ export default function NativeClipsScreen() {
             />
 
             <View pointerEvents="box-none" style={styles.header}>
-              <Pressable accessibilityLabel="Back to Feed" onPress={() => router.replace("/(app)") } style={styles.headerButton}>
+              <Pressable accessibilityLabel="Back to Feed" onPress={() => router.navigate("/(app)/(tabs)")} style={styles.headerButton}>
                 <Text style={styles.headerButtonText}>‹</Text>
               </Pressable>
               <View style={styles.heading}>
@@ -483,10 +442,10 @@ export default function NativeClipsScreen() {
             <NativeSurfaceDock
               activeSurface="clips"
               onClipsPress={() => {
-                if (requestedPostId) router.replace("/(app)/clips");
+                if (requestedPostId) router.replace("/(app)/(tabs)/clips");
                 else listRef.current?.scrollToOffset({ offset: 0, animated: true });
               }}
-              onFeedPress={() => router.replace("/(app)")}
+              onFeedPress={() => router.navigate("/(app)/(tabs)")}
               visible={dockVisible}
             />
 
@@ -612,7 +571,7 @@ function MenuButton({
 const styles = StyleSheet.create({
   root: { flex: 1 },
   safeArea: { flex: 1, backgroundColor: "transparent" },
-  list: { flex: 1 },
+  list: { flex: 1, marginBottom: NATIVE_SURFACE_DOCK_HEIGHT },
   center: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 28 },
   statusText: { marginTop: 10, color: "#64748b", fontSize: 14, lineHeight: 21, textAlign: "center" },
   loadingText: { marginTop: 12, color: "#ffffff", fontSize: 14, fontWeight: "700" },

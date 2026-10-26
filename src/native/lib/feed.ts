@@ -8,6 +8,20 @@ export type NativeFeedCursor = {
   id: string;
 };
 
+async function hydrateNativePostLikeCounts(posts: PostRecord[]) {
+  return Promise.all(posts.map(async (post) => {
+    const { count, error } = await nativeSupabase
+      .from("post_likes")
+      .select("id", { count: "exact", head: true })
+      .eq("post_id", post.id);
+    if (error) {
+      console.warn("Could not refresh the post like count.", error);
+      return post;
+    }
+    return { ...post, likes_count: count ?? 0 };
+  }));
+}
+
 export async function fetchNativeFeedPage(
   cursor?: NativeFeedCursor,
 ): Promise<PostRecord[]> {
@@ -30,7 +44,7 @@ export async function fetchNativeFeedPage(
   const { data, error } = await query;
   if (error) throw error;
 
-  const posts = (data ?? []) as PostRecord[];
+  const posts = await hydrateNativePostLikeCounts((data ?? []) as PostRecord[]);
   const authorIds = Array.from(new Set(posts.map((post) => post.author_id).filter(Boolean)));
   if (authorIds.length === 0) return posts;
 
@@ -59,6 +73,8 @@ export async function fetchNativeFeedPostById(postId: string): Promise<PostRecor
   if (error) throw error;
   if (!data) return null;
 
+  const [hydratedPost] = await hydrateNativePostLikeCounts([data as PostRecord]);
+
   const { data: profile, error: profileError } = await nativeSupabase
     .from("public_profiles")
     .select("id, username, profile_pic, vibes_pro")
@@ -67,7 +83,7 @@ export async function fetchNativeFeedPostById(postId: string): Promise<PostRecor
   if (profileError) throw profileError;
 
   return {
-    ...data,
+    ...hydratedPost,
     profiles: profile ?? null,
-  } as PostRecord;
+  };
 }

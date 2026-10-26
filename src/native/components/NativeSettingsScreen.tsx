@@ -22,9 +22,11 @@ import { useRouter } from "expo-router";
 import type { ReactNode } from "react";
 import { nativeSupabase } from "../lib/supabase";
 import { useNativeAuth } from "../contexts/NativeAuthProvider";
+import { useNativeEntitlement } from "../contexts/NativeEntitlementProvider";
 import { DEFAULT_LANGUAGE, normalizeLanguage, type AppLanguage } from "../../lib/i18n";
 import type { NativeProfile } from "../lib/profile";
 import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
+import { NativeSettingsSkeleton } from "./NativeScreenSkeletons";
 
 type EditField = "name" | "username" | "picture" | null;
 type ProfileSettings = NativeProfile & {
@@ -62,6 +64,7 @@ export default function NativeSettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { session } = useNativeAuth();
+  const { entitlement, refresh: refreshEntitlement } = useNativeEntitlement();
   const { theme, setTheme, isVibesPro: accountCanUseBlueSky } = useNativeTheme();
   const isBlueSky = theme === "bluesky";
   const userId = session?.user.id;
@@ -78,7 +81,7 @@ export default function NativeSettingsScreen() {
   const [supportMessage, setSupportMessage] = useState<string | null>(null);
   const [logoutOpen, setLogoutOpen] = useState(false);
 
-  const isVibesPro = Boolean(profile?.is_vibes_pro ?? profile?.is_vibespro ?? profile?.vibes_pro);
+  const isVibesPro = entitlement.status === "vibesPro";
   const firstName =
     profile?.first_name ??
     (typeof session?.user.user_metadata.first_name === "string" ? session.user.user_metadata.first_name : "") ??
@@ -355,10 +358,28 @@ export default function NativeSettingsScreen() {
     </Pressable>
   );
 
-  if (loading) {
+  if (loading && !profile) {
     return (
-      <LinearGradient colors={NATIVE_THEME_COLORS[theme].background} style={styles.loadingScreen}>
-        <ActivityIndicator color="#ffffff" size="large" />
+      <LinearGradient colors={NATIVE_THEME_COLORS[theme].background} style={styles.root}>
+        <SafeAreaView edges={["top"]} style={styles.safeArea}>
+          <View style={[styles.header, isBlueSky && styles.blueSkyHeader]}>
+            <Pressable
+              accessibilityLabel="Go back"
+              onPress={() => router.replace("/(app)/(tabs)/profile")}
+              style={[styles.backButton, isBlueSky && styles.blueSkyControl]}
+            >
+              <Text style={styles.backButtonText}>‹</Text>
+            </Pressable>
+            <View style={styles.headerCopy}>
+              <Text style={styles.headerOverline}>ACCOUNT</Text>
+              <Text style={styles.headerTitle}>Settings</Text>
+            </View>
+            <View style={styles.headerSpacer} />
+          </View>
+          <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+            <NativeSettingsSkeleton />
+          </ScrollView>
+        </SafeAreaView>
       </LinearGradient>
     );
   }
@@ -370,7 +391,11 @@ export default function NativeSettingsScreen() {
     >
       <SafeAreaView edges={["top"]} style={styles.safeArea}>
         <View style={[styles.header, isBlueSky && styles.blueSkyHeader]}>
-          <Pressable accessibilityLabel="Go back" onPress={() => router.back()} style={[styles.backButton, isBlueSky && styles.blueSkyControl]}>
+          <Pressable
+            accessibilityLabel="Go back"
+            onPress={() => router.replace("/(app)/(tabs)/profile")}
+            style={[styles.backButton, isBlueSky && styles.blueSkyControl]}
+          >
             <Text style={styles.backButtonText}>‹</Text>
           </Pressable>
           <View style={styles.headerCopy}>
@@ -383,6 +408,14 @@ export default function NativeSettingsScreen() {
           contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, 18) + 30 }]}
           showsVerticalScrollIndicator={false}
         >
+          {entitlement.status === "error" ? (
+            <View style={[styles.errorCard, isBlueSky && styles.blueSkyOption]}>
+              <Text style={styles.errorText}>VibesPro status could not be checked: {entitlement.error.message}</Text>
+              <Pressable onPress={() => void refreshEntitlement()} style={styles.retryButton}>
+                <Text style={styles.retryText}>Retry account status</Text>
+              </Pressable>
+            </View>
+          ) : null}
           {screenError ? (
             <View style={[styles.errorCard, isBlueSky && styles.blueSkyOption]}>
               <Text style={styles.errorText}>{screenError}</Text>
@@ -392,7 +425,7 @@ export default function NativeSettingsScreen() {
             </View>
           ) : null}
 
-          {!isVibesPro ? (
+          {entitlement.status === "free" ? (
             <View style={styles.upgradeCard}>
               <Text style={styles.upgradeOverline}>VIBESPRO</Text>
               <Text style={styles.upgradeTitle}>Unlock your premium profile</Text>

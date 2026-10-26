@@ -3,6 +3,11 @@ import { Redirect, Stack } from "expo-router";
 import { useNativeAuth } from "../../src/native/contexts/NativeAuthProvider";
 import { NativeCallProvider } from "../../src/native/contexts/NativeCallProvider";
 import { NativePresenceProvider } from "../../src/native/contexts/NativePresenceProvider";
+import NativeOfflinePrompt from "../../src/native/components/NativeOfflinePrompt";
+
+export const unstable_settings = {
+  initialRouteName: "(tabs)",
+};
 
 export default function AuthenticatedLayout() {
   const { session, loading } = useNativeAuth();
@@ -19,7 +24,10 @@ export default function AuthenticatedLayout() {
   return (
     <NativePresenceProvider>
       <NativeCallProvider>
-        <Stack screenOptions={{ headerShown: false }} />
+        <>
+          <Stack screenOptions={{ headerShown: false }} />
+          <NativeOfflinePrompt />
+        </>
       </NativeCallProvider>
     </NativePresenceProvider>
   );

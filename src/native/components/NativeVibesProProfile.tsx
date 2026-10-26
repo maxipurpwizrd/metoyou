@@ -24,9 +24,12 @@ import * as ExpoLinking from "expo-linking";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { nativeSupabase } from "../lib/supabase";
 import { useRouter } from "expo-router";
-import type { NativeProfile, NativeProfileConnection } from "../lib/profile";
+import { MessageCircle } from "lucide-react-native";
+import type { NativeProfile } from "../lib/profile";
 import type { PostRecord } from "../../types/post";
 import NativeConfirmDialog from "./NativeConfirmDialog";
+import NativeSkeleton from "./NativeSkeleton";
+import { NativeProfilePostsSkeleton } from "./NativeScreenSkeletons";
 import { useNativeTheme } from "../contexts/NativeThemeProvider";
 
 const REPORT_REASONS = [
@@ -110,7 +113,9 @@ function decodeBase64(value: string) {
 type Props = {
   profile: NativeProfile;
   posts: Array<PostRecord & { liked?: boolean }>;
-  hommies: NativeProfileConnection[];
+  followerCount: number;
+  followerCountLoading: boolean;
+  postsLoading: boolean;
   viewerId: string;
   isFollowing: boolean;
   isFollowedBy: boolean;
@@ -118,14 +123,15 @@ type Props = {
   onFollow: () => void;
   onProfileUpdated: (profile: NativeProfile) => void;
   onOpenPost: (post: PostRecord) => void;
-  onOpenProfile: (username: string) => void;
   onBack: () => void;
 };
 
 export default function NativeVibesProProfile({
   profile,
   posts,
-  hommies,
+  followerCount,
+  followerCountLoading,
+  postsLoading,
   viewerId,
   isFollowing,
   isFollowedBy,
@@ -133,7 +139,6 @@ export default function NativeVibesProProfile({
   onFollow,
   onProfileUpdated,
   onOpenPost,
-  onOpenProfile,
   onBack,
 }: Props) {
   const { height, width } = useWindowDimensions();
@@ -157,8 +162,6 @@ export default function NativeVibesProProfile({
   const [appealDetails, setAppealDetails] = useState("");
   const [appealBusy, setAppealBusy] = useState(false);
   const [appealMessage, setAppealMessage] = useState<string | null>(null);
-  const [hommiesOpen, setHommiesOpen] = useState(false);
-  const [hommiesSearch, setHommiesSearch] = useState("");
   const [reportOpen, setReportOpen] = useState(false);
   const [reportReason, setReportReason] = useState(REPORT_REASONS[0]);
   const [reportDetails, setReportDetails] = useState("");
@@ -181,11 +184,8 @@ export default function NativeVibesProProfile({
   const [activePost, setActivePost] = useState(0);
   const portraitUrl = profile.vibes_pro_portrait ?? profile.profile_pic ?? null;
   const cardWidth = Math.min(Math.round(width * 0.56), 240);
-  const filteredHommies = hommies.filter((homie) =>
-    homie.username.toLowerCase().includes(hommiesSearch.trim().toLowerCase()),
-  );
   const followLabel = isFollowing && isFollowedBy
-    ? "Homie"
+    ? "Friend"
     : isFollowing
       ? "Following"
       : isFollowedBy
@@ -443,7 +443,7 @@ export default function NativeVibesProProfile({
             <LinearGradient colors={["#061a3a", "#0b3b78", "#125baa"]} style={StyleSheet.absoluteFill} />
           ) : !portraitUrl ? (
             <ImageBackground
-              source={require("../../components/VibesPro/assets/throne-template.png")}
+              source={require("../../components/VibesPro/assets/throne-template.webp")}
               resizeMode="cover"
               style={StyleSheet.absoluteFill}
             />
@@ -520,11 +520,34 @@ export default function NativeVibesProProfile({
                 <Text style={styles.onlineText}>Online</Text>
               </View>
             ) : null}
-            <Pressable onPress={() => setHommiesOpen(true)}>
-              <Text style={[styles.hommiesCount, isBlueSky && styles.blueSkyText]}>{hommies.length} Hommies</Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push({
+                pathname: "/profile/followers",
+                params: { profileId: profile.id, username: profile.username },
+              })}
+              style={[styles.followersButton, isBlueSky && styles.blueSkyFollowButton]}
+            >
+              {followerCountLoading ? (
+                <NativeSkeleton style={styles.followersCountSkeleton} />
+              ) : (
+                <Text style={styles.followersButtonText}>{followerCount} Followers</Text>
+              )}
             </Pressable>
             {!isOwnProfile ? (
               <View style={styles.publicActions}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Message ${profile.username}`}
+                  onPress={() => router.push({
+                    pathname: "/messages/[recipientId]",
+                    params: { recipientId: profile.id },
+                  })}
+                  style={[styles.messageButton, isBlueSky && styles.blueSkyFollowButton]}
+                >
+                  <MessageCircle color="#ffffff" size={16} />
+                  <Text style={styles.messageText}>Message</Text>
+                </Pressable>
                 <Pressable
                   accessibilityRole="button"
                   disabled={followLoading}
@@ -542,7 +565,7 @@ export default function NativeVibesProProfile({
 
         <View style={[styles.postsPanel, isBlueSky && styles.blueSkyPanel]}>
           <Text style={[styles.postsHeading, isBlueSky && styles.blueSkyText]}>VIBES</Text>
-          {posts.length === 0 ? (
+          {postsLoading ? <NativeProfilePostsSkeleton carousel /> : posts.length === 0 ? (
             <View style={styles.emptyPosts}>
               <Text style={[styles.emptyPostsText, isBlueSky && styles.blueSkyText]}>No Vibes to show yet.</Text>
             </View>
@@ -727,53 +750,6 @@ export default function NativeVibesProProfile({
         </View>
       </Modal>
 
-      <Modal animationType="fade" onRequestClose={() => setHommiesOpen(false)} transparent visible={hommiesOpen}>
-        <View style={styles.modalBackdrop}>
-          <View style={[styles.hommiesCard, isBlueSky && styles.blueSkyPanel]}>
-            <View style={[styles.modalHeadingRow, isBlueSky && styles.blueSkyPanel]}>
-              <View>
-                <Text style={[styles.modalTitle, isBlueSky && styles.blueSkyText]}>Hommies</Text>
-                <Text style={[styles.modalSubtitle, isBlueSky && styles.blueSkyMuted]}>Mutual connections</Text>
-              </View>
-              <Pressable accessibilityLabel="Close Hommies" onPress={() => setHommiesOpen(false)}>
-                <Text style={[styles.closeText, isBlueSky && styles.blueSkyText]}>×</Text>
-              </Pressable>
-            </View>
-            <TextInput
-              accessibilityLabel="Search Hommies"
-              onChangeText={setHommiesSearch}
-              placeholder="Search Hommies"
-              placeholderTextColor={isBlueSky ? "rgba(255,255,255,0.62)" : "#b7a679"}
-              style={[styles.searchInput, isBlueSky && styles.blueSkyInput]}
-              value={hommiesSearch}
-            />
-            <ScrollView style={styles.hommiesList}>
-              {filteredHommies.length === 0 ? (
-                <Text style={[styles.emptyHommies, isBlueSky && styles.blueSkyMuted]}>
-                  {hommiesSearch.trim() ? "No matching Hommies." : "No mutual connections yet."}
-                </Text>
-              ) : filteredHommies.map((homie) => (
-                <Pressable
-                  key={homie.id}
-                  onPress={() => {
-                    setHommiesOpen(false);
-                    onOpenProfile(homie.username);
-                  }}
-                  style={[styles.hommieRow, isBlueSky && styles.blueSkyHommieRow]}
-                >
-                  {homie.profile_pic
-                    ? <Image source={{ uri: homie.profile_pic }} style={styles.hommieAvatar} />
-                    : <View style={[styles.hommieFallback, isBlueSky && styles.blueSkyFollowButton]}><Text style={[styles.hommieInitial, isBlueSky && styles.blueSkyText]}>{homie.username.slice(0, 1).toUpperCase()}</Text></View>}
-                  <View>
-                    <Text style={[styles.hommieName, isBlueSky && styles.blueSkyText]}>{homie.username}</Text>
-                    <Text style={[styles.hommieLabel, isBlueSky && styles.blueSkyMuted]}>Homie</Text>
-                  </View>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
 
       <Modal
         animationType="fade"
@@ -823,13 +799,13 @@ export default function NativeVibesProProfile({
       <NativeConfirmDialog
         confirmLabel="Unfollow"
         emoji="💔"
-        message={`${profile.username} is your homie. Would you like to unfollow them?`}
+        message={`${profile.username} is your friend. Would you like to unfollow them?`}
         onCancel={() => setUnfollowConfirmation(false)}
         onConfirm={async () => {
           setUnfollowConfirmation(false);
           await onFollow();
         }}
-        title="Unfollow your homie?"
+        title="Unfollow your friend?"
         visible={unfollowConfirmation}
       />
 
@@ -994,8 +970,12 @@ const styles = StyleSheet.create({
   onlinePill: { flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: "rgba(255,255,255,0.2)", borderRadius: 99, backgroundColor: "rgba(0,0,0,0.38)" },
   onlineDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: "#34d399" },
   onlineText: { color: "rgba(255,255,255,0.88)", fontSize: 12 },
-  hommiesCount: { color: "rgba(255,255,255,0.9)", fontSize: 13 },
+  followersButton: { minHeight: 34, justifyContent: "center", paddingHorizontal: 13, borderWidth: 1, borderColor: "rgba(253,230,138,0.48)", borderRadius: 99, backgroundColor: "rgba(0,0,0,0.42)" },
+  followersButtonText: { color: "#ffffff", fontSize: 13, fontWeight: "800" },
+    followersCountSkeleton: { width: 80, height: 12, borderRadius: 7 },
   publicActions: { flexDirection: "row", gap: 10, marginTop: 2 },
+  messageButton: { minHeight: 38, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, paddingHorizontal: 14, borderWidth: 1, borderColor: "rgba(255,255,255,0.4)", borderRadius: 99, backgroundColor: "rgba(0,0,0,0.48)" },
+  messageText: { color: "#ffffff", fontSize: 13, fontWeight: "800" },
   followButton: { minWidth: 100, minHeight: 38, alignItems: "center", justifyContent: "center", paddingHorizontal: 16, borderRadius: 99, backgroundColor: "#fbbf24" },
   followText: { color: "#451a03", fontSize: 13, fontWeight: "900" },
   postsPanel: { flex: 1, minHeight: 0, marginHorizontal: 14, marginTop: 12, marginBottom: 12, paddingTop: 11, paddingBottom: 10, overflow: "hidden", borderWidth: 1, borderColor: "rgba(251,191,36,0.24)", borderRadius: 30, backgroundColor: "#08080d" },
