@@ -19,12 +19,10 @@ import { File, Paths } from "expo-file-system";
 import * as MediaLibrary from "expo-media-library/legacy";
 import {
   setAudioModeAsync,
-  useAudioPlayer,
-  useAudioPlayerStatus,
 } from "expo-audio";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurTargetView } from "expo-blur";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   CloudSun,
@@ -46,6 +44,7 @@ import {
 } from "lucide-react-native";
 import { useNativeAuth } from "../contexts/NativeAuthProvider";
 import { useNativeEntitlement } from "../contexts/NativeEntitlementProvider";
+import { useNativeMusic } from "../contexts/NativeMusicProvider";
 import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
 import {
   fetchNativeTrackById,
@@ -55,7 +54,7 @@ import {
   type NativeTrack,
 } from "../lib/tracks";
 import { deleteNativePost, reportNativePost, toggleNativePostLike } from "../lib/posts";
-import NativeBlurBackdrop, { NativeBlurTargetContext } from "./NativeBlurBackdrop";
+import NativeBlurBackdrop, { NativeBlurTargetContext, type NativeBlurTargetRef } from "./NativeBlurBackdrop";
 import NativeCommentsSheet from "./NativeCommentsSheet";
 import NativeConfirmDialog from "./NativeConfirmDialog";
 import { NativeTrackPlayerSkeleton, NativeTrackRowsSkeleton } from "./NativeScreenSkeletons";
@@ -97,6 +96,7 @@ export default function NativeTracksScreen() {
   const router = useRouter();
   const { session } = useNativeAuth();
   const { entitlement, refresh: refreshEntitlement } = useNativeEntitlement();
+  const music = useNativeMusic();
   const { theme, setTheme } = useNativeTheme();
   const isBlueSky = theme === "bluesky";
   const userId = session?.user.id;
@@ -104,8 +104,7 @@ export default function NativeTracksScreen() {
   const requestedPostId = Array.isArray(params.postId) ? params.postId[0] : params.postId;
   const requestedShowComments = (Array.isArray(params.showComments) ? params.showComments[0] : params.showComments) === "1";
   const requestedDeviceFiles = (Array.isArray(params.openDeviceFiles) ? params.openDeviceFiles[0] : params.openDeviceFiles) === "1";
-  const insets = useSafeAreaInsets();
-  const blurTargetRef = useRef<View | null>(null);
+  const blurTargetRef = useRef<NativeBlurTargetRef>(null);
   const progressWidth = useRef(0);
   const autoplayNext = useRef(false);
   const finishedTrackId = useRef<string | null>(null);
@@ -147,8 +146,8 @@ export default function NativeTracksScreen() {
     : trackSource === "device"
       ? deviceTracks[deviceIndex]
       : tracks[currentIndex];
-  const player = useAudioPlayer(currentTrack?.audio_url ?? null, { updateInterval: 250 });
-  const status = useAudioPlayerStatus(player);
+  const player = music.player;
+  const status = music.status;
   const duration = status.duration || (currentTrack?.duration_ms ? currentTrack.duration_ms / 1000 : 0);
   const progress = duration > 0 ? Math.min(status.currentTime / duration, 1) : 0;
   const isDark = theme === "dark";
@@ -349,6 +348,14 @@ export default function NativeTracksScreen() {
   }, [requestedPostId, requestedShowComments]);
 
   useEffect(() => {
+    const trackQueue = trackSource === "device" ? deviceTracks : tracks;
+    const index = trackSource === "device" ? deviceIndex : currentIndex;
+    const activeTrack = trackQueue[Math.max(0, Math.min(index, trackQueue.length - 1))];
+    if (!activeTrack) return;
+    music.setTrack(activeTrack, trackQueue, index);
+  }, [currentIndex, deviceIndex, deviceTracks, music, trackSource, tracks]);
+
+  useEffect(() => {
     void setAudioModeAsync({ playsInSilentMode: true })
       .catch((cause: unknown) => setActionError(errorMessage(cause, "Audio playback could not be initialized.")));
   }, []);
@@ -388,7 +395,7 @@ export default function NativeTracksScreen() {
 
   const nextTrack = async (naturalFinish = false) => {
     if (requestedPostId) {
-      player.pause();
+      music.pause();
       return;
     }
 
@@ -402,14 +409,14 @@ export default function NativeTracksScreen() {
 
     if (naturalFinish && playMode === "single") {
       void player.seekTo(0);
-      player.play();
+      music.play();
       return;
     }
 
     if (playMode === "random" && playlist.length > 0) {
       if (playlist.length === 1) {
         void player.seekTo(0);
-        player.play();
+        music.play();
         return;
       }
       const candidates = playlist
@@ -425,7 +432,7 @@ export default function NativeTracksScreen() {
     }
 
     if (trackSource === "device") {
-      player.pause();
+      music.pause();
       void player.seekTo(0);
       return;
     }
@@ -446,7 +453,7 @@ export default function NativeTracksScreen() {
       }
     }
 
-    player.pause();
+    music.pause();
     void player.seekTo(0);
   };
 
@@ -566,7 +573,7 @@ export default function NativeTracksScreen() {
     setDeleteBusy(true);
     try {
       await deleteNativePost(currentTrack.id);
-      player.pause();
+      music.pause();
       setConfirmationVisible(false);
       setMenuOpen(false);
       if (requestedPostId) {
@@ -664,7 +671,7 @@ export default function NativeTracksScreen() {
               </View>
             ) : (
               <ScrollView
-                contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, 24) + 88 }]}
+                contentContainerStyle={styles.content}
                 showsVerticalScrollIndicator={false}
               >
                 <View style={[styles.playerCard, isDark && styles.darkCard, isBlueSky && styles.blueSkyCard]}>
@@ -753,8 +760,8 @@ export default function NativeTracksScreen() {
                         setActionError(null);
                         setAudioError(null);
                         try {
-                          if (status.playing) player.pause();
-                          else player.play();
+                          if (status.playing) music.pause();
+                          else music.play();
                         } catch (cause) {
                           setAudioError(errorMessage(cause, "This Track could not be played."));
                         }
@@ -810,7 +817,10 @@ export default function NativeTracksScreen() {
 
             <NativeSurfaceDock
               activeSurface="tracks"
-              onClipsPress={() => router.navigate("/(app)/(tabs)/clips")}
+              onClipsPress={() => {
+                music.pause();
+                router.navigate("/(app)/(tabs)/clips");
+              }}
               onFeedPress={() => router.navigate("/(app)/(tabs)")}
               onFlicksPress={() => router.navigate("/(app)/(tabs)/flicks")}
               onTracksPress={() => {
@@ -1092,11 +1102,12 @@ export default function NativeTracksScreen() {
                             setPlaylistOpen(false);
                             setTrackSource("vibespro");
                             if (selected) {
-                              player.play();
+                              music.play();
                               return;
                             }
                             autoplayNext.current = true;
                             setCurrentIndex(index);
+                            music.setTrack(track, tracks, index);
                           }}
                           style={({ pressed }) => [
                             styles.playlistItem,
@@ -1232,7 +1243,7 @@ const styles = StyleSheet.create({
   retryText: { color: "#ffffff", fontSize: 13, fontWeight: "800" },
   backToFeed: { marginTop: 10, padding: 10 },
   backToFeedText: { color: "#0369a1", fontSize: 13, fontWeight: "800" },
-  content: { alignItems: "center", paddingHorizontal: 16, paddingTop: 4 },
+  content: { alignItems: "center", paddingHorizontal: 16, paddingTop: 4, paddingBottom: 88 },
   playerCard: { width: "100%", maxWidth: 480, alignItems: "center", padding: 16, borderWidth: 1, borderColor: "#dbeafe", borderRadius: 28, backgroundColor: "rgba(255,255,255,0.92)", shadowColor: "#0c4a6e", shadowOpacity: 0.17, shadowRadius: 22, shadowOffset: { width: 0, height: 10 }, elevation: 8 },
   darkCard: { borderColor: "rgba(252,211,77,0.2)", backgroundColor: "#151515" },
   blueSkyCard: { borderColor: "#3478bd", backgroundColor: "#0b2d5b" },

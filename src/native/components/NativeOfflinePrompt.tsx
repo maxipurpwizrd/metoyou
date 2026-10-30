@@ -1,24 +1,29 @@
+import { NATIVE_OFFLINE_MESSAGE } from "../lib/networkStatus";
+import { useNativeConnectivity } from "../contexts/NativeQueryProvider";
 import { useEffect, useRef, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Activity, Gamepad2, Music2, WifiOff, X } from "lucide-react-native";
-import { useNativeConnectivity } from "../contexts/NativeQueryProvider";
+import { useNativeAuth } from "../contexts/NativeAuthProvider";
 import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
+import NativeBlurBackdrop from "./NativeBlurBackdrop";
 
-type PromptMode = "offline" | "games" | null;
+type PromptMode = "offline" | null;
 
 export default function NativeOfflinePrompt() {
   const router = useRouter();
-  const { isOffline, isSlow } = useNativeConnectivity();
+  const { status } = useNativeAuth();
+  const { isConnectivityOffline, hasRequestFailure, isSlow } = useNativeConnectivity();
   const { theme } = useNativeTheme();
   const colors = NATIVE_THEME_COLORS[theme];
   const insets = useSafeAreaInsets();
   const [mode, setMode] = useState<PromptMode>(null);
   const outageHandled = useRef(false);
+  const shouldShowOfflineMessage = isConnectivityOffline || hasRequestFailure || status === "offlineDeferred";
 
   useEffect(() => {
-    if (!isOffline) {
+    if (!shouldShowOfflineMessage) {
       outageHandled.current = false;
       setMode(null);
       return;
@@ -27,13 +32,13 @@ export default function NativeOfflinePrompt() {
       outageHandled.current = true;
       setMode("offline");
     }
-  }, [isOffline]);
+  }, [shouldShowOfflineMessage]);
 
   const close = () => setMode(null);
 
   return (
     <>
-      {!isOffline && isSlow ? (
+        {!shouldShowOfflineMessage && isSlow ? (
         <View pointerEvents="none" style={[styles.slowNotice, { top: insets.top + 8, backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Activity color={colors.accent} size={17} />
           <Text style={[styles.slowNoticeText, { color: colors.text }]}>Connection is taking longer than usual.</Text>
@@ -47,6 +52,7 @@ export default function NativeOfflinePrompt() {
         visible={mode !== null}
       >
         <View style={styles.backdrop}>
+          <NativeBlurBackdrop intensity={18} overlayColor="rgba(3,10,20,0.48)" />
           <View style={[styles.dialog, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Pressable
               accessibilityLabel="Close connection message"
@@ -57,28 +63,16 @@ export default function NativeOfflinePrompt() {
               <X color={colors.muted} size={19} />
             </Pressable>
             <View style={[styles.iconWrap, { backgroundColor: colors.control }]}>
-              {mode === "games"
-                ? <Gamepad2 color={colors.accent} size={27} />
-                : <WifiOff color={colors.accent} size={27} />}
+              <WifiOff color={colors.accent} size={27} />
             </View>
-            <Text style={[styles.title, { color: colors.text }]}>
-              {mode === "games" ? "Games are on the way" : "Connection hiccup"}
-            </Text>
-            <Text style={[styles.message, { color: colors.muted }]}>
-              {mode === "games"
-                ? "Oops, we’re working on the best games for you."
-                : "Oops, it looks like there’s a problem with your connection. Would you like to listen to music saved on your device or check out Games?"}
-            </Text>
-            {mode === "offline" ? (
-              <View style={styles.actions}>
+            <Text style={[styles.title, { color: colors.text }]}>Connection hiccup</Text>
+            <Text style={[styles.message, { color: colors.muted }]}>{NATIVE_OFFLINE_MESSAGE}</Text>
+            <View style={styles.actions}>
                 <Pressable
                   accessibilityRole="button"
                   onPress={() => {
                     close();
-                    router.navigate({
-                      pathname: "/(app)/(tabs)/tracks",
-                      params: { openDeviceFiles: "1" },
-                    });
+                    router.navigate({ pathname: "/(app)/(tabs)/tracks", params: { openDeviceFiles: "1" } });
                   }}
                   style={[styles.actionButton, { backgroundColor: colors.accent }]}
                 >
@@ -87,27 +81,19 @@ export default function NativeOfflinePrompt() {
                 </Pressable>
                 <Pressable
                   accessibilityRole="button"
-                  onPress={() => setMode("games")}
+                  onPress={() => {
+                    close();
+                    router.navigate("/(app)/games");
+                  }}
                   style={[styles.actionButton, styles.secondaryButton, { borderColor: colors.border, backgroundColor: colors.control }]}
                 >
                   <Gamepad2 color={colors.text} size={19} />
-                  <Text style={[styles.actionText, { color: colors.text }]}>Games</Text>
+                  <Text style={[styles.actionText, { color: colors.text }]}>Play offline</Text>
                 </Pressable>
-              </View>
-            ) : (
-              <Pressable
-                accessibilityRole="button"
-                onPress={close}
-                style={[styles.doneButton, { backgroundColor: colors.accent }]}
-              >
-                <Text style={[styles.actionText, { color: colors.accentText }]}>Got it</Text>
-              </Pressable>
-            )}
-            {mode === "offline" ? (
-              <Pressable accessibilityRole="button" onPress={close} style={styles.notNowButton}>
-                <Text style={[styles.notNowText, { color: colors.muted }]}>Not now</Text>
-              </Pressable>
-            ) : null}
+            </View>
+            <Pressable accessibilityRole="button" onPress={close} style={styles.notNowButton}>
+              <Text style={[styles.notNowText, { color: colors.muted }]}>Not now</Text>
+            </Pressable>
           </View>
         </View>
       </Modal>

@@ -17,7 +17,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import { LinearGradient } from "expo-linear-gradient";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import type { ReactNode } from "react";
 import { nativeSupabase } from "../lib/supabase";
@@ -26,7 +26,13 @@ import { useNativeEntitlement } from "../contexts/NativeEntitlementProvider";
 import { DEFAULT_LANGUAGE, normalizeLanguage, type AppLanguage } from "../../lib/i18n";
 import type { NativeProfile } from "../lib/profile";
 import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
+import NativeBlurBackdrop from "./NativeBlurBackdrop";
 import { NativeSettingsSkeleton } from "./NativeScreenSkeletons";
+import {
+  getNativePushRegistrationStatus,
+  subscribeToNativePushRegistrationStatus,
+  type NativePushRegistrationStatus,
+} from "../lib/pushRegistration";
 
 type EditField = "name" | "username" | "picture" | null;
 type ProfileSettings = NativeProfile & {
@@ -40,6 +46,15 @@ const LANGUAGE_OPTIONS: Array<{ value: AppLanguage; label: string; helper: strin
   { value: "en-street", label: "Street Slang", helper: "MeToYou street style" },
   { value: "fr-fr", label: "French", helper: "Français" },
 ];
+
+const PUSH_REGISTRATION_LABELS: Record<NativePushRegistrationStatus["state"], string> = {
+  checking: "Checking",
+  registered: "Registered",
+  "permission-denied": "Permission needed",
+  "build-required": "Build required",
+  unsupported: "Unavailable",
+  failed: "Registration failed",
+};
 
 function decodeBase64(value: string) {
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -62,8 +77,7 @@ function decodeBase64(value: string) {
 
 export default function NativeSettingsScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const { session } = useNativeAuth();
+  const { session, signOutNative } = useNativeAuth();
   const { entitlement, refresh: refreshEntitlement } = useNativeEntitlement();
   const { theme, setTheme, isVibesPro: accountCanUseBlueSky } = useNativeTheme();
   const isBlueSky = theme === "bluesky";
@@ -80,6 +94,9 @@ export default function NativeSettingsScreen() {
   const [supportBusy, setSupportBusy] = useState(false);
   const [supportMessage, setSupportMessage] = useState<string | null>(null);
   const [logoutOpen, setLogoutOpen] = useState(false);
+  const [pushRegistrationStatus, setPushRegistrationStatus] = useState(getNativePushRegistrationStatus);
+
+  useEffect(() => subscribeToNativePushRegistrationStatus(setPushRegistrationStatus), []);
 
   const isVibesPro = entitlement.status === "vibesPro";
   const firstName =
@@ -320,8 +337,13 @@ export default function NativeSettingsScreen() {
   const signOut = async () => {
     setSaving(true);
     try {
-      const { error } = await nativeSupabase.auth.signOut();
-      if (error) throw error;
+      const result = await signOutNative();
+      if (!result.remoteRevocationConfirmed) {
+        Alert.alert(
+          "Signed out on this device",
+          "Your local session and account cache were cleared. Remote sign-out could not be confirmed while offline.",
+        );
+      }
     } catch (cause) {
       setSaving(false);
       Alert.alert("Could not sign out", cause instanceof Error ? cause.message : "Please try again.");
@@ -361,7 +383,7 @@ export default function NativeSettingsScreen() {
   if (loading && !profile) {
     return (
       <LinearGradient colors={NATIVE_THEME_COLORS[theme].background} style={styles.root}>
-        <SafeAreaView edges={["top"]} style={styles.safeArea}>
+        <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
           <View style={[styles.header, isBlueSky && styles.blueSkyHeader]}>
             <Pressable
               accessibilityLabel="Go back"
@@ -389,7 +411,7 @@ export default function NativeSettingsScreen() {
       colors={NATIVE_THEME_COLORS[theme].background}
       style={styles.root}
     >
-      <SafeAreaView edges={["top"]} style={styles.safeArea}>
+      <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
         <View style={[styles.header, isBlueSky && styles.blueSkyHeader]}>
           <Pressable
             accessibilityLabel="Go back"
@@ -405,7 +427,7 @@ export default function NativeSettingsScreen() {
           <View style={styles.headerSpacer} />
         </View>
         <ScrollView
-          contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, 18) + 30 }]}
+          contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
         >
           {entitlement.status === "error" ? (
@@ -525,11 +547,11 @@ export default function NativeSettingsScreen() {
             <View style={styles.notificationRow}>
               <View style={styles.rowText}>
                 <Text style={styles.rowTitle}>Push notifications</Text>
-                <Text style={styles.rowDetail}>
-                  Native push notifications are not configured yet.
-                </Text>
+                <Text style={styles.rowDetail}>{pushRegistrationStatus.detail}</Text>
               </View>
-              <Text style={styles.unavailableTag}>Not available</Text>
+              <Text style={styles.unavailableTag}>
+                {PUSH_REGISTRATION_LABELS[pushRegistrationStatus.state]}
+              </Text>
             </View>
           ))}
 
@@ -561,6 +583,8 @@ export default function NativeSettingsScreen() {
 
       <Modal animationType="fade" onRequestClose={() => setEditField(null)} transparent visible={editField !== null}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.modalBackdrop}>
+          <NativeBlurBackdrop intensity={22} overlayColor="rgba(0,0,0,0.55)" />
+          <Pressable onPress={() => setEditField(null)} style={StyleSheet.absoluteFill} />
           <View style={styles.editCard}>
             <View style={styles.modalHeader}>
               <View>
@@ -608,6 +632,8 @@ export default function NativeSettingsScreen() {
 
       <Modal animationType="fade" onRequestClose={() => setSupportOpen(false)} transparent visible={supportOpen}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.modalBackdrop}>
+          <NativeBlurBackdrop intensity={22} overlayColor="rgba(0,0,0,0.55)" />
+          <Pressable onPress={() => setSupportOpen(false)} style={StyleSheet.absoluteFill} />
           <View style={styles.editCard}>
             <View style={styles.modalHeader}>
               <View>
@@ -640,6 +666,8 @@ export default function NativeSettingsScreen() {
 
       <Modal animationType="fade" onRequestClose={() => setLogoutOpen(false)} transparent visible={logoutOpen}>
         <View style={styles.modalBackdrop}>
+          <NativeBlurBackdrop intensity={22} overlayColor="rgba(0,0,0,0.55)" />
+          <Pressable onPress={() => setLogoutOpen(false)} style={StyleSheet.absoluteFill} />
           <View style={styles.editCard}>
             <Text style={styles.modalOverline}>END THIS SESSION</Text>
             <Text style={styles.modalTitle}>Sign out?</Text>
@@ -671,7 +699,7 @@ const styles = StyleSheet.create({
   headerOverline: { color: "#ffffff", fontSize: 9, fontWeight: "800", letterSpacing: 2 },
   headerTitle: { color: "#ffffff", fontSize: 19, fontWeight: "900" },
   headerSpacer: { width: 42 },
-  content: { gap: 14, padding: 14, paddingTop: 16 },
+  content: { gap: 14, padding: 14, paddingTop: 16, paddingBottom: 30 },
   errorCard: { padding: 16, borderWidth: 1, borderColor: "#454b55", borderRadius: 20, backgroundColor: "#151a22" },
   errorText: { color: "#ffffff", fontSize: 14 },
   retryButton: { alignSelf: "flex-start", marginTop: 9, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, backgroundColor: "#303743" },

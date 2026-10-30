@@ -55,9 +55,9 @@ export const NATIVE_THEME_COLORS = {
 }>;
 
 export function NativeThemeProvider({ children }: { children: ReactNode }) {
-  const { session } = useNativeAuth();
+  const { cacheUserId } = useNativeAuth();
   const { entitlement } = useNativeEntitlement();
-  const userId = session?.user.id ?? null;
+  const userId = cacheUserId;
   const isVibesPro = entitlement.status === "vibesPro";
   const [theme, setThemeState] = useState<NativeTheme>("dark");
   const [ready, setReady] = useState(false);

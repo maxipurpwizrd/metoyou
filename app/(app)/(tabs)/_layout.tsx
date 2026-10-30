@@ -1,10 +1,11 @@
 import { Tabs } from "expo-router/tabs";
 
+export const unstable_settings = { anchor: "index" };
+
 export default function PrimaryTabsLayout() {
   return (
     <Tabs
       backBehavior="initialRoute"
-      initialRouteName="index"
       screenOptions={{
         headerShown: false,
         tabBarStyle: { display: "none" },

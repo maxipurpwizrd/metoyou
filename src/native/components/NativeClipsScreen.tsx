@@ -1,3 +1,4 @@
+import type { ListViewToken } from "@react-native/virtualized-lists";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -10,7 +11,6 @@ import {
   Text,
   View,
   useWindowDimensions,
-  type ViewToken,
 } from "react-native";
 import { File, Paths } from "expo-file-system";
 import * as MediaLibrary from "expo-media-library/legacy";
@@ -20,6 +20,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
 import { useNativeAuth } from "../contexts/NativeAuthProvider";
 import { useNativeEntitlement } from "../contexts/NativeEntitlementProvider";
+import { useNativeMusic } from "../contexts/NativeMusicProvider";
 import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
 import {
   fetchNativeClipById,
@@ -35,7 +36,7 @@ import {
   reportNativePost,
   toggleNativePostLike,
 } from "../lib/posts";
-import NativeBlurBackdrop, { NativeBlurTargetContext } from "./NativeBlurBackdrop";
+import NativeBlurBackdrop, { NativeBlurTargetContext, type NativeBlurTargetRef } from "./NativeBlurBackdrop";
 import NativeClipCard from "./NativeClipCard";
 import NativeCommentsSheet from "./NativeCommentsSheet";
 import NativeConfirmDialog from "./NativeConfirmDialog";
@@ -54,9 +55,10 @@ type Confirmation = { type: "delete" | "block"; clip: NativeClip } | null;
 export default function NativeClipsScreen() {
   const router = useRouter();
   const isFocused = useIsFocused();
-  const blurTargetRef = useRef<View | null>(null);
+  const blurTargetRef = useRef<NativeBlurTargetRef>(null);
   const { session } = useNativeAuth();
   const { entitlement, refresh: refreshEntitlement } = useNativeEntitlement();
+  const music = useNativeMusic();
   const { theme, setTheme } = useNativeTheme();
   const darkTheme = theme === "dark";
   const userId = session?.user.id;
@@ -138,6 +140,12 @@ export default function NativeClipsScreen() {
   }, [isVibesPro, loadFirstPage, requestedPostId]);
 
   useEffect(() => {
+    if (isFocused) {
+      music.pause();
+    }
+  }, [isFocused, music]);
+
+  useEffect(() => {
     if (!requestedPostId || !userId) return;
     let active = true;
     setInitialLoading(true);
@@ -193,7 +201,7 @@ export default function NativeClipsScreen() {
   }, [clips, userId]);
 
   const handleViewableItemsChanged = useRef(
-    ({ viewableItems }: { viewableItems: ViewToken<NativeClip>[] }) => {
+    ({ viewableItems }: { viewableItems: (ListViewToken & { item: NativeClip })[] }) => {
       const active = viewableItems.find((token) => token.isViewable)?.item;
       if (active) setActiveClipId(active.id);
     },
@@ -419,7 +427,7 @@ export default function NativeClipsScreen() {
                     <Text style={styles.errorTitle}>{feedError}</Text>
                     <Text style={styles.retryText}>Tap to retry</Text>
                   </Pressable>
-                ) : null
+                ) : undefined
               }
             />
 
@@ -442,6 +450,7 @@ export default function NativeClipsScreen() {
             <NativeSurfaceDock
               activeSurface="clips"
               onClipsPress={() => {
+                music.pause();
                 if (requestedPostId) router.replace("/(app)/(tabs)/clips");
                 else listRef.current?.scrollToOffset({ offset: 0, animated: true });
               }}

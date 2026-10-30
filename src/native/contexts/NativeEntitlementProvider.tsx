@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createNativeEntitlementState, type NativeEntitlementState } from "../lib/entitlement";
 import { fetchNativeVibesProEntitlement } from "../lib/profile";
 import { nativeEntitlementQueryKey } from "../lib/queryKeys";
+import { NATIVE_OFFLINE_MESSAGE } from "../lib/networkStatus";
 import { useNativeAuth } from "./NativeAuthProvider";
 
 type NativeEntitlementContextValue = {
@@ -13,12 +14,13 @@ type NativeEntitlementContextValue = {
 const NativeEntitlementContext = createContext<NativeEntitlementContextValue | null>(null);
 
 export function NativeEntitlementProvider({ children }: { children: ReactNode }) {
-  const { session, loading: authLoading } = useNativeAuth();
+  const { session, cacheUserId, loading: authLoading, status } = useNativeAuth();
   const userId = session?.user.id ?? null;
+  const cacheOwnerId = cacheUserId;
   const query = useQuery({
-    queryKey: nativeEntitlementQueryKey(userId ?? ""),
+    queryKey: nativeEntitlementQueryKey(cacheOwnerId ?? ""),
     queryFn: () => fetchNativeVibesProEntitlement(userId!),
-    enabled: Boolean(userId) && !authLoading,
+    enabled: Boolean(userId) && !authLoading && status === "authenticated",
     staleTime: 60_000,
     refetchOnWindowFocus: true,
   });
@@ -29,11 +31,15 @@ export function NativeEntitlementProvider({ children }: { children: ReactNode })
 
   const entitlement = useMemo(
     () => createNativeEntitlementState(
-      userId,
+      cacheOwnerId,
       query.data,
-      query.isError ? query.error ?? new Error("VibesPro access could not be checked.") : null,
+      query.isError
+        ? query.error ?? new Error("VibesPro access could not be checked.")
+        : status === "offlineDeferred" && !query.data
+          ? new Error(NATIVE_OFFLINE_MESSAGE)
+          : null,
     ),
-    [query.data, query.error, query.isError, userId],
+    [cacheOwnerId, query.data, query.error, query.isError, status],
   );
 
   const value = useMemo(() => ({ entitlement, refresh }), [entitlement, refresh]);

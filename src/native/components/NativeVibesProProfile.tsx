@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ComponentRef } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -27,6 +27,7 @@ import { useRouter } from "expo-router";
 import { MessageCircle } from "lucide-react-native";
 import type { NativeProfile } from "../lib/profile";
 import type { PostRecord } from "../../types/post";
+import NativeBlurBackdrop from "./NativeBlurBackdrop";
 import NativeConfirmDialog from "./NativeConfirmDialog";
 import NativeSkeleton from "./NativeSkeleton";
 import { NativeProfilePostsSkeleton } from "./NativeScreenSkeletons";
@@ -146,7 +147,7 @@ export default function NativeVibesProProfile({
   const router = useRouter();
   const { theme } = useNativeTheme();
   const isBlueSky = theme === "bluesky";
-  const carouselRef = useRef<ScrollView>(null);
+  const carouselRef = useRef<ComponentRef<typeof ScrollView>>(null);
   const isOwnProfile = profile.id === viewerId;
   const [menuOpen, setMenuOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
@@ -634,7 +635,9 @@ export default function NativeVibesProProfile({
       </SafeAreaView>
 
       <Modal animationType="fade" onRequestClose={() => setMenuOpen(false)} transparent visible={menuOpen}>
-        <Pressable style={styles.modalBackdrop} onPress={() => setMenuOpen(false)}>
+        <View style={styles.modalBackdrop}>
+          <NativeBlurBackdrop intensity={18} overlayColor="rgba(2,6,23,0.38)" />
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setMenuOpen(false)} />
           <View style={[styles.menuCard, isBlueSky && styles.blueSkyPanel]}>
             <View style={[styles.modalHeadingRow, isBlueSky && styles.blueSkyPanel]}>
               <Text style={[styles.modalTitle, isBlueSky && styles.blueSkyText]}>Profile actions</Text>
@@ -662,11 +665,13 @@ export default function NativeVibesProProfile({
               ))}
             </View>
           </View>
-        </Pressable>
+        </View>
       </Modal>
 
       <Modal animationType="fade" onRequestClose={() => setProblemOpen(false)} transparent visible={problemOpen}>
         <View style={styles.modalBackdrop}>
+          <NativeBlurBackdrop intensity={18} overlayColor="rgba(2,6,23,0.38)" />
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setProblemOpen(false)} />
           <View style={[styles.reportCard, isBlueSky && styles.blueSkyPanel]}>
             <View style={[styles.modalHeadingRow, isBlueSky && styles.blueSkyPanel]}>
               <Text style={[styles.modalTitle, isBlueSky && styles.blueSkyText]}>Report a problem</Text>
@@ -695,6 +700,8 @@ export default function NativeVibesProProfile({
 
       <Modal animationType="fade" onRequestClose={() => setStatusOpen(false)} transparent visible={statusOpen}>
         <View style={styles.modalBackdrop}>
+          <NativeBlurBackdrop intensity={18} overlayColor="rgba(2,6,23,0.38)" />
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setStatusOpen(false)} />
           <View style={[styles.statusCard, isBlueSky && styles.blueSkyPanel]}>
             <View style={[styles.modalHeadingRow, isBlueSky && styles.blueSkyPanel]}>
               <Text style={[styles.modalTitle, isBlueSky && styles.blueSkyText]}>Profile status</Text>
@@ -758,6 +765,8 @@ export default function NativeVibesProProfile({
         visible={reportOpen}
       >
         <View style={styles.modalBackdrop}>
+          <NativeBlurBackdrop intensity={18} overlayColor="rgba(2,6,23,0.38)" />
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setReportOpen(false)} />
           <View style={[styles.reportCard, isBlueSky && styles.blueSkyPanel]}>
             <View style={[styles.modalHeadingRow, isBlueSky && styles.blueSkyPanel]}>
               <Text style={[styles.modalTitle, isBlueSky && styles.blueSkyText]}>{reportSubmitted ? "Report submitted" : "Report profile"}</Text>
@@ -824,6 +833,8 @@ export default function NativeVibesProProfile({
 
       <Modal animationType="fade" onRequestClose={() => setCropChoiceOpen(false)} transparent visible={cropChoiceOpen}>
         <View style={styles.modalBackdrop}>
+          <NativeBlurBackdrop intensity={18} overlayColor="rgba(2,6,23,0.38)" />
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setCropChoiceOpen(false)} />
           <View style={[styles.cropChoice, isBlueSky && styles.blueSkyPanel]}>
             <Text style={[styles.cropChoiceTitle, isBlueSky && styles.blueSkyText]}>Would you like to crop your portrait?</Text>
             <View style={styles.cropChoiceButtons}>

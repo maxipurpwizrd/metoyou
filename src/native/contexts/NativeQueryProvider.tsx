@@ -4,9 +4,20 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import { AppState, type AppStateStatus } from "react-native";
 import { nativeQueryClient } from "../lib/queryClient";
 import { nativeAccountQueryFilter } from "../lib/queryKeys";
+import {
+  getNativeNetworkStatus,
+  setNativeConnectivityOffline,
+  subscribeToNativeNetworkStatus,
+} from "../lib/networkStatus";
+import { nativeSupabase } from "../lib/supabase";
 import { useNativeAuth } from "./NativeAuthProvider";
 
-const NativeConnectivityContext = createContext<{ isOffline: boolean; isSlow: boolean } | null>(null);
+const NativeConnectivityContext = createContext<{
+  isOffline: boolean;
+  isConnectivityOffline: boolean;
+  hasRequestFailure: boolean;
+  isSlow: boolean;
+} | null>(null);
 
 export function useNativeConnectivity() {
   const context = useContext(NativeConnectivityContext);
@@ -15,10 +26,12 @@ export function useNativeConnectivity() {
 }
 
 export function NativeQueryProvider({ children }: { children: ReactNode }) {
-  const { session } = useNativeAuth();
-  const userId = session?.user.id ?? null;
+  const { cacheUserId, retrySessionValidation, status } = useNativeAuth();
+  const userId = cacheUserId;
   const previousUserId = useRef(userId);
-  const [isOffline, setIsOffline] = useState(false);
+  const [isOffline, setIsOffline] = useState(getNativeNetworkStatus().isOffline);
+  const [isConnectivityOffline, setIsConnectivityOffline] = useState(getNativeNetworkStatus().isConnectivityOffline);
+  const [hasRequestFailure, setHasRequestFailure] = useState(getNativeNetworkStatus().hasRequestFailure);
   const [isSlow, setIsSlow] = useState(false);
 
   useEffect(() => {
@@ -26,35 +39,54 @@ export function NativeQueryProvider({ children }: { children: ReactNode }) {
     let networkEventsReceived = 0;
     let offlineTimer: ReturnType<typeof setTimeout> | null = null;
     const applyNetworkState = (state: Network.NetworkState) => {
-      const isOnline = state.isInternetReachable ?? state.isConnected ?? true;
-      onlineManager.setOnline(isOnline);
-      if (offlineTimer) clearTimeout(offlineTimer);
-      offlineTimer = null;
-      if (isOnline) {
-        setIsOffline(false);
-      } else {
-        offlineTimer = setTimeout(() => {
-          if (active) setIsOffline(true);
-        }, 2000);
-      }
+      const isReportedOffline = state.isInternetReachable === false || state.isConnected === false;
+      setNativeConnectivityOffline(isReportedOffline, state.isInternetReachable ?? null, state.isConnected ?? null);
     };
+    const unsubscribeNetworkStatus = subscribeToNativeNetworkStatus((state) => {
+      if (!active) return;
+      setIsOffline(state.isOffline);
+      setHasRequestFailure(state.hasRequestFailure);
+      if (state.hasRequestFailure) {
+        if (offlineTimer) clearTimeout(offlineTimer);
+        offlineTimer = null;
+      } else if (state.isConnectivityOffline) {
+        if (!offlineTimer) {
+          offlineTimer = setTimeout(() => {
+            offlineTimer = null;
+            if (active) setIsConnectivityOffline(getNativeNetworkStatus().isConnectivityOffline);
+          }, 2000);
+        }
+      } else {
+        if (offlineTimer) clearTimeout(offlineTimer);
+        offlineTimer = null;
+        setIsConnectivityOffline(false);
+      }
+    });
     const subscription = Network.addNetworkStateListener((state) => {
       networkEventsReceived += 1;
       applyNetworkState(state);
     });
     void Network.getNetworkStateAsync().then((state) => {
       if (active && networkEventsReceived === 0) applyNetworkState(state);
-    }).catch(() => {
-      onlineManager.setOnline(true);
-    });
+    }).catch(() => undefined);
 
     return () => {
       active = false;
       if (offlineTimer) clearTimeout(offlineTimer);
       subscription.remove();
-      onlineManager.setOnline(true);
+      unsubscribeNetworkStatus();
     };
   }, []);
+
+  useEffect(() => {
+    onlineManager.setOnline(!isOffline && status === "authenticated");
+  }, [isOffline, status]);
+
+  useEffect(() => {
+    if (status === "offlineDeferred" && !isOffline) {
+      void retrySessionValidation();
+    }
+  }, [isOffline, retrySessionValidation, status]);
 
   useEffect(() => {
     let slowTimer: ReturnType<typeof setTimeout> | null = null;
@@ -82,11 +114,22 @@ export function NativeQueryProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     focusManager.setFocused(AppState.currentState === "active");
+    if (AppState.currentState === "active" && !getNativeNetworkStatus().isOffline && status === "authenticated") nativeSupabase.auth.startAutoRefresh();
+    else nativeSupabase.auth.stopAutoRefresh();
     const subscription = AppState.addEventListener("change", (state: AppStateStatus) => {
-      focusManager.setFocused(state === "active");
+      const isActive = state === "active";
+      focusManager.setFocused(isActive);
+      if (isActive && !getNativeNetworkStatus().isOffline && status === "authenticated") {
+        nativeSupabase.auth.startAutoRefresh();
+      } else {
+        nativeSupabase.auth.stopAutoRefresh();
+      }
+      if (isActive && !getNativeNetworkStatus().isOffline && status === "offlineDeferred") {
+        void retrySessionValidation();
+      }
     });
     return () => subscription.remove();
-  }, []);
+  }, [retrySessionValidation, status]);
 
   useEffect(() => {
     if (previousUserId.current === userId) return;
@@ -101,7 +144,7 @@ export function NativeQueryProvider({ children }: { children: ReactNode }) {
   }, [userId]);
 
   return (
-    <NativeConnectivityContext.Provider value={{ isOffline, isSlow }}>
+    <NativeConnectivityContext.Provider value={{ isOffline, isConnectivityOffline, hasRequestFailure, isSlow }}>
       <QueryClientProvider client={nativeQueryClient}>
         {children}
       </QueryClientProvider>

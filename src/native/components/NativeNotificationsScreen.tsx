@@ -13,6 +13,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useNativeAuth } from "../contexts/NativeAuthProvider";
+import { useNativeMusic } from "../contexts/NativeMusicProvider";
 import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
 import {
   deleteAllNativeNotifications,
@@ -100,6 +101,7 @@ function notificationEmoji(type: string) {
 
 export default function NativeNotificationsScreen() {
   const router = useRouter();
+  const music = useNativeMusic();
   const { session } = useNativeAuth();
   const { theme, isVibesPro } = useNativeTheme();
   const isBlueSky = theme === "bluesky";
@@ -179,8 +181,13 @@ export default function NativeNotificationsScreen() {
       const post = await fetchNativeNotificationPost(notification.postId);
       if (!post) throw new Error("The post could not be found.");
       const params = { postId: notification.postId, ...(notification.type === "comment" ? { showComments: "1" } : {}) };
-      if (post.video_url) router.push({ pathname: "/(app)/(tabs)/clips", params });
-      else if (post.audio_url) router.push({ pathname: "/(app)/(tabs)/tracks", params });
+      if (post.video_url) {
+        music.pause();
+        router.push({ pathname: "/(app)/(tabs)/clips", params });
+      } else if (post.audio_url) {
+        music.pause();
+        router.push({ pathname: "/(app)/(tabs)/tracks", params });
+      }
       else if (post.image_url || post.image_original_url) {
         router.push({
           pathname: "/(app)/(tabs)/flicks",
@@ -222,7 +229,7 @@ export default function NativeNotificationsScreen() {
       start={{ x: 0, y: 0 }}
       style={styles.root}
     >
-      <SafeAreaView edges={["top"]} style={styles.safeArea}>
+      <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
         <View style={[styles.header, isVibesPro && styles.vibesProHeader, isBlueSky && styles.blueSkyHeader]}>
           <Pressable
             accessibilityLabel="Go back"

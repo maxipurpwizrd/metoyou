@@ -28,6 +28,8 @@ import {
 } from "../lib/calls";
 import { resolveNativeConversation } from "../lib/chat";
 import { nativeCallHistoryQueryKey, nativeCallParticipantProfilesQueryKey } from "../lib/queryKeys";
+import { NATIVE_OFFLINE_MESSAGE } from "../lib/networkStatus";
+import NativeBlurBackdrop from "./NativeBlurBackdrop";
 import NativeSkeleton from "./NativeSkeleton";
 import { NativeCallHistoryRowsSkeleton } from "./NativeScreenSkeletons";
 
@@ -51,14 +53,15 @@ function formatDuration(seconds: number | null) {
 
 export default function NativeCallHistoryScreen() {
   const router = useRouter();
-  const { session } = useNativeAuth();
+  const { session, cacheUserId, status } = useNativeAuth();
   const { startCall } = useNativeCalls();
   const { theme } = useNativeTheme();
   const isBlueSky = theme === "bluesky";
   const userId = session?.user.id;
+  const cacheOwnerId = cacheUserId;
   const [pendingTarget, setPendingTarget] = useState<CallTarget | null>(null);
   const callsQuery = useInfiniteQuery({
-    queryKey: nativeCallHistoryQueryKey(userId ?? ""),
+    queryKey: nativeCallHistoryQueryKey(cacheOwnerId ?? ""),
     queryFn: ({ pageParam }) => fetchNativeCallHistoryPage(userId!, pageParam),
     enabled: Boolean(userId),
     initialPageParam: undefined as NativeCallHistoryCursor | undefined,
@@ -78,15 +81,16 @@ export default function NativeCallHistoryScreen() {
     [calls, userId],
   );
   const participantProfilesQuery = useQuery({
-    queryKey: nativeCallParticipantProfilesQueryKey(userId ?? "", participantIds),
+    queryKey: nativeCallParticipantProfilesQueryKey(cacheOwnerId ?? "", participantIds),
     queryFn: () => fetchNativeCallParticipantNames(participantIds),
     enabled: Boolean(userId && participantIds.length),
     staleTime: 5 * 60_000,
   });
   const usernames = participantProfilesQuery.data ?? {};
-  const loading = callsQuery.isPending;
+  const loading = callsQuery.isPending && status !== "offlineDeferred";
   const refreshing = callsQuery.isRefetching || participantProfilesQuery.isRefetching;
-  const error = callsQuery.error?.message ?? participantProfilesQuery.error?.message ?? null;
+  const error = callsQuery.error?.message ?? participantProfilesQuery.error?.message ??
+    (status === "offlineDeferred" && !callsQuery.data ? NATIVE_OFFLINE_MESSAGE : null);
 
   const loadCalls = useCallback(async () => {
     await Promise.all([callsQuery.refetch(), participantProfilesQuery.refetch()]);
@@ -94,7 +98,7 @@ export default function NativeCallHistoryScreen() {
 
   const redial = async (callType: "audio" | "video") => {
     if (!pendingTarget) return;
-    if (Constants.appOwnership === "expo") {
+    if (Constants.expoGoConfig !== null) {
       setPendingTarget(null);
       Alert.alert(
         "Development build required",
@@ -229,6 +233,8 @@ export default function NativeCallHistoryScreen() {
 
         <Modal animationType="fade" onRequestClose={() => setPendingTarget(null)} transparent visible={Boolean(pendingTarget)}>
           <View style={styles.modalBackdrop}>
+            <NativeBlurBackdrop intensity={22} overlayColor="rgba(0,0,0,0.58)" />
+            <Pressable onPress={() => setPendingTarget(null)} style={StyleSheet.absoluteFill} />
             <View style={[styles.modalCard, isBlueSky && styles.blueSkyModal]}>
               <Text style={styles.modalOverline}>CALL AGAIN</Text>
               <Text style={styles.modalTitle}>Choose a call type</Text>

@@ -3,14 +3,13 @@ import { Redirect, Stack } from "expo-router";
 import { useNativeAuth } from "../../src/native/contexts/NativeAuthProvider";
 import { NativeCallProvider } from "../../src/native/contexts/NativeCallProvider";
 import { NativePresenceProvider } from "../../src/native/contexts/NativePresenceProvider";
-import NativeOfflinePrompt from "../../src/native/components/NativeOfflinePrompt";
 
 export const unstable_settings = {
   initialRouteName: "(tabs)",
 };
 
 export default function AuthenticatedLayout() {
-  const { session, loading } = useNativeAuth();
+  const { session, loading, status } = useNativeAuth();
 
   if (loading) {
     return (
@@ -20,13 +19,12 @@ export default function AuthenticatedLayout() {
     );
   }
 
-  if (!session) return <Redirect href="/(auth)/login" />;
+  if (!session && status !== "offlineDeferred") return <Redirect href="/(auth)/login" />;
   return (
     <NativePresenceProvider>
       <NativeCallProvider>
         <>
           <Stack screenOptions={{ headerShown: false }} />
-          <NativeOfflinePrompt />
         </>
       </NativeCallProvider>
     </NativePresenceProvider>

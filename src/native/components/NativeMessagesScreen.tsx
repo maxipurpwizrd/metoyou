@@ -34,15 +34,13 @@ import {
 import { fetchNativeMessageThreads } from "../lib/messages";
 import { blockNativeUser } from "../lib/posts";
 import { nativeConversationActionsQueryKey, nativeMessageThreadsQueryKey } from "../lib/queryKeys";
+import { nativeMessageThreadsCacheKey } from "../lib/nativeAccountStorage";
+import { NATIVE_OFFLINE_MESSAGE } from "../lib/networkStatus";
 import { nativeSupabase } from "../lib/supabase";
 import { NativeConversationRowsSkeleton } from "./NativeScreenSkeletons";
 import NativeStories from "./NativeStories";
 
 const BOTTOM_BAR_HIDE_DELAY_MS = 10_000;
-
-function getThreadsCacheKey(userId: string) {
-  return `metoyou-threads:${userId}`;
-}
 
 function parseCachedThreads(raw: string): MessageThread[] {
   const parsed: unknown = JSON.parse(raw);
@@ -70,27 +68,28 @@ function sortThreads(threads: MessageThread[]) {
 
 export default function NativeMessagesScreen({ folder = "messages" }: { folder?: "messages" | "spam" } = {}) {
   const router = useRouter();
-  const { session } = useNativeAuth();
+  const { session, cacheUserId, status } = useNativeAuth();
   const { entitlement, refresh: refreshEntitlement } = useNativeEntitlement();
   const { theme } = useNativeTheme();
   const isBlueSky = theme === "bluesky";
   const userId = session?.user.id;
+  const cacheOwnerId = cacheUserId;
   const queryClient = useQueryClient();
   const [cachedThreadsUserId, setCachedThreadsUserId] = useState<string | null>(null);
   const [cacheError, setCacheError] = useState<string | null>(null);
   const showSpam = folder === "spam";
-  const threadsQueryKey = nativeMessageThreadsQueryKey(userId ?? "");
-  const actionsQueryKey = nativeConversationActionsQueryKey(userId ?? "");
+  const threadsQueryKey = nativeMessageThreadsQueryKey(cacheOwnerId ?? "");
+  const actionsQueryKey = nativeConversationActionsQueryKey(cacheOwnerId ?? "");
   const threadsQuery = useQuery({
     queryKey: threadsQueryKey,
     queryFn: async () => sortThreads(await fetchNativeMessageThreads(userId!)),
-    enabled: Boolean(userId && cachedThreadsUserId === userId),
+    enabled: Boolean(userId && cacheOwnerId && cachedThreadsUserId === cacheOwnerId),
     staleTime: 20_000,
   });
   const actionsQuery = useQuery({
     queryKey: actionsQueryKey,
     queryFn: () => fetchNativeConversationActions(userId!),
-    enabled: Boolean(userId),
+    enabled: Boolean(userId && cacheOwnerId),
   });
   const threads = threadsQuery.data ?? [];
   const actions = actionsQuery.data;
@@ -109,15 +108,17 @@ export default function NativeMessagesScreen({ folder = "messages" }: { folder?:
       const rightTime = right.lastTime ? new Date(right.lastTime).getTime() : 0;
       return rightTime - leftTime;
     });
-  const loading = Boolean(userId && !threadsQuery.data && (
-    cachedThreadsUserId !== userId || threadsQuery.isPending || actionsQuery.isPending
+  const loading = Boolean(cacheOwnerId && !threadsQuery.data && (
+    cachedThreadsUserId !== cacheOwnerId ||
+    threadsQuery.isPending ||
+    Boolean(userId && actionsQuery.isPending)
   ));
   const refreshing = threadsQuery.isRefetching;
   const error = threadsQuery.isError
     ? threadsQuery.error.message
     : actionsQuery.isError
       ? actionsQuery.error.message
-      : cacheError;
+      : cacheError ?? (status === "offlineDeferred" && !threadsQuery.data ? NATIVE_OFFLINE_MESSAGE : null);
   const isVibesPro = entitlement.status === "vibesPro";
   const [bottomBarVisible, setBottomBarVisible] = useState(true);
   const bottomBarTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -282,7 +283,7 @@ export default function NativeMessagesScreen({ folder = "messages" }: { folder?:
   }, []);
 
   useEffect(() => {
-    if (!userId) {
+    if (!cacheOwnerId) {
       setCachedThreadsUserId(null);
       setCacheError(null);
       return;
@@ -292,7 +293,7 @@ export default function NativeMessagesScreen({ folder = "messages" }: { folder?:
     setCacheError(null);
     void (async () => {
       try {
-        const cached = await AsyncStorage.getItem(getThreadsCacheKey(userId));
+        const cached = await AsyncStorage.getItem(nativeMessageThreadsCacheKey(cacheOwnerId));
         if (!active) return;
         if (cached) {
           const parsed = sortThreads(parseCachedThreads(cached));
@@ -305,25 +306,25 @@ export default function NativeMessagesScreen({ folder = "messages" }: { folder?:
           setCacheError(cause instanceof Error ? cause.message : "Saved conversations could not be read.");
         }
       } finally {
-        if (active) setCachedThreadsUserId(userId);
+        if (active) setCachedThreadsUserId(cacheOwnerId);
       }
     })();
     return () => {
       active = false;
     };
-  }, [queryClient, userId]);
+  }, [cacheOwnerId, queryClient, threadsQueryKey]);
 
   useEffect(() => {
-    if (!userId || cachedThreadsUserId !== userId || !threadsQuery.data) return;
+    if (!cacheOwnerId || cachedThreadsUserId !== cacheOwnerId || !threadsQuery.data) return;
     setCacheError(null);
-    void AsyncStorage.setItem(getThreadsCacheKey(userId), JSON.stringify(threadsQuery.data))
+    void AsyncStorage.setItem(nativeMessageThreadsCacheKey(cacheOwnerId), JSON.stringify(threadsQuery.data))
       .catch((cause: unknown) => console.warn("Could not persist saved conversations.", cause));
-  }, [cachedThreadsUserId, threadsQuery.data, userId]);
+  }, [cacheOwnerId, cachedThreadsUserId, threadsQuery.data]);
 
   const loadThreads = useCallback(async () => {
-    if (!userId || cachedThreadsUserId !== userId) return;
+    if (!userId || !cacheOwnerId || cachedThreadsUserId !== cacheOwnerId) return;
     await threadsQuery.refetch();
-  }, [cachedThreadsUserId, threadsQuery.refetch, userId]);
+  }, [cacheOwnerId, cachedThreadsUserId, threadsQuery.refetch, userId]);
 
   const updateConversationAction = async (field: NativeConversationActionField, enabled: boolean) => {
     if (!userId || !selectedThread || actionBusy) return;

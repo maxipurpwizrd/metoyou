@@ -109,7 +109,9 @@ export default function NativePostActionsMenu(props: Props) {
 
       <Modal
         animationType="fade"
-        onRequestClose={() => !busy && setMode("closed")}
+        onRequestClose={() => {
+          if (!busy) setMode("closed");
+        }}
         transparent
         visible={mode !== "closed"}
       >

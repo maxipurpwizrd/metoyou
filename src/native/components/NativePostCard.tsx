@@ -553,7 +553,9 @@ export default function NativePostCard({
         transparent
         visible={imageOpen}
       >
-        <Pressable accessibilityRole="button" onPress={() => setImageOpen(false)} style={styles.imageViewer}>
+        <View style={styles.imageViewer}>
+          <NativeBlurBackdrop intensity={40} overlayColor="rgba(2,6,23,0.48)" />
+          <Pressable accessibilityRole="button" onPress={() => setImageOpen(false)} style={StyleSheet.absoluteFill} />
           <Pressable accessibilityRole="none" onPress={(event) => event.stopPropagation()} style={styles.imageViewerContent}>
             <Image
               accessibilityLabel={`Full image posted by ${username}`}
@@ -565,7 +567,7 @@ export default function NativePostCard({
               <Text style={styles.imageViewerCloseText}>×</Text>
             </Pressable>
           </Pressable>
-        </Pressable>
+        </View>
       </Modal>
     </>
   );

@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { AppState, type AppStateStatus } from "react-native";
+import { AppState } from "react-native";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useNativeAuth } from "./NativeAuthProvider";
 import { nativeSupabase } from "../lib/supabase";
@@ -97,7 +97,7 @@ export function NativePresenceProvider({ children }: { children: ReactNode }) {
     });
     let subscribed = false;
     let heartbeat: ReturnType<typeof setInterval> | null = null;
-    let appState: AppStateStatus = AppState.currentState;
+    let appState: string | null | undefined = AppState.currentState;
 
     const persistLastSeen = (next: LastSeenCache) => {
       const bounded = mergeLastSeen(next);

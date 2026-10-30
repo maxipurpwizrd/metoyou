@@ -23,8 +23,11 @@ import {
   useAudioRecorder,
 } from "expo-audio";
 import { File } from "expo-file-system";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getRelativeTime } from "../../lib/time";
 import { nativeSupabase } from "../lib/supabase";
+import { nativeCommentLikesCacheKey } from "../lib/nativeAccountStorage";
+import { useNativeAuth } from "../contexts/NativeAuthProvider";
 import { uploadNativeCommentAudio } from "../lib/posts";
 import NativeBlurBackdrop from "./NativeBlurBackdrop";
 import NativeConfirmDialog from "./NativeConfirmDialog";
@@ -40,7 +43,6 @@ type NativeComment = {
 
 type CommentLike = { liked: boolean; likes: number };
 type CommentLikeState = Record<string, CommentLike>;
-const COMMENT_LIKE_STORAGE_KEY = "metoyou-comment-like-state";
 
 function NativeVoiceComment({ uri }: { uri: string }) {
   const player = useAudioPlayer(uri);
@@ -69,6 +71,8 @@ export default function NativeCommentsSheet({
   onClose: () => void;
   onCountChange: (count: number) => void;
 }) {
+  const { cacheUserId } = useNativeAuth();
+  const insets = useSafeAreaInsets();
   const [comments, setComments] = useState<NativeComment[]>([]);
   const [text, setText] = useState("");
   const [voiceBase64, setVoiceBase64] = useState<string | null>(null);
@@ -80,7 +84,8 @@ export default function NativeCommentsSheet({
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
-  const [likeState, setLikeState] = useState<CommentLikeState>({});
+  const [likeStateOwner, setLikeStateOwner] = useState<{ userId: string; state: CommentLikeState } | null>(null);
+  const likeState = likeStateOwner?.userId === cacheUserId ? likeStateOwner.state : {};
   const [error, setError] = useState<string | null>(null);
   const [commentToDelete, setCommentToDelete] = useState<string | null>(null);
   const onCountChangeRef = useRef(onCountChange);
@@ -122,13 +127,18 @@ export default function NativeCommentsSheet({
   }, [loadComments, visible]);
 
   useEffect(() => {
+    if (!cacheUserId) {
+      setLikeStateOwner(null);
+      return;
+    }
     let active = true;
-    void AsyncStorage.getItem(COMMENT_LIKE_STORAGE_KEY)
+    setLikeStateOwner({ userId: cacheUserId, state: {} });
+    void AsyncStorage.getItem(nativeCommentLikesCacheKey(cacheUserId))
       .then((raw) => {
         if (!active || !raw) return;
         const stored: unknown = JSON.parse(raw);
         if (stored && typeof stored === "object" && !Array.isArray(stored)) {
-          setLikeState(stored as CommentLikeState);
+          setLikeStateOwner({ userId: cacheUserId, state: stored as CommentLikeState });
         }
       })
       .catch((cause: unknown) => {
@@ -137,7 +147,7 @@ export default function NativeCommentsSheet({
     return () => {
       active = false;
     };
-  }, []);
+  }, [cacheUserId]);
 
   const updateCountBestEffort = async (delta: number, successMessage: string) => {
     try {
@@ -297,6 +307,7 @@ export default function NativeCommentsSheet({
   };
 
   const toggleCommentLike = async (commentId: string) => {
+    if (!cacheUserId) return;
     const current = likeState[commentId] ?? { liked: false, likes: 0 };
     const nextLikeState = {
       ...likeState,
@@ -306,8 +317,8 @@ export default function NativeCommentsSheet({
       },
     };
     try {
-      await AsyncStorage.setItem(COMMENT_LIKE_STORAGE_KEY, JSON.stringify(nextLikeState));
-      setLikeState(nextLikeState);
+      await AsyncStorage.setItem(nativeCommentLikesCacheKey(cacheUserId), JSON.stringify(nextLikeState));
+      setLikeStateOwner({ userId: cacheUserId, state: nextLikeState });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to save this like.");
     }
@@ -325,7 +336,7 @@ export default function NativeCommentsSheet({
       >
         <NativeBlurBackdrop intensity={18} overlayColor="rgba(2,32,54,0.42)" />
         <Pressable accessibilityRole="button" onPress={onClose} style={styles.backdrop} />
-        <View style={styles.sheet}>
+        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <View style={styles.header}>
             <View>
               <Text style={styles.title}>Comments</Text>

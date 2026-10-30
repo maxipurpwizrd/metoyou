@@ -3,7 +3,7 @@ import { Redirect, Stack } from "expo-router";
 import { useNativeAuth } from "../../src/native/contexts/NativeAuthProvider";
 
 export default function AuthLayout() {
-  const { session, loading } = useNativeAuth();
+  const { status, loading } = useNativeAuth();
 
   if (loading) {
     return (
@@ -13,7 +13,7 @@ export default function AuthLayout() {
     );
   }
 
-  if (session) return <Redirect href="/(app)/(tabs)" />;
+  if (status === "authenticated" || status === "offlineDeferred") return <Redirect href="/(app)/(tabs)" />;
   return <Stack screenOptions={{ headerShown: false, animation: "fade" }} />;
 }
 

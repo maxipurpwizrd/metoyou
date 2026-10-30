@@ -22,6 +22,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ban, CloudSun, Download, Flag, MessageCircle, MoonStar, Repeat2, Share2, Trash2 } from "lucide-react-native";
 import { useNativeAuth } from "../contexts/NativeAuthProvider";
+import { useNativeMusic } from "../contexts/NativeMusicProvider";
 import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
 import {
   fetchNativeFlickById,
@@ -32,7 +33,7 @@ import {
   type NativeFlick,
 } from "../lib/flicks";
 import { blockNativeUser, deleteNativePost, reportNativePost, toggleNativePostLike } from "../lib/posts";
-import NativeBlurBackdrop, { NativeBlurTargetContext } from "./NativeBlurBackdrop";
+import NativeBlurBackdrop, { NativeBlurTargetContext, type NativeBlurTargetRef } from "./NativeBlurBackdrop";
 import NativeCommentsSheet from "./NativeCommentsSheet";
 import NativeConfirmDialog from "./NativeConfirmDialog";
 import { NativeVerticalMediaSkeleton } from "./NativeScreenSkeletons";
@@ -57,6 +58,7 @@ function errorMessage(cause: unknown, fallback: string) {
 
 export default function NativeFlicksScreen() {
   const router = useRouter();
+  const music = useNativeMusic();
   const { session } = useNativeAuth();
   const { theme, setTheme } = useNativeTheme();
   const userId = session?.user.id;
@@ -71,7 +73,7 @@ export default function NativeFlicksScreen() {
     (Array.isArray(params.showComments) ? params.showComments[0] : params.showComments) === "1";
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
-  const blurTargetRef = useRef<View | null>(null);
+  const blurTargetRef = useRef<NativeBlurTargetRef>(null);
   const listRef = useRef<FlatList<NativeFlick>>(null);
   const requestGeneration = useRef(0);
   const loadingMoreRef = useRef(false);
@@ -438,7 +440,7 @@ export default function NativeFlicksScreen() {
                     <Text style={styles.errorTitle}>{feedError}</Text>
                     <Text style={styles.retryText}>Tap to retry</Text>
                   </Pressable>
-                ) : null
+                ) : undefined
               }
             />
 
@@ -463,7 +465,10 @@ export default function NativeFlicksScreen() {
 
             <NativeSurfaceDock
               activeSurface="flicks"
-              onClipsPress={() => router.navigate("/(app)/(tabs)/clips")}
+              onClipsPress={() => {
+                music.pause();
+                router.navigate("/(app)/(tabs)/clips");
+              }}
               onFeedPress={() => router.navigate("/(app)/(tabs)")}
               onFlicksPress={() => listRef.current?.scrollToOffset({ offset: 0, animated: true })}
               visible={dockVisible}
@@ -549,6 +554,7 @@ export default function NativeFlicksScreen() {
 
         <Modal animationType="fade" onRequestClose={() => setImageViewer(null)} statusBarTranslucent transparent visible={imageViewer !== null}>
           <View style={styles.viewerRoot}>
+            <NativeBlurBackdrop intensity={32} overlayColor="rgba(2,6,23,0.52)" />
             <Pressable accessibilityLabel="Close image viewer" onPress={() => setImageViewer(null)} style={StyleSheet.absoluteFill} />
             {imageViewer ? <Image resizeMode="contain" source={{ uri: imageViewer }} style={StyleSheet.absoluteFill} /> : null}
             <Pressable accessibilityLabel="Close image viewer" onPress={() => setImageViewer(null)} style={[styles.viewerClose, { top: insets.top + 10 }]}>

@@ -1,0 +1,8 @@
+[functions.native-call]
+verify_jwt = true
+
+[functions.native-device]
+verify_jwt = true
+
+[functions.native-push-receipts]
+verify_jwt = true

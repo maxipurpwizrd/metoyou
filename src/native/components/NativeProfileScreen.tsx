@@ -35,6 +35,8 @@ import {
   nativeProfilePostsQueryKey,
   nativeProfileQueryKey,
 } from "../lib/queryKeys";
+import { nativeSavedPostsCacheKey } from "../lib/nativeAccountStorage";
+import { NATIVE_OFFLINE_MESSAGE } from "../lib/networkStatus";
 import {
   blockNativeUser,
   deleteNativePost,
@@ -44,16 +46,16 @@ import {
 } from "../lib/posts";
 import { useNativeAuth } from "../contexts/NativeAuthProvider";
 import { useNativeEntitlement } from "../contexts/NativeEntitlementProvider";
+import { useNativeMusic } from "../contexts/NativeMusicProvider";
 import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
 import type { PostRecord } from "../../types/post";
+import NativeBlurBackdrop from "./NativeBlurBackdrop";
 import NativeConfirmDialog from "./NativeConfirmDialog";
 import NativePostCard from "./NativePostCard";
 import NativeSkeleton from "./NativeSkeleton";
 import { NativeProfilePostsSkeleton, NativeProfileSkeleton } from "./NativeScreenSkeletons";
 import NativeSurfaceDock from "./NativeSurfaceDock";
 import NativeVibesProProfile from "./NativeVibesProProfile";
-
-const SAVED_POSTS_KEY = "metoyou-saved-posts";
 
 function isVibesPro(profile: NativeProfile | null) {
   return Boolean(profile?.is_vibes_pro ?? profile?.is_vibespro ?? profile?.vibes_pro);
@@ -103,12 +105,14 @@ export default function NativeProfileScreen() {
   const params = useLocalSearchParams<{ username?: string | string[] }>();
   const routeUsername = Array.isArray(params.username) ? params.username[0] : params.username;
   const router = useRouter();
+  const music = useNativeMusic();
   const insets = useSafeAreaInsets();
-  const { session } = useNativeAuth();
+  const { session, cacheUserId, status } = useNativeAuth();
   const { entitlement, refresh: refreshEntitlement } = useNativeEntitlement();
   const { theme } = useNativeTheme();
   const isBlueSky = theme === "bluesky";
   const viewerId = session?.user.id;
+  const cacheOwnerId = cacheUserId;
   const queryClient = useQueryClient();
   const ownUsername = typeof session?.user.user_metadata.username === "string"
     ? session.user.user_metadata.username
@@ -116,7 +120,7 @@ export default function NativeProfileScreen() {
   const viewingSelf = !routeUsername || routeUsername.toLowerCase() === "me" ||
     routeUsername.toLowerCase() === ownUsername.toLowerCase();
   const profileKey = viewingSelf ? "self" : `username:${routeUsername}`;
-  const profileQueryKey = nativeProfileQueryKey(viewerId ?? "", profileKey);
+  const profileQueryKey = nativeProfileQueryKey(cacheOwnerId ?? "", profileKey);
   const profileQuery = useQuery({
     queryKey: profileQueryKey,
     queryFn: () => viewingSelf
@@ -126,14 +130,14 @@ export default function NativeProfileScreen() {
     staleTime: 60_000,
   });
   const profile = profileQuery.data ?? null;
-  const profilePostsQueryKey = nativeProfilePostsQueryKey(viewerId ?? "", profile?.id ?? "");
+  const profilePostsQueryKey = nativeProfilePostsQueryKey(cacheOwnerId ?? "", profile?.id ?? "");
   const profilePostsQuery = useQuery({
     queryKey: profilePostsQueryKey,
     queryFn: () => fetchNativeProfilePosts(profile!.id, viewerId!, profile),
     enabled: Boolean(viewerId && profile?.id),
     staleTime: 30_000,
   });
-  const followInfoQueryKey = nativeFollowInfoQueryKey(viewerId ?? "", profile?.id ?? "");
+  const followInfoQueryKey = nativeFollowInfoQueryKey(cacheOwnerId ?? "", profile?.id ?? "");
   const followInfoQuery = useQuery({
     queryKey: followInfoQueryKey,
     queryFn: () => fetchNativeFollowInfo(viewerId!, profile!.id),
@@ -144,7 +148,8 @@ export default function NativeProfileScreen() {
   const followInfo = followInfoQuery.data;
   const isFollowing = profile?.id !== viewerId && Boolean(followInfo?.isFollowing);
   const isFollowedBy = profile?.id !== viewerId && Boolean(followInfo?.isFollowedBy);
-  const [savedPostIds, setSavedPostIds] = useState<Set<string>>(() => new Set());
+  const [savedPostState, setSavedPostState] = useState<{ userId: string; ids: Set<string> } | null>(null);
+  const savedPostIds = savedPostState?.userId === cacheOwnerId ? savedPostState.ids : new Set<string>();
   const [followLoading, setFollowLoading] = useState(false);
   const [photoLoading, setPhotoLoading] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -153,11 +158,13 @@ export default function NativeProfileScreen() {
   const [editInterests, setEditInterests] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
   const [unfollowConfirmation, setUnfollowConfirmation] = useState(false);
-  const loading = profileQuery.isPending && !profile;
-  const postsLoading = Boolean(profile && profilePostsQuery.isPending && !profilePostsQuery.data);
-  const followInfoLoading = Boolean(profile && followInfoQuery.isPending && !followInfoQuery.data);
+  const loading = profileQuery.isPending && !profile && status !== "offlineDeferred";
+  const postsLoading = Boolean(profile && profilePostsQuery.isPending && !profilePostsQuery.data && status !== "offlineDeferred");
+  const followInfoLoading = Boolean(profile && followInfoQuery.isPending && !followInfoQuery.data && status !== "offlineDeferred");
   const error = profileQuery.isError && !profileQuery.data
     ? profileQuery.error.message
+    : status === "offlineDeferred" && !profile
+      ? NATIVE_OFFLINE_MESSAGE
     : profilePostsQuery.isError && !profilePostsQuery.data
       ? profilePostsQuery.error.message
       : followInfoQuery.isError && !followInfoQuery.data
@@ -201,13 +208,18 @@ export default function NativeProfileScreen() {
   }, [followInfoQuery.refetch, profilePostsQuery.refetch, profileQuery.refetch]);
 
   useEffect(() => {
+    if (!cacheOwnerId) {
+      setSavedPostState(null);
+      return;
+    }
     let active = true;
-    void AsyncStorage.getItem(SAVED_POSTS_KEY)
+    setSavedPostState({ userId: cacheOwnerId, ids: new Set() });
+    void AsyncStorage.getItem(nativeSavedPostsCacheKey(cacheOwnerId))
       .then((raw) => {
         if (!active || !raw) return;
         const ids: unknown = JSON.parse(raw);
         if (Array.isArray(ids) && ids.every((id) => typeof id === "string")) {
-          setSavedPostIds(new Set(ids));
+          setSavedPostState({ userId: cacheOwnerId, ids: new Set(ids) });
         }
       })
       .catch((cause: unknown) => {
@@ -216,12 +228,13 @@ export default function NativeProfileScreen() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [cacheOwnerId]);
 
   const savePost = async (postId: string) => {
+    if (!cacheOwnerId) return;
     const next = new Set(savedPostIds).add(postId);
-    await AsyncStorage.setItem(SAVED_POSTS_KEY, JSON.stringify([...next]));
-    setSavedPostIds(next);
+    await AsyncStorage.setItem(nativeSavedPostsCacheKey(cacheOwnerId), JSON.stringify([...next]));
+    setSavedPostState({ userId: cacheOwnerId, ids: next });
   };
 
   const toggleFollow = async () => {
@@ -435,7 +448,10 @@ export default function NativeProfileScreen() {
         </View>
 
         {loading || ownEntitlementLoading ? (
-          <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, 20) + 100 }]}
+            showsVerticalScrollIndicator={false}
+          >
             <NativeProfileSkeleton />
           </ScrollView>
         ) : ownEntitlementError ? (
@@ -616,7 +632,10 @@ export default function NativeProfileScreen() {
       <NativeSurfaceDock
         activeSurface="feed"
         bottomInset={insets.bottom}
-        onClipsPress={() => router.navigate("/(app)/(tabs)/clips")}
+        onClipsPress={() => {
+          music.pause();
+          router.navigate("/(app)/(tabs)/clips");
+        }}
         onFeedPress={() => router.navigate("/(app)/(tabs)")}
         onFlicksPress={() => router.navigate("/(app)/(tabs)/flicks")}
         onTracksPress={() => router.navigate("/(app)/(tabs)/tracks")}
@@ -629,7 +648,9 @@ export default function NativeProfileScreen() {
         transparent
         visible={profileMenuOpen}
       >
-        <Pressable onPress={() => setProfileMenuOpen(false)} style={styles.menuBackdrop}>
+        <View style={styles.menuBackdrop}>
+          <NativeBlurBackdrop intensity={18} overlayColor="rgba(15,23,42,0.48)" />
+          <Pressable onPress={() => setProfileMenuOpen(false)} style={StyleSheet.absoluteFill} />
           <Pressable onPress={(event) => event.stopPropagation()} style={styles.profileMenuCard}>
             <View style={styles.menuHeading}>
               <View>
@@ -692,11 +713,13 @@ export default function NativeProfileScreen() {
               )}
             </View>
           </Pressable>
-        </Pressable>
+        </View>
       </Modal>
 
       <Modal animationType="fade" onRequestClose={() => setEditOpen(false)} transparent visible={editOpen}>
         <View style={styles.modalBackdrop}>
+          <NativeBlurBackdrop intensity={26} overlayColor="rgba(15,23,42,0.42)" />
+          <Pressable onPress={() => setEditOpen(false)} style={StyleSheet.absoluteFill} />
           <View style={styles.editCard}>
             <Text style={styles.editTitle}>Edit profile</Text>
             <Text style={styles.inputLabel}>About me</Text>

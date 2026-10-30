@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { Modal, Pressable, SafeAreaView, StyleSheet, Text, View } from "react-native";
+import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Mic, MicOff, PhoneOff, Volume2, VolumeX, Video, VideoOff } from "lucide-react-native";
 import { RTCView, type MediaStream } from "react-native-webrtc";
+import { SafeAreaView } from "react-native-safe-area-context";
 import type { CallSession, CallType } from "../../types/call";
 import { useNativeTheme } from "../contexts/NativeThemeProvider";
 
@@ -12,6 +13,8 @@ export type NativeIncomingCall = {
   senderName: string;
   callType: CallType;
   callId?: string;
+  invitationId?: string;
+  expiresAt?: string;
   sdp: { type: "offer"; sdp: string };
 };
 
@@ -90,7 +93,7 @@ export default function NativeCallOverlay({
           locations={[0, 0.5, 1]}
           style={StyleSheet.absoluteFill}
         />
-        <SafeAreaView style={styles.safeArea}>
+        <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
           <View style={styles.content}>
             {callType === "video" && localStream?.getVideoTracks().length && !isCameraOff ? (
               <View style={styles.localVideo}>

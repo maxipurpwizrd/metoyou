@@ -3,7 +3,7 @@ import { Redirect } from "expo-router";
 import { useNativeAuth } from "../src/native/contexts/NativeAuthProvider";
 
 export default function IndexRoute() {
-  const { session, loading } = useNativeAuth();
+  const { status, loading } = useNativeAuth();
 
   if (loading) {
     return (
@@ -13,7 +13,7 @@ export default function IndexRoute() {
     );
   }
 
-  return <Redirect href={session ? "/(app)/(tabs)" : "/(auth)/login"} />;
+  return <Redirect href={status === "authenticated" || status === "offlineDeferred" ? "/(app)/(tabs)" : "/(auth)/login"} />;
 }
 
 const styles = StyleSheet.create({

@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { nativeConversationActionsCacheKey } from "./nativeAccountStorage";
 
 export type NativeConversationActionField = "pinnedIds" | "archivedIds" | "unreadIds" | "deletedIds";
 
@@ -11,12 +12,8 @@ const EMPTY_ACTIONS: NativeConversationActions = {
   deletedIds: [],
 };
 
-function getStorageKey(userId: string) {
-  return `metoyou-conversation-actions:${userId}`;
-}
-
 export async function fetchNativeConversationActions(userId: string): Promise<NativeConversationActions> {
-  const raw = await AsyncStorage.getItem(getStorageKey(userId));
+  const raw = await AsyncStorage.getItem(nativeConversationActionsCacheKey(userId));
   if (!raw) return EMPTY_ACTIONS;
 
   try {
@@ -45,7 +42,7 @@ export async function setNativeConversationAction(
   if (enabled) ids.add(conversationId);
   else ids.delete(conversationId);
   const next = { ...current, [field]: [...ids] };
-  await AsyncStorage.setItem(getStorageKey(userId), JSON.stringify(next));
+  await AsyncStorage.setItem(nativeConversationActionsCacheKey(userId), JSON.stringify(next));
   return next;
 }
 
@@ -60,6 +57,6 @@ export async function clearNativeConversationActions(
     unreadIds: current.unreadIds.filter((id) => id !== conversationId),
     deletedIds: current.deletedIds,
   };
-  await AsyncStorage.setItem(getStorageKey(userId), JSON.stringify(next));
+  await AsyncStorage.setItem(nativeConversationActionsCacheKey(userId), JSON.stringify(next));
   return next;
 }

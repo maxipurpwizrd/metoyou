@@ -32,7 +32,7 @@ import { File } from "expo-file-system";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Mic } from "lucide-react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import type { Message, MessageThread } from "../../types/message";
 import { formatDisplayTime } from "../../lib/time";
@@ -64,6 +64,7 @@ import {
   nativeConversationMessagesQueryKey,
   nativeMessageThreadsQueryKey,
 } from "../lib/queryKeys";
+import NativeBlurBackdrop from "./NativeBlurBackdrop";
 import { NativeChatSkeleton } from "./NativeScreenSkeletons";
 import { getPresenceLabel } from "../../lib/presenceStatus";
 
@@ -222,6 +223,7 @@ export default function NativeChatScreen() {
   const { session, loading: authLoading } = useNativeAuth();
   const { entitlement } = useNativeEntitlement();
   const { theme } = useNativeTheme();
+  const insets = useSafeAreaInsets();
   const isBlueSky = theme === "bluesky";
   const { startCall } = useNativeCalls();
   const userId = session?.user.id;
@@ -772,7 +774,7 @@ export default function NativeChatScreen() {
 
   const startNativeCall = (callType: "audio" | "video") => {
     if (!conversationId || !recipientId || !recipient) return;
-    if (Constants.appOwnership === "expo") {
+    if (Constants.expoGoConfig !== null) {
       Alert.alert(
         "Development build required",
         "Audio and video calls need the MeToYou development build. Expo Go does not include the native WebRTC module.",
@@ -1055,7 +1057,7 @@ export default function NativeChatScreen() {
                     ? <ActivityIndicator color="#ffffff" size="small" />
                     : <Text style={[styles.loadOlderText, mutedText]}>Load earlier messages</Text>}
                 </Pressable>
-              ) : null}
+              ) : undefined}
             />
           )}
 
@@ -1201,12 +1203,13 @@ export default function NativeChatScreen() {
         visible={Boolean(selectedMessage)}
       >
         <View style={styles.pickerOverlay}>
+          <NativeBlurBackdrop intensity={18} overlayColor="rgba(2,6,23,0.46)" />
           <Pressable
             accessibilityLabel="Close message options"
             onPress={closeMessageActions}
             style={StyleSheet.absoluteFill}
           />
-          <View style={[styles.messageActionSheet, isVibesPro && styles.premiumPickerSheet]}>
+          <View style={[styles.messageActionSheet, { paddingBottom: Math.max(insets.bottom, 24) }, isVibesPro && styles.premiumPickerSheet]}>
             <View style={[styles.pickerHandle, isVibesPro && styles.premiumPickerHandle]} />
             {forwardPickerVisible ? (
               <>
@@ -1360,12 +1363,13 @@ export default function NativeChatScreen() {
         visible={attachmentPickerVisible}
       >
         <View style={styles.pickerOverlay}>
+          <NativeBlurBackdrop intensity={18} overlayColor="rgba(2,6,23,0.46)" />
           <Pressable
             accessibilityLabel="Close attachment options"
             onPress={() => setAttachmentPickerVisible(false)}
             style={StyleSheet.absoluteFill}
           />
-          <View style={[styles.pickerSheet, isVibesPro && styles.premiumPickerSheet]}>
+          <View style={[styles.pickerSheet, { paddingBottom: Math.max(insets.bottom, 24) }, isVibesPro && styles.premiumPickerSheet]}>
             <View style={[styles.pickerHandle, isVibesPro && styles.premiumPickerHandle]} />
             <View style={styles.pickerHeadingRow}>
               <View style={[styles.pickerHeadingIcon, isVibesPro && styles.premiumPickerHeadingIcon]}>

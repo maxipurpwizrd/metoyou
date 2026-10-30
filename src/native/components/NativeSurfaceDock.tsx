@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Animated, Pressable, StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import { useRouter } from "expo-router";
 import { Gamepad2, Home, Image, Music2, ShoppingBag, Video } from "lucide-react-native";
+import { useNativeMusic } from "../contexts/NativeMusicProvider";
 import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
 
 export const NATIVE_SURFACE_DOCK_HEIGHT = 61;
@@ -53,9 +54,10 @@ export default function NativeSurfaceDock({
   onFlicksPress?: () => void;
   onClipsPress?: () => void;
   onTracksPress?: () => void;
-  activeSurface?: "feed" | "flicks" | "clips" | "tracks";
+  activeSurface?: "feed" | "flicks" | "clips" | "tracks" | "gaming";
 }) {
   const router = useRouter();
+  const music = useNativeMusic();
   const { theme, isVibesPro } = useNativeTheme();
   const colors = NATIVE_THEME_COLORS[theme];
   const translateY = useRef(new Animated.Value(0)).current;
@@ -97,6 +99,7 @@ export default function NativeSurfaceDock({
                     else router.navigate("/(app)/(tabs)/flicks");
                     break;
                   case "clips":
+                    music.pause();
                     if (onClipsPress) onClipsPress();
                     else router.navigate("/(app)/(tabs)/clips");
                     break;
@@ -105,7 +108,7 @@ export default function NativeSurfaceDock({
                     else router.navigate("/(app)/(tabs)/tracks");
                     break;
                   case "market": Alert.alert("Market", "Coming soon."); break;
-                  case "gaming": Alert.alert("Gaming", "Coming soon."); break;
+                  case "gaming": router.navigate("/(app)/games"); break;
                 }
               }}
               style={({ pressed }) => [

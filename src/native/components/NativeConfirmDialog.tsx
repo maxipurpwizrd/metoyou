@@ -55,7 +55,9 @@ export default function NativeConfirmDialog({
   return (
     <Modal
       animationType="fade"
-      onRequestClose={() => !busy && onCancel()}
+      onRequestClose={() => {
+        if (!busy) onCancel();
+      }}
       statusBarTranslucent
       transparent
       visible={visible}

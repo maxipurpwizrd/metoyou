@@ -9,7 +9,7 @@ const unavailableCallContext = {
 };
 
 export function NativeCallProvider({ children }: { children: ReactNode }) {
-  if (Constants.appOwnership === "expo") {
+  if (Constants.expoGoConfig !== null) {
     return (
       <NativeCallContext.Provider value={unavailableCallContext}>
         {children}

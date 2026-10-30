@@ -77,7 +77,7 @@ export default function NativeSearchScreen() {
       start={{ x: 0, y: 0 }}
       style={styles.root}
     >
-      <SafeAreaView edges={["top"]} style={styles.safeArea}>
+      <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
         <View style={[styles.header, isVibesPro && styles.vibesProHeader, isBlueSky && styles.blueSkyHeader]}>
           <Pressable
             accessibilityLabel="Go back"

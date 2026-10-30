@@ -23,10 +23,11 @@ import NativeConfirmDialog from "./NativeConfirmDialog";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNativeAuth } from "../contexts/NativeAuthProvider";
 import { useNativeTheme } from "../contexts/NativeThemeProvider";
+import { nativeSavedStoriesCacheKey } from "../lib/nativeAccountStorage";
+import { NATIVE_OFFLINE_MESSAGE } from "../lib/networkStatus";
 import { createNativeStory, deleteNativeStory, fetchNativeStories, type NativeStory } from "../lib/stories";
 import { nativeStoriesQueryKey } from "../lib/queryKeys";
 
-const SAVED_STORIES_KEY = "metoyou-saved-stories";
 const STORY_DURATIONS = [2, 4, 8, 12, 24];
 const EMPTY_STORIES: NativeStory[] = [];
 
@@ -42,10 +43,11 @@ export default function NativeStories({
   isVibesPro?: boolean;
   messagesList?: boolean;
 }) {
-  const { session } = useNativeAuth();
+  const { session, cacheUserId, status } = useNativeAuth();
   const { theme } = useNativeTheme();
   const isBlueSky = theme === "bluesky";
   const authorId = session?.user.id;
+  const cacheOwnerId = cacheUserId;
   const username =
     typeof session?.user.user_metadata.username === "string"
       ? session.user.user_metadata.username
@@ -56,7 +58,7 @@ export default function NativeStories({
       : null;
   const queryClient = useQueryClient();
   const storiesQuery = useQuery({
-    queryKey: nativeStoriesQueryKey(authorId ?? ""),
+    queryKey: nativeStoriesQueryKey(cacheOwnerId ?? ""),
     queryFn: fetchNativeStories,
     enabled: Boolean(authorId),
     staleTime: 20_000,
@@ -64,8 +66,9 @@ export default function NativeStories({
   const stories = (storiesQuery.data ?? EMPTY_STORIES).filter(
     (story) => new Date(story.expires_at).getTime() > Date.now(),
   );
-  const loading = storiesQuery.isPending;
-  const loadError = storiesQuery.error?.message ?? null;
+  const loading = storiesQuery.isPending && status !== "offlineDeferred";
+  const loadError = storiesQuery.error?.message ??
+    (status === "offlineDeferred" && !storiesQuery.data ? NATIVE_OFFLINE_MESSAGE : null);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [progress, setProgress] = useState(0);
   const [composerOpen, setComposerOpen] = useState(false);
@@ -79,19 +82,25 @@ export default function NativeStories({
     originalBase64: string;
     originalMimeType: string;
   } | null>(null);
-  const [savedStoryIds, setSavedStoryIds] = useState<Set<string>>(() => new Set());
+  const [savedStoryState, setSavedStoryState] = useState<{ userId: string; ids: Set<string> } | null>(null);
+  const savedStoryIds = savedStoryState?.userId === cacheOwnerId ? savedStoryState.ids : new Set<string>();
   const [busy, setBusy] = useState(false);
   const [composerError, setComposerError] = useState<string | null>(null);
   const selectedStory = selectedIndex === null ? null : stories[selectedIndex] ?? null;
   const isOwner = Boolean(selectedStory && selectedStory.author_id === authorId);
 
   useEffect(() => {
-    void AsyncStorage.getItem(SAVED_STORIES_KEY)
+    if (!cacheOwnerId) {
+      setSavedStoryState(null);
+      return;
+    }
+    setSavedStoryState({ userId: cacheOwnerId, ids: new Set() });
+    void AsyncStorage.getItem(nativeSavedStoriesCacheKey(cacheOwnerId))
       .then((raw) => {
         if (!raw) return;
         const ids: unknown = JSON.parse(raw);
         if (Array.isArray(ids) && ids.every((id) => typeof id === "string")) {
-          setSavedStoryIds(new Set(ids));
+          setSavedStoryState({ userId: cacheOwnerId, ids: new Set(ids) });
         }
       })
       .catch((cause: unknown) => {
@@ -100,7 +109,7 @@ export default function NativeStories({
           cause instanceof Error ? cause.message : "Saved stories could not be loaded.",
         );
       });
-  }, []);
+  }, [cacheOwnerId]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -236,10 +245,10 @@ export default function NativeStories({
   };
 
   const saveStory = async () => {
-    if (!selectedStory) return;
+    if (!selectedStory || !cacheOwnerId) return;
     const next = new Set(savedStoryIds).add(selectedStory.id);
-    await AsyncStorage.setItem(SAVED_STORIES_KEY, JSON.stringify([...next]));
-    setSavedStoryIds(next);
+    await AsyncStorage.setItem(nativeSavedStoriesCacheKey(cacheOwnerId), JSON.stringify([...next]));
+    setSavedStoryState({ userId: cacheOwnerId, ids: next });
     setMenuOpen(false);
     Alert.alert("Story saved", "This story is saved on this device.");
   };

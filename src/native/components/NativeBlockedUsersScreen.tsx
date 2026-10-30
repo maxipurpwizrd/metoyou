@@ -71,7 +71,7 @@ export default function NativeBlockedUsersScreen() {
 
   return (
     <LinearGradient colors={NATIVE_THEME_COLORS[theme].background} style={styles.root}>
-      <SafeAreaView edges={["top"]} style={styles.safeArea}>
+      <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
         <View style={[styles.header, isBlueSky && styles.blueSkyHeader]}>
           <Pressable
             accessibilityLabel="Go back"

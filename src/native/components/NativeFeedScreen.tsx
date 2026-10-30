@@ -22,7 +22,7 @@ import {
 } from "@tanstack/react-query";
 import { BlurTargetView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
-import NativeBlurBackdrop, { NativeBlurTargetContext } from "./NativeBlurBackdrop";
+import NativeBlurBackdrop, { NativeBlurTargetContext, type NativeBlurTargetRef } from "./NativeBlurBackdrop";
 import type { PostRecord } from "../../types/post";
 import { useNativeAuth } from "../contexts/NativeAuthProvider";
 import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
@@ -37,6 +37,8 @@ import {
   nativeFeedPostQueryKey,
   nativeFeedQueryKey,
 } from "../lib/queryKeys";
+import { nativeSavedPostsCacheKey } from "../lib/nativeAccountStorage";
+import { NATIVE_OFFLINE_MESSAGE } from "../lib/networkStatus";
 import {
   blockNativeUser,
   createNativePost,
@@ -53,24 +55,28 @@ import NativeFeedSkeleton, { NativeFeedPostSkeleton } from "./NativeFeedSkeleton
 import NativeSurfaceDock, { useNativeSurfaceDockVisibility } from "./NativeSurfaceDock";
 import NativeStories from "./NativeStories";
 
-const SAVED_POSTS_KEY = "metoyou-saved-posts";
+const MINIMUM_PAGINATION_SKELETON_MS = 250;
+
 export default function NativeFeedScreen() {
-  const blurTargetRef = useRef<View | null>(null);
+  const blurTargetRef = useRef<NativeBlurTargetRef>(null);
   const params = useLocalSearchParams<{ postId?: string | string[]; showComments?: string | string[] }>();
   const requestedPostId = Array.isArray(params.postId) ? params.postId[0] : params.postId;
   const requestedShowComments =
     (Array.isArray(params.showComments) ? params.showComments[0] : params.showComments) === "1";
-  const { session } = useNativeAuth();
+  const { session, cacheUserId, status } = useNativeAuth();
   const { theme, isVibesPro } = useNativeTheme();
   const isBlueSky = theme === "bluesky";
   const userId = session?.user.id;
+  const cacheOwnerId = cacheUserId;
   const username =
     typeof session?.user.user_metadata.username === "string"
       ? session.user.user_metadata.username
       : session?.user.email?.split("@")[0] ?? "MeToYou member";
   const insets = useSafeAreaInsets();
   const [paginationError, setPaginationError] = useState<string | null>(null);
-  const [savedPostIds, setSavedPostIds] = useState<Set<string>>(() => new Set());
+  const [paginationPending, setPaginationPending] = useState(false);
+  const [savedPostState, setSavedPostState] = useState<{ userId: string; ids: Set<string> } | null>(null);
+  const savedPostIds = savedPostState?.userId === cacheOwnerId ? savedPostState.ids : new Set<string>();
   const [blockedPostAuthorIds, setBlockedPostAuthorIds] = useState<Set<string>>(() => new Set());
   const [focusedPostId, setFocusedPostId] = useState<string | null>(null);
   const {
@@ -81,7 +87,7 @@ export default function NativeFeedScreen() {
   const loadingMoreRef = useRef(false);
   const listRef = useRef<FlatList<PostRecord>>(null);
   const queryClient = useQueryClient();
-  const feedQueryKey = nativeFeedQueryKey(userId ?? "");
+  const feedQueryKey = nativeFeedQueryKey(cacheOwnerId ?? "");
   const feedQuery = useInfiniteQuery({
     queryKey: feedQueryKey,
     queryFn: ({ pageParam }) => fetchNativeFeedPage(pageParam),
@@ -93,9 +99,9 @@ export default function NativeFeedScreen() {
     },
     enabled: Boolean(userId && !requestedPostId),
   });
-  const posts = feedQuery.data?.pages.flat() ?? [];
+  const posts = useMemo(() => feedQuery.data?.pages.flat() ?? [], [feedQuery.data?.pages]);
   const focusedPostQuery = useQuery({
-    queryKey: nativeFeedPostQueryKey(userId ?? "", requestedPostId ?? ""),
+    queryKey: nativeFeedPostQueryKey(cacheOwnerId ?? "", requestedPostId ?? ""),
     queryFn: () => fetchNativeFeedPostById(requestedPostId!),
     enabled: Boolean(userId && requestedPostId),
   });
@@ -109,7 +115,7 @@ export default function NativeFeedScreen() {
   );
   const likesQueries = useQueries({
     queries: likeGroups.map((postIds) => ({
-      queryKey: nativeFeedLikesQueryKey(userId ?? "", postIds),
+      queryKey: nativeFeedLikesQueryKey(cacheOwnerId ?? "", postIds),
       queryFn: () => getNativeLikedPostIds(userId!, postIds),
       enabled: Boolean(userId && postIds.length),
     })),
@@ -117,14 +123,17 @@ export default function NativeFeedScreen() {
   const likedPostIds = new Set(likesQueries.flatMap((query) => [...(query.data ?? [])]));
   const likeError = likesQueries.find((query) => query.error)?.error;
   const initialLoading = requestedPostId
-    ? focusedPostQuery.isPending
-    : feedQuery.isPending && !feedQuery.data;
+    ? focusedPostQuery.isPending && status !== "offlineDeferred"
+    : feedQuery.isPending && !feedQuery.data && status !== "offlineDeferred";
   const feedError = requestedPostId
-    ? focusedPostQuery.error?.message ?? null
+    ? focusedPostQuery.error?.message ??
+      (status === "offlineDeferred" && !focusedPostQuery.data ? NATIVE_OFFLINE_MESSAGE : null)
     : feedQuery.isError && !feedQuery.data
       ? feedQuery.error.message
-      : null;
-  const loadingMore = feedQuery.isFetchingNextPage;
+      : status === "offlineDeferred" && !feedQuery.data
+        ? NATIVE_OFFLINE_MESSAGE
+        : null;
+  const loadingMore = paginationPending || feedQuery.isFetchingNextPage;
   const refreshing = feedQuery.isRefetching;
   const showFeedSkeleton = Boolean(userId && !requestedPostId && feedQuery.isPending && !feedQuery.data);
 
@@ -170,13 +179,18 @@ export default function NativeFeedScreen() {
   }, [likeError]);
 
   useEffect(() => {
+    if (!cacheOwnerId) {
+      setSavedPostState(null);
+      return;
+    }
     let active = true;
-    void AsyncStorage.getItem(SAVED_POSTS_KEY)
+    setSavedPostState({ userId: cacheOwnerId, ids: new Set() });
+    void AsyncStorage.getItem(nativeSavedPostsCacheKey(cacheOwnerId))
       .then((raw) => {
         if (!active || !raw) return;
         const ids = JSON.parse(raw) as unknown;
         if (Array.isArray(ids) && ids.every((id) => typeof id === "string")) {
-          setSavedPostIds(new Set(ids));
+          setSavedPostState({ userId: cacheOwnerId, ids: new Set(ids) });
         }
       })
       .catch((cause: unknown) => {
@@ -188,11 +202,13 @@ export default function NativeFeedScreen() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [cacheOwnerId]);
 
   const loadMorePosts = useCallback(async () => {
     if (!userId || !feedQuery.hasNextPage || loadingMoreRef.current) return;
     loadingMoreRef.current = true;
+    const startedAt = Date.now();
+    setPaginationPending(true);
     setPaginationError(null);
     try {
       const result = await feedQuery.fetchNextPage();
@@ -206,7 +222,12 @@ export default function NativeFeedScreen() {
           : "Unable to load more posts. Check your connection and retry.",
       );
     } finally {
+      const remainingSkeletonTime = MINIMUM_PAGINATION_SKELETON_MS - (Date.now() - startedAt);
+      if (remainingSkeletonTime > 0) {
+        await new Promise<void>((resolve) => setTimeout(resolve, remainingSkeletonTime));
+      }
       loadingMoreRef.current = false;
+      setPaginationPending(false);
     }
   }, [feedQuery.fetchNextPage, feedQuery.hasNextPage, userId]);
 
@@ -250,10 +271,11 @@ export default function NativeFeedScreen() {
   };
 
   const savePost = async (postId: string) => {
+    if (!cacheOwnerId) return;
     const next = new Set(savedPostIds);
     if (!next.has(postId)) next.add(postId);
-    await AsyncStorage.setItem(SAVED_POSTS_KEY, JSON.stringify([...next]));
-    setSavedPostIds(next);
+    await AsyncStorage.setItem(nativeSavedPostsCacheKey(cacheOwnerId), JSON.stringify([...next]));
+    setSavedPostState({ userId: cacheOwnerId, ids: next });
   };
 
   const deletePost = async (postId: string) => {
@@ -279,9 +301,12 @@ export default function NativeFeedScreen() {
     setFocusedPostId(null);
   };
 
-  const visiblePosts = requestedPostId
-    ? []
-    : posts.filter((post) => !blockedPostAuthorIds.has(post.author_id));
+  const visiblePosts = useMemo(
+    () => requestedPostId
+      ? []
+      : posts.filter((post) => !blockedPostAuthorIds.has(post.author_id)),
+    [blockedPostAuthorIds, posts, requestedPostId],
+  );
   const focusedPost = requestedPostId
     ? focusedPostRecord
     : posts.find((post) => post.id === focusedPostId) ?? null;
@@ -418,7 +443,7 @@ export default function NativeFeedScreen() {
         ref={listRef}
         ListHeaderComponent={
           showFeedSkeleton
-            ? null
+            ? undefined
             : (
               <View>
                 {feedQuery.isRefetching ? (
@@ -442,7 +467,17 @@ export default function NativeFeedScreen() {
         }
         ListEmptyComponent={renderEmptyState}
         ListFooterComponent={
-          paginationError ? (
+          loadingMore ? (
+            <View style={styles.paginationSkeletons}>
+              {Array.from({ length: 2 }, (_, index) => (
+                <NativeFeedPostSkeleton
+                  compact
+                  key={index}
+                  showMedia={index === 0}
+                />
+              ))}
+            </View>
+          ) : paginationError ? (
             <View style={styles.paginationError}>
               <Text style={styles.paginationErrorText}>{paginationError}</Text>
               <Pressable
@@ -453,17 +488,7 @@ export default function NativeFeedScreen() {
                 <Text style={styles.retryText}>Retry</Text>
               </Pressable>
             </View>
-          ) : loadingMore && feedQuery.hasNextPage ? (
-            <View style={styles.paginationSkeletons}>
-              {Array.from({ length: 2 }, (_, index) => (
-                <NativeFeedPostSkeleton
-                  compact
-                  key={index}
-                  showMedia={index === 0}
-                />
-              ))}
-            </View>
-          ) : null
+          ) : undefined
         }
         renderItem={({ item }) => (
           <Pressable
