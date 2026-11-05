@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import {
   ActivityIndicator,
@@ -54,12 +54,14 @@ function formatDuration(seconds: number | null) {
 export default function NativeCallHistoryScreen() {
   const router = useRouter();
   const { session, cacheUserId, status } = useNativeAuth();
-  const { startCall } = useNativeCalls();
+  const { startCall, isStartingCall } = useNativeCalls();
   const { theme } = useNativeTheme();
   const isBlueSky = theme === "bluesky";
   const userId = session?.user.id;
   const cacheOwnerId = cacheUserId;
   const [pendingTarget, setPendingTarget] = useState<CallTarget | null>(null);
+  const [isResolvingRedial, setIsResolvingRedial] = useState(false);
+  const redialInFlightRef = useRef(false);
   const callsQuery = useInfiniteQuery({
     queryKey: nativeCallHistoryQueryKey(cacheOwnerId ?? ""),
     queryFn: ({ pageParam }) => fetchNativeCallHistoryPage(userId!, pageParam),
@@ -97,7 +99,7 @@ export default function NativeCallHistoryScreen() {
   }, [callsQuery.refetch, participantProfilesQuery.refetch]);
 
   const redial = async (callType: "audio" | "video") => {
-    if (!pendingTarget) return;
+    if (!pendingTarget || redialInFlightRef.current || isStartingCall) return;
     if (Constants.expoGoConfig !== null) {
       setPendingTarget(null);
       Alert.alert(
@@ -107,7 +109,8 @@ export default function NativeCallHistoryScreen() {
       return;
     }
     const target = pendingTarget;
-    setPendingTarget(null);
+    redialInFlightRef.current = true;
+    setIsResolvingRedial(true);
     try {
       const conversation = await resolveNativeConversation(target.id);
       await startCall({
@@ -116,11 +119,15 @@ export default function NativeCallHistoryScreen() {
         recipientName: target.username,
         callType,
       });
+      setPendingTarget(null);
     } catch (cause) {
       Alert.alert(
         "Call could not start",
         cause instanceof Error ? cause.message : "Check your connection and try again.",
       );
+    } finally {
+      redialInFlightRef.current = false;
+      setIsResolvingRedial(false);
     }
   };
 
@@ -231,23 +238,23 @@ export default function NativeCallHistoryScreen() {
           </ScrollView>
         )}
 
-        <Modal animationType="fade" onRequestClose={() => setPendingTarget(null)} transparent visible={Boolean(pendingTarget)}>
+        <Modal animationType="fade" onRequestClose={() => { if (!isResolvingRedial && !isStartingCall) setPendingTarget(null); }} transparent visible={Boolean(pendingTarget)}>
           <View style={styles.modalBackdrop}>
             <NativeBlurBackdrop intensity={22} overlayColor="rgba(0,0,0,0.58)" />
-            <Pressable onPress={() => setPendingTarget(null)} style={StyleSheet.absoluteFill} />
+            <Pressable onPress={() => { if (!isResolvingRedial && !isStartingCall) setPendingTarget(null); }} style={StyleSheet.absoluteFill} />
             <View style={[styles.modalCard, isBlueSky && styles.blueSkyModal]}>
               <Text style={styles.modalOverline}>CALL AGAIN</Text>
               <Text style={styles.modalTitle}>Choose a call type</Text>
               <Text style={styles.modalSubtitle}>{pendingTarget?.username}</Text>
-              <Pressable onPress={() => void redial("audio")} style={[styles.primaryModalButton, isBlueSky && styles.blueSkyControl]}>
+              <Pressable disabled={isResolvingRedial || isStartingCall} onPress={() => void redial("audio")} style={[styles.primaryModalButton, isBlueSky && styles.blueSkyControl, (isResolvingRedial || isStartingCall) && styles.disabledButton]}>
                 <PhoneCall color="#ffffff" size={19} />
-                <Text style={styles.primaryModalText}>Start audio call</Text>
+                <Text style={styles.primaryModalText}>{isResolvingRedial || isStartingCall ? "Starting call…" : "Start audio call"}</Text>
               </Pressable>
-              <Pressable onPress={() => void redial("video")} style={[styles.secondaryModalButton, isBlueSky && styles.blueSkyCard]}>
+              <Pressable disabled={isResolvingRedial || isStartingCall} onPress={() => void redial("video")} style={[styles.secondaryModalButton, isBlueSky && styles.blueSkyCard, (isResolvingRedial || isStartingCall) && styles.disabledButton]}>
                 <Video color="#ffffff" size={19} />
-                <Text style={styles.secondaryModalText}>Start video call</Text>
+                <Text style={styles.secondaryModalText}>{isResolvingRedial || isStartingCall ? "Starting call…" : "Start video call"}</Text>
               </Pressable>
-              <Pressable accessibilityRole="button" onPress={() => setPendingTarget(null)} style={styles.cancelButton}>
+              <Pressable accessibilityRole="button" disabled={isResolvingRedial || isStartingCall} onPress={() => setPendingTarget(null)} style={[styles.cancelButton, (isResolvingRedial || isStartingCall) && styles.disabledButton]}>
                 <Text style={styles.cancelText}>Cancel</Text>
               </Pressable>
             </View>
@@ -299,6 +306,7 @@ const styles = StyleSheet.create({
   primaryModalText: { color: "#ffffff", fontSize: 14, fontWeight: "900" },
   secondaryModalButton: { minHeight: 47, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, borderWidth: 1, borderColor: "#555d69", borderRadius: 15, backgroundColor: "#303743" },
   secondaryModalText: { color: "#ffffff", fontSize: 14, fontWeight: "900" },
+  disabledButton: { opacity: 0.45 },
   cancelButton: { minHeight: 46, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#454b55", borderRadius: 15, backgroundColor: "#171c25" },
   cancelText: { color: "#ffffff", fontWeight: "800" },
 });

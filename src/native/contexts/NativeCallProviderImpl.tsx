@@ -21,6 +21,9 @@ import {
   getServerCallInvitation,
   recoverServerCallInvitation,
   transitionServerCallInvitation,
+  InvitationPersistenceUnknownError,
+  type CallInvitationRequest,
+  type CreatedServerCallInvitation,
 } from "../lib/callInvitationClient";
 import { nativeSupabase } from "../lib/supabase";
 import {
@@ -58,6 +61,12 @@ type StartCallInput = {
   recipientId: string;
   recipientName: string;
   callType: CallType;
+};
+type PendingCallCreation = {
+  request: CallInvitationRequest;
+  recipientName: string;
+  shouldSignal: boolean;
+  abandoned: boolean;
 };
 
 const ICE_SERVERS = [{ urls: ["stun:stun.l.google.com:19302"] }];
@@ -109,6 +118,9 @@ export function NativeCallProviderImpl({ children }: { children: ReactNode }) {
   const recoveringInvitationIdsRef = useRef(new Set<string>());
   const dismissedInvitationIdsRef = useRef(new Set<string>());
   const acceptingInvitationRef = useRef(false);
+  const startingCallRef = useRef(false);
+  const pendingCallCreationRef = useRef<PendingCallCreation | null>(null);
+  const retryPendingCallRef = useRef<() => Promise<void>>(async () => {});
   const sessionRef = useRef<CallSession | null>(null);
   const incomingCallRef = useRef<NativeIncomingCall | null>(null);
   const isMutedRef = useRef(false);
@@ -119,6 +131,8 @@ export function NativeCallProviderImpl({ children }: { children: ReactNode }) {
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
   const [isSpeakerOn, setIsSpeakerOn] = useState(false);
+  const [isStartingCall, setIsStartingCall] = useState(false);
+  const [pendingInvitationStatus, setPendingInvitationStatus] = useState<"creating" | "unknown" | "retrying" | null>(null);
   const [callError, setCallError] = useState<string | null>(null);
 
   const updateSession = useCallback((next: CallSession | null) => {
@@ -231,6 +245,9 @@ export function NativeCallProviderImpl({ children }: { children: ReactNode }) {
 
   const clearCall = useCallback(() => {
     stopMedia();
+    if (pendingCallCreationRef.current) {
+      pendingCallCreationRef.current.shouldSignal = false;
+    }
     callHistoryIdRef.current = null;
     callStartedAtRef.current = null;
     targetUserIdRef.current = null;
@@ -255,6 +272,65 @@ export function NativeCallProviderImpl({ children }: { children: ReactNode }) {
         : 0,
     }, [userId ?? "", targetUserIdRef.current ?? ""]);
   }, [userId]);
+
+  const completeCallCreation = useCallback(async (
+    pending: PendingCallCreation,
+    invitation: CreatedServerCallInvitation,
+  ) => {
+    const { request, recipientName } = pending;
+    if (pendingCallCreationRef.current !== pending || !pending.shouldSignal) {
+      if (pendingCallCreationRef.current === pending) {
+        pendingCallCreationRef.current = null;
+        setPendingInvitationStatus(null);
+      }
+      await transitionServerCallInvitation(
+        invitation.id,
+        "cancel",
+        `abandoned-create:${invitation.id}`,
+      ).catch((cause: unknown) => {
+        console.warn("Could not cancel an abandoned native call invitation.", cause);
+      });
+      return;
+    }
+    if (!userId) throw new Error("Sign in before placing a call.");
+    pendingCallCreationRef.current = null;
+    setPendingInvitationStatus(null);
+    invitationIdRef.current = invitation.id;
+    invitationStatusRef.current = "ringing";
+    invitationExpiresAtRef.current = invitation.expiresAt;
+    callHistoryIdRef.current = invitation.callHistoryId;
+    updateSession({
+      id: invitation.callHistoryId,
+      conversationId: request.conversationId,
+      callType: request.callType,
+      status: "ringing",
+      remoteUserId: request.calleeId,
+      remoteUsername: recipientName,
+    });
+    await sendSignal(request.conversationId, "call-offer", {
+      senderId: userId,
+      recipientId: request.calleeId,
+      senderName: displayName,
+      callType: request.callType,
+      callId: invitation.callHistoryId,
+      invitationId: invitation.id,
+      expiresAt: invitation.expiresAt,
+      renegotiation: false,
+      sdp: request.offer,
+    });
+    await flushPendingOutgoingIce();
+  }, [displayName, flushPendingOutgoingIce, sendSignal, updateSession, userId]);
+
+  const abandonPendingCall = useCallback(() => {
+    const pending = pendingCallCreationRef.current;
+    if (!pending) return;
+    pending.abandoned = true;
+    pending.shouldSignal = false;
+    pendingCallCreationRef.current = null;
+    setPendingInvitationStatus(null);
+    updateHistoryForEnd("failed");
+    clearCall();
+  }, [clearCall, updateHistoryForEnd]);
 
   const addPendingCandidates = useCallback(async (peerConnection: RTCPeerConnection) => {
     const candidates = pendingCandidatesRef.current;
@@ -793,117 +869,156 @@ export function NativeCallProviderImpl({ children }: { children: ReactNode }) {
 
   const startCall = useCallback(async (input: StartCallInput) => {
     if (!userId) throw new Error("Sign in before placing a call.");
+    if (startingCallRef.current) return;
+    if (pendingCallCreationRef.current) return;
     if (sessionRef.current || incomingCallRef.current) {
       Alert.alert("Call in progress", "Finish the current call before starting another.");
       return;
     }
-    setCallError(null);
-    setIsMuted(false);
-    isMutedRef.current = false;
-    await ensureCallChannel(input.conversationId);
-    const peerConnection = createPeerConnection(input.conversationId, input.recipientId);
-    targetUserIdRef.current = input.recipientId;
-    targetConversationIdRef.current = input.conversationId;
-    isInitiatorRef.current = true;
-    invitationIdRef.current = null;
-    invitationStatusRef.current = null;
-    invitationExpiresAtRef.current = null;
-
-    updateSession({
-      id: `call-${Date.now()}`,
-      conversationId: input.conversationId,
-      callType: input.callType,
-      status: "ringing",
-      remoteUserId: input.recipientId,
-      remoteUsername: input.recipientName,
-    });
-
-    let cameraStream: MediaStream | null = null;
-    if (input.callType === "video") {
-      try {
-        cameraStream = await mediaDevices.getUserMedia({ audio: false, video: true });
-        localStreamRef.current = cameraStream;
-        setLocalStream(cameraStream);
-        const videoTrack = cameraStream.getVideoTracks()[0];
-        if (videoTrack) peerConnection.addTransceiver(videoTrack, { direction: "sendrecv" });
-      } catch (cause) {
-        setCallError(cause instanceof Error ? "Camera unavailable. The call will continue without local video." : "Camera unavailable.");
-        peerConnection.addTransceiver("video", { direction: "recvonly" });
-      }
-    }
-    peerConnection.addTransceiver("audio", { direction: "recvonly" });
-
-    setIsMuted(false);
-    isMutedRef.current = false;
-    setIsCameraOff(input.callType === "video" && !cameraStream);
-    setIsSpeakerOn(false);
+    startingCallRef.current = true;
+    setIsStartingCall(true);
+    let pendingCreation: PendingCallCreation | null = null;
     try {
-      InCallManager.start({ media: input.callType });
-      InCallManager.setKeepScreenOn(true);
-      InCallManager.setForceSpeakerphoneOn(false);
-      const offer = await peerConnection.createOffer();
-      await peerConnection.setLocalDescription(offer);
-      const offerSdp = peerConnection.localDescription?.sdp ?? offer.sdp;
-      if (!offerSdp) throw new Error("The call offer could not be created.");
-      const idempotencyKey = createIdempotencyKey();
-      const { invitation } = await createServerCallInvitation({
-        conversationId: input.conversationId,
-        calleeId: input.recipientId,
-        callType: input.callType,
-        offer: { type: "offer", sdp: offerSdp },
-        idempotencyKey,
-      });
-      invitationIdRef.current = invitation.id;
-      invitationStatusRef.current = "ringing";
-      invitationExpiresAtRef.current = invitation.expiresAt;
-      callHistoryIdRef.current = invitation.callHistoryId;
+      setCallError(null);
+      setIsMuted(false);
+      isMutedRef.current = false;
+      await ensureCallChannel(input.conversationId);
+      const peerConnection = createPeerConnection(input.conversationId, input.recipientId);
+      targetUserIdRef.current = input.recipientId;
+      targetConversationIdRef.current = input.conversationId;
+      isInitiatorRef.current = true;
+      invitationIdRef.current = null;
+      invitationStatusRef.current = null;
+      invitationExpiresAtRef.current = null;
+
       updateSession({
-        id: invitation.callHistoryId,
+        id: `call-${Date.now()}`,
         conversationId: input.conversationId,
         callType: input.callType,
         status: "ringing",
         remoteUserId: input.recipientId,
         remoteUsername: input.recipientName,
       });
-      await sendSignal(input.conversationId, "call-offer", {
-        senderId: userId,
-        recipientId: input.recipientId,
-        senderName: displayName,
-        callType: input.callType,
-        callId: invitation.callHistoryId,
-        invitationId: invitation.id,
-        expiresAt: invitation.expiresAt,
-        renegotiation: false,
-        sdp: { type: "offer", sdp: offerSdp },
-      });
-      await flushPendingOutgoingIce();
+
+      let cameraStream: MediaStream | null = null;
+      if (input.callType === "video") {
+        try {
+          cameraStream = await mediaDevices.getUserMedia({ audio: false, video: true });
+          localStreamRef.current = cameraStream;
+          setLocalStream(cameraStream);
+          const videoTrack = cameraStream.getVideoTracks()[0];
+          if (videoTrack) peerConnection.addTransceiver(videoTrack, { direction: "sendrecv" });
+        } catch (cause) {
+          setCallError(cause instanceof Error ? "Camera unavailable. The call will continue without local video." : "Camera unavailable.");
+          peerConnection.addTransceiver("video", { direction: "recvonly" });
+        }
+      }
+      peerConnection.addTransceiver("audio", { direction: "recvonly" });
+
+      setIsMuted(false);
+      isMutedRef.current = false;
+      setIsCameraOff(input.callType === "video" && !cameraStream);
+      setIsSpeakerOn(false);
+      try {
+        InCallManager.start({ media: input.callType });
+        InCallManager.setKeepScreenOn(true);
+        InCallManager.setForceSpeakerphoneOn(false);
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        const offerSdp = peerConnection.localDescription?.sdp ?? offer.sdp;
+        if (!offerSdp) throw new Error("The call offer could not be created.");
+        const request: CallInvitationRequest = {
+          conversationId: input.conversationId,
+          calleeId: input.recipientId,
+          callType: input.callType,
+          offer: { type: "offer", sdp: offerSdp },
+          idempotencyKey: createIdempotencyKey(),
+        };
+        const pending = { request, recipientName: input.recipientName, shouldSignal: true, abandoned: false };
+        pendingCreation = pending;
+        pendingCallCreationRef.current = pending;
+        setPendingInvitationStatus("creating");
+        const { invitation } = await createServerCallInvitation(request);
+        await completeCallCreation(pending, invitation);
+      } catch (cause) {
+        if (pendingCreation?.abandoned) return;
+        if (cause instanceof InvitationPersistenceUnknownError && pendingCallCreationRef.current) {
+          setCallError(cause.message);
+          setPendingInvitationStatus("unknown");
+          return;
+        }
+        pendingCallCreationRef.current = null;
+        setPendingInvitationStatus(null);
+        setCallError(cause instanceof Error ? cause.message : "The call could not be started.");
+        const invitationId = invitationIdRef.current;
+        if (invitationId) {
+          await transitionServerCallInvitation(
+            invitationId,
+            "cancel",
+            `start-failed:${invitationId}`,
+          ).catch((transitionError: unknown) => {
+            console.warn("Could not cancel the failed native call invitation.", transitionError);
+          });
+        }
+        updateHistoryForEnd("failed");
+        clearCall();
+        throw cause;
+      }
+    } finally {
+      startingCallRef.current = false;
+      setIsStartingCall(false);
+    }
+  }, [
+    clearCall,
+    completeCallCreation,
+    createPeerConnection,
+    displayName,
+    ensureCallChannel,
+    sendSignal,
+    updateHistoryForEnd,
+    updateSession,
+    userId,
+  ]);
+
+  const retryPendingCall = useCallback(async () => {
+    const pending = pendingCallCreationRef.current;
+    if (!pending || !userId || startingCallRef.current) return;
+    startingCallRef.current = true;
+    setIsStartingCall(true);
+    setPendingInvitationStatus("retrying");
+    setCallError(null);
+    try {
+      const { invitation } = await createServerCallInvitation(pending.request);
+      await completeCallCreation(pending, invitation);
     } catch (cause) {
+      if (pending.abandoned) return;
+      if (cause instanceof InvitationPersistenceUnknownError) {
+        setCallError(cause.message);
+        setPendingInvitationStatus("unknown");
+        return;
+      }
+      pendingCallCreationRef.current = null;
+      setPendingInvitationStatus(null);
       setCallError(cause instanceof Error ? cause.message : "The call could not be started.");
       const invitationId = invitationIdRef.current;
       if (invitationId) {
         await transitionServerCallInvitation(
           invitationId,
           "cancel",
-          `start-failed:${invitationId}`,
+          `retry-failed:${invitationId}`,
         ).catch((transitionError: unknown) => {
           console.warn("Could not cancel the failed native call invitation.", transitionError);
         });
       }
       updateHistoryForEnd("failed");
       clearCall();
-      throw cause;
+      Alert.alert("Call could not start", cause instanceof Error ? cause.message : "Check your connection and try again.");
+    } finally {
+      startingCallRef.current = false;
+      setIsStartingCall(false);
     }
-  }, [
-    clearCall,
-    createPeerConnection,
-    displayName,
-    ensureCallChannel,
-    flushPendingOutgoingIce,
-    sendSignal,
-    updateHistoryForEnd,
-    updateSession,
-    userId,
-  ]);
+  }, [clearCall, completeCallCreation, updateHistoryForEnd, userId]);
+  retryPendingCallRef.current = retryPendingCall;
 
   const acceptCall = useCallback(async () => {
     const offer = incomingCallRef.current;
@@ -1089,6 +1204,13 @@ export function NativeCallProviderImpl({ children }: { children: ReactNode }) {
   const endCall = useCallback(async () => {
     const activeSession = sessionRef.current;
     if (!activeSession || !userId) return;
+    const pending = pendingCallCreationRef.current;
+    if (pending) {
+      pending.abandoned = true;
+      pending.shouldSignal = false;
+    }
+    pendingCallCreationRef.current = null;
+    setPendingInvitationStatus(null);
     const invitationId = invitationIdRef.current;
     if (invitationId) {
       try {
@@ -1142,7 +1264,7 @@ export function NativeCallProviderImpl({ children }: { children: ReactNode }) {
     InCallManager.setForceSpeakerphoneOn(speakerOn);
   }, [isSpeakerOn]);
 
-  const contextValue = useMemo(() => ({ startCall }), [startCall]);
+  const contextValue = useMemo(() => ({ startCall, isStartingCall }), [isStartingCall, startCall]);
 
   return (
     <NativeCallContext.Provider value={contextValue}>
@@ -1152,14 +1274,17 @@ export function NativeCallProviderImpl({ children }: { children: ReactNode }) {
         incomingCall={incomingCall}
         isCameraOff={isCameraOff}
         isMuted={isMuted}
+        onAbandonPendingInvitation={abandonPendingCall}
         isSpeakerOn={isSpeakerOn}
         localStream={localStream}
         onAccept={() => void acceptCall()}
         onDecline={() => void declineCall()}
         onEnd={() => void endCall()}
+        onRetryPendingInvitation={() => void retryPendingCallRef.current()}
         onToggleCamera={toggleCamera}
         onToggleMute={toggleMute}
         onToggleSpeaker={toggleSpeaker}
+        pendingInvitationStatus={pendingInvitationStatus}
         remoteStream={remoteStream}
         session={callSession}
       />

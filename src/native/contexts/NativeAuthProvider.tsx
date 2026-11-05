@@ -234,10 +234,10 @@ export function NativeAuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (state.status !== "authenticated") return;
     const userId = state.session.user.id;
-    void registerNativePushTokenForCurrentUser(userId);
+    void registerNativePushTokenForCurrentUser(userId, "session");
     const tokenSubscription = subscribeToNativePushTokenRefresh(userId);
     const appStateSubscription = AppState.addEventListener("change", (nextState) => {
-      if (nextState === "active") void registerNativePushTokenForCurrentUser(userId);
+      if (nextState === "active") void registerNativePushTokenForCurrentUser(userId, "foreground");
     });
     return () => {
       tokenSubscription.remove();

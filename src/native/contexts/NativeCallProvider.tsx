@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { NativeCallContext } from "./NativeCallContext";
 
 const unavailableCallContext = {
+  isStartingCall: false,
   startCall: async () => {
     throw new Error("Calls require the MeToYou development build.");
   },

@@ -225,7 +225,7 @@ export default function NativeChatScreen() {
   const { theme } = useNativeTheme();
   const insets = useSafeAreaInsets();
   const isBlueSky = theme === "bluesky";
-  const { startCall } = useNativeCalls();
+  const { startCall, isStartingCall } = useNativeCalls();
   const userId = session?.user.id;
   const queryClient = useQueryClient();
   const recipientPresence = useNativePresence(recipientId);
@@ -903,10 +903,10 @@ export default function NativeChatScreen() {
                 })}
               </Text>
             </View>
-            <Pressable accessibilityLabel="Start audio call" accessibilityRole="button" disabled={loading || !conversationId} onPress={() => startNativeCall("audio")} style={[styles.headerAction, isVibesPro && styles.premiumAction, (loading || !conversationId) && styles.disabledButton]}>
+            <Pressable accessibilityLabel="Start audio call" accessibilityRole="button" disabled={loading || !conversationId || isStartingCall} onPress={() => startNativeCall("audio")} style={[styles.headerAction, isVibesPro && styles.premiumAction, (loading || !conversationId || isStartingCall) && styles.disabledButton]}>
               <Text style={styles.actionEmoji}>📞</Text>
             </Pressable>
-            <Pressable accessibilityLabel="Start video call" accessibilityRole="button" disabled={loading || !conversationId} onPress={() => startNativeCall("video")} style={[styles.headerAction, isVibesPro && styles.premiumAction, (loading || !conversationId) && styles.disabledButton]}>
+            <Pressable accessibilityLabel="Start video call" accessibilityRole="button" disabled={loading || !conversationId || isStartingCall} onPress={() => startNativeCall("video")} style={[styles.headerAction, isVibesPro && styles.premiumAction, (loading || !conversationId || isStartingCall) && styles.disabledButton]}>
               <Text style={styles.actionEmoji}>🎥</Text>
             </Pressable>
           </View>

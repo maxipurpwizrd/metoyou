@@ -1,4 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { AppState } from "react-native";
+import { usePathname, useRouter } from "expo-router";
 import { createAudioPlayer, setAudioModeAsync, useAudioPlayerStatus, type AudioPlayer, type AudioMetadata, type AudioStatus } from "expo-audio";
 import type { NativeTrack } from "../lib/tracks";
 
@@ -27,11 +29,15 @@ type NativeMusicContextValue = {
 const NativeMusicContext = createContext<NativeMusicContextValue | null>(null);
 
 export function NativeMusicProvider({ children }: { children: ReactNode }) {
+  const router = useRouter();
+  const pathname = usePathname();
   const playerRef = useRef<AudioPlayer | null>(null);
   const lastSourceRef = useRef<string | null>(null);
   const [queue, setQueueState] = useState<NativeMusicQueueEntry[]>([]);
   const [currentIndex, setCurrentIndexState] = useState(0);
   const [currentTrack, setCurrentTrackState] = useState<NativeMusicQueueEntry | null>(null);
+  const currentTrackRef = useRef(currentTrack);
+  currentTrackRef.current = currentTrack;
 
   if (!playerRef.current) {
     playerRef.current = createAudioPlayer(null, { updateInterval: 250 });
@@ -39,6 +45,18 @@ export function NativeMusicProvider({ children }: { children: ReactNode }) {
 
   const player = playerRef.current;
   const status = useAudioPlayerStatus(player);
+
+  useEffect(() => {
+    let previousState = AppState.currentState;
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      const returnedToForeground = previousState !== "active" && nextState === "active";
+      previousState = nextState;
+      if (returnedToForeground && currentTrackRef.current && !pathname.endsWith("/tracks")) {
+        router.navigate("/(app)/(tabs)/tracks");
+      }
+    });
+    return () => subscription.remove();
+  }, [pathname, router]);
 
   useEffect(() => {
     void setAudioModeAsync({
@@ -65,8 +83,8 @@ export function NativeMusicProvider({ children }: { children: ReactNode }) {
     player.setActiveForLockScreen(true, metadata, {
       showNextTrack: true,
       showPreviousTrack: true,
-      showSeekForward: true,
-      showSeekBackward: true,
+      showSeekForward: false,
+      showSeekBackward: false,
     });
 
     const nextSource = currentTrack.audio_url;

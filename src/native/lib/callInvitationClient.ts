@@ -1,4 +1,25 @@
+import { FunctionsHttpError } from '@supabase/supabase-js';
 import { nativeSupabase } from './supabase';
+
+export class InvitationPersistenceUnknownError extends Error {
+  readonly code = 'INVITATION_PERSISTENCE_UNKNOWN';
+
+  constructor() {
+    super('The server could not confirm whether the call invitation was created.');
+    this.name = 'InvitationPersistenceUnknownError';
+  }
+}
+
+async function isInvitationPersistenceUnknown(cause: unknown): Promise<boolean> {
+  if (!(cause instanceof FunctionsHttpError) || !(cause.context instanceof Response)) return false;
+  try {
+    const body: unknown = await cause.context.clone().json();
+    return body !== null && typeof body === 'object'
+      && 'code' in body && body.code === 'INVITATION_PERSISTENCE_UNKNOWN';
+  } catch {
+    return false;
+  }
+}
 
 async function retryIdempotentRequest<T>(
   request: () => Promise<{ data: T; error: Error | null }>,
@@ -7,7 +28,8 @@ async function retryIdempotentRequest<T>(
     const result = await request();
     if (result.error) throw result.error;
     return result.data;
-  } catch {
+  } catch (cause) {
+    if (cause instanceof InvitationPersistenceUnknownError) throw cause;
     // The request retains its idempotency key and payload across this retry.
     const result = await request();
     if (result.error) throw result.error;
@@ -87,10 +109,23 @@ export type GetServerCallInvitationResponse = {
 export async function createServerCallInvitation(
   input: CallInvitationRequest,
 ): Promise<CreateServerCallInvitationResponse> {
-  const data = await retryIdempotentRequest(() =>
-    nativeSupabase.functions.invoke('native-call', {
-      body: { action: 'create', ...input },
-    }));
+  let data: CreateServerCallInvitationResponse | null;
+  try {
+    data = await retryIdempotentRequest(async () => {
+      const result = await nativeSupabase.functions.invoke('native-call', {
+        body: { action: 'create', ...input },
+      });
+      if (result.error && await isInvitationPersistenceUnknown(result.error)) {
+        throw new InvitationPersistenceUnknownError();
+      }
+      return result;
+    });
+  } catch (cause) {
+    if (await isInvitationPersistenceUnknown(cause)) {
+      throw new InvitationPersistenceUnknownError();
+    }
+    throw cause;
+  }
 
   if (!data?.invitation) throw new Error('The call invitation response was incomplete.');
   return data as CreateServerCallInvitationResponse;

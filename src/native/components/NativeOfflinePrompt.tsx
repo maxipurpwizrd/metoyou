@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Activity, Gamepad2, Music2, WifiOff, X } from "lucide-react-native";
 import { useNativeAuth } from "../contexts/NativeAuthProvider";
+import { useNativeMusic } from "../contexts/NativeMusicProvider";
 import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
 import NativeBlurBackdrop from "./NativeBlurBackdrop";
 
@@ -14,6 +15,7 @@ type PromptMode = "offline" | null;
 export default function NativeOfflinePrompt() {
   const router = useRouter();
   const { status } = useNativeAuth();
+  const music = useNativeMusic();
   const { isConnectivityOffline, hasRequestFailure, isSlow } = useNativeConnectivity();
   const { theme } = useNativeTheme();
   const colors = NATIVE_THEME_COLORS[theme];
@@ -72,7 +74,11 @@ export default function NativeOfflinePrompt() {
                   accessibilityRole="button"
                   onPress={() => {
                     close();
-                    router.navigate({ pathname: "/(app)/(tabs)/tracks", params: { openDeviceFiles: "1" } });
+                    if (music.currentTrack?.id.startsWith("device:")) {
+                      router.navigate("/(app)/(tabs)/tracks");
+                    } else {
+                      router.navigate({ pathname: "/(app)/(tabs)/tracks", params: { openDeviceFiles: "1" } });
+                    }
                   }}
                   style={[styles.actionButton, { backgroundColor: colors.accent }]}
                 >

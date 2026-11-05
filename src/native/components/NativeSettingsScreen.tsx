@@ -30,6 +30,7 @@ import NativeBlurBackdrop from "./NativeBlurBackdrop";
 import { NativeSettingsSkeleton } from "./NativeScreenSkeletons";
 import {
   getNativePushRegistrationStatus,
+  NATIVE_PUSH_REGISTRATION_STAGES,
   subscribeToNativePushRegistrationStatus,
   type NativePushRegistrationStatus,
 } from "../lib/pushRegistration";
@@ -51,7 +52,6 @@ const PUSH_REGISTRATION_LABELS: Record<NativePushRegistrationStatus["state"], st
   checking: "Checking",
   registered: "Registered",
   "permission-denied": "Permission needed",
-  "build-required": "Build required",
   unsupported: "Unavailable",
   failed: "Registration failed",
 };
@@ -548,6 +548,13 @@ export default function NativeSettingsScreen() {
               <View style={styles.rowText}>
                 <Text style={styles.rowTitle}>Push notifications</Text>
                 <Text style={styles.rowDetail}>{pushRegistrationStatus.detail}</Text>
+                <View style={styles.notificationDiagnostics}>
+                  {NATIVE_PUSH_REGISTRATION_STAGES.map(({ key, label }) => (
+                    <Text key={key} style={styles.rowDetail}>
+                      {label}: {pushRegistrationStatus.stages[key]?.detail ?? "Not run"}
+                    </Text>
+                  ))}
+                </View>
               </View>
               <Text style={styles.unavailableTag}>
                 {PUSH_REGISTRATION_LABELS[pushRegistrationStatus.state]}
@@ -725,6 +732,7 @@ const styles = StyleSheet.create({
   rowText: { flex: 1, gap: 3 },
   rowTitle: { color: "#ffffff", fontSize: 14, fontWeight: "800" },
   rowDetail: { color: "#ffffff", fontSize: 11, lineHeight: 16 },
+  notificationDiagnostics: { gap: 2, marginTop: 4 },
   rowArrow: { color: "#ffffff", fontSize: 24 },
   pressed: { opacity: 0.7, backgroundColor: "#252b35" },
   optionList: { gap: 7 },
@@ -735,7 +743,7 @@ const styles = StyleSheet.create({
   radio: { color: "#ffffff", fontSize: 19 },
   radioSelected: { color: "#ffffff" },
   note: { color: "#ffffff", fontSize: 11, lineHeight: 16 },
-  notificationRow: { minHeight: 58, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 10 },
+  notificationRow: { minHeight: 58, flexDirection: "row", alignItems: "flex-start", gap: 10, paddingHorizontal: 10 },
   unavailableTag: { overflow: "hidden", paddingHorizontal: 9, paddingVertical: 6, borderWidth: 1, borderColor: "#454b55", borderRadius: 99, color: "#ffffff", backgroundColor: "#252b35", fontSize: 9, fontWeight: "800" },
   versionRow: { minHeight: 50, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 10 },
   versionTag: { overflow: "hidden", paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: "#454b55", borderRadius: 99, color: "#ffffff", backgroundColor: "#252b35", fontSize: 10, fontWeight: "800" },

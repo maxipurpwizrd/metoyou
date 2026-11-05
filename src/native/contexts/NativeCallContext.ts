@@ -10,11 +10,13 @@ type StartCallInput = {
 
 type NativeCallContextValue = {
   startCall: (input: StartCallInput) => Promise<void>;
+  isStartingCall: boolean;
 };
 
 export const NativeCallContext = createContext<NativeCallContextValue>({
+  isStartingCall: false,
   startCall: async () => {
-    throw new Error("Calls require the MeToYou development build.");
+    throw new Error("Call service is unavailable.");
   },
 });
 

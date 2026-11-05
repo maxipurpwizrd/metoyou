@@ -13,13 +13,9 @@ import {
   Text,
   View,
 } from "react-native";
-import Constants from "expo-constants";
 import * as DocumentPicker from "expo-document-picker";
 import { File, Paths } from "expo-file-system";
 import * as MediaLibrary from "expo-media-library/legacy";
-import {
-  setAudioModeAsync,
-} from "expo-audio";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurTargetView } from "expo-blur";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -160,9 +156,6 @@ export default function NativeTracksScreen() {
     setDeviceError(null);
     try {
       if (Platform.OS === "android") {
-        if (Constants.appOwnership === "expo") {
-          throw new Error("Automatic audio-library access requires an Android development build; Expo Go does not include the required audio permission.");
-        }
         const permission = devicePermission !== "granted"
           ? await MediaLibrary.requestPermissionsAsync(false, ["audio"])
           : await MediaLibrary.getPermissionsAsync(false, ["audio"]);
@@ -353,12 +346,7 @@ export default function NativeTracksScreen() {
     const activeTrack = trackQueue[Math.max(0, Math.min(index, trackQueue.length - 1))];
     if (!activeTrack) return;
     music.setTrack(activeTrack, trackQueue, index);
-  }, [currentIndex, deviceIndex, deviceTracks, music, trackSource, tracks]);
-
-  useEffect(() => {
-    void setAudioModeAsync({ playsInSilentMode: true })
-      .catch((cause: unknown) => setActionError(errorMessage(cause, "Audio playback could not be initialized.")));
-  }, []);
+  }, [currentIndex, deviceIndex, deviceTracks, music.setTrack, trackSource, tracks]);
 
   useEffect(() => {
     if (status.playbackState === "error") setAudioError("This Track could not be played.");
