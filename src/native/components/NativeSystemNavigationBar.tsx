@@ -24,18 +24,19 @@ export default function NativeSystemNavigationBar() {
   const { theme, isVibesPro } = useNativeTheme();
   const isDarkSurface = DARK_SURFACE_PATHS.has(pathname) || pathname.startsWith("/messages/");
   const isLightSurface = !isVibesPro && !isDarkSurface;
-  const isBlueSky = !isLightSurface && theme === "bluesky";
-  const backgroundColor = isLightSurface
-    ? "#ffffff"
-    : isBlueSky
-      ? NATIVE_THEME_COLORS.bluesky.background[0]
-      : NATIVE_THEME_COLORS.dark.background[0];
+  const colors = NATIVE_THEME_COLORS[theme];
+  const isLightTheme = isLightSurface || theme === "white";
+  const backgroundColor = theme === "liquidGlass"
+    ? "transparent"
+    : isLightSurface
+      ? "#ffffff"
+      : colors.background[0];
 
   if (Platform.OS !== "android") return null;
 
   return (
     <>
-      <NavigationBar style={isLightSurface ? "dark" : "light"} />
+      <NavigationBar style={isLightTheme ? "dark" : "light"} />
       <View
         pointerEvents="none"
         style={[styles.background, { backgroundColor, height: bottom }]}

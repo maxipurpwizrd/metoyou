@@ -67,8 +67,9 @@ const networkAwareFetch: typeof fetch = async (input, init) => {
   } catch (cause) {
     const timedOut = controller.signal.aborted && !requestSignal?.aborted;
     if (timedOut || isNativeNetworkRequestError(cause)) {
-      reportNativeNetworkRequestFailure(new Error(NATIVE_OFFLINE_MESSAGE));
-      throw new Error(NATIVE_OFFLINE_MESSAGE);
+      const error = new Error(NATIVE_OFFLINE_MESSAGE, { cause });
+      reportNativeNetworkRequestFailure(error);
+      throw error;
     }
     throw cause;
   } finally {

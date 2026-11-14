@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Animated, Pressable, StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
+import { Alert, Animated, Platform, Pressable, StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import { useRouter } from "expo-router";
 import { Gamepad2, Home, Image, Music2, ShoppingBag, Video } from "lucide-react-native";
 import { useNativeMusic } from "../contexts/NativeMusicProvider";
 import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
+import NativeGlassSurface, { NATIVE_LIQUID_GLASS_PRESSED } from "./NativeGlassSurface";
 
 export const NATIVE_SURFACE_DOCK_HEIGHT = 61;
 
@@ -60,6 +61,7 @@ export default function NativeSurfaceDock({
   const music = useNativeMusic();
   const { theme, isVibesPro } = useNativeTheme();
   const colors = NATIVE_THEME_COLORS[theme];
+  const isLiquidGlass = theme === "liquidGlass";
   const translateY = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -78,11 +80,16 @@ export default function NativeSurfaceDock({
       pointerEvents={visible ? "auto" : "none"}
       style={[styles.position, { paddingBottom: 0, transform: [{ translateY: scrollTranslation ?? translateY }] }]}
     >
-      <View style={[styles.dock, {
-        backgroundColor: theme === "bluesky" ? colors.control : colors.surface,
-        borderColor: colors.border,
-        paddingBottom: Math.max(6, bottomInset + 4),
-      }]}>
+      <NativeGlassSurface
+        enabled={isLiquidGlass}
+        blurEnabled={Platform.OS !== "android"}
+        style={[styles.dock, {
+          backgroundColor: isLiquidGlass ? "transparent" : colors.surface,
+          borderColor: colors.border,
+          paddingBottom: Math.max(6, bottomInset + 4),
+        }]}
+        overlayColor="rgba(245,248,250,0.035)"
+      >
         {SURFACES.map((surface) => {
           const Icon = surface.Icon;
           const active = surface.key === activeSurface;
@@ -113,15 +120,27 @@ export default function NativeSurfaceDock({
               }}
               style={({ pressed }) => [
                 styles.item,
-                active && [styles.activeItem, { backgroundColor: theme === "bluesky" ? colors.accent : isVibesPro ? "#fbbf24" : "#ffffff" }],
-                pressed && styles.pressed,
+                active && [
+                  styles.activeItem,
+                  isLiquidGlass && styles.liquidGlassActiveItem,
+                  { backgroundColor: isLiquidGlass
+                    ? "rgba(245,248,250,0.9)"
+                    : theme === "dark" && isVibesPro ? "#fbbf24" : colors.accent },
+                ],
+                pressed && (isLiquidGlass ? NATIVE_LIQUID_GLASS_PRESSED : styles.pressed),
               ]}
             >
-              <Icon color={active ? (theme === "bluesky" ? colors.text : isVibesPro ? "#451a03" : "#0f172a") : colors.muted} size={20} strokeWidth={2} />
+              <Icon
+                color={isLiquidGlass
+                  ? active ? "#17191b" : "#ffffff"
+                  : active ? (theme === "dark" && isVibesPro ? "#451a03" : colors.accentText) : colors.muted}
+                size={isLiquidGlass ? 22 : 20}
+                strokeWidth={isLiquidGlass ? 2.5 : 2}
+              />
             </Pressable>
           );
         })}
-      </View>
+      </NativeGlassSurface>
     </Animated.View>
   );
 }
@@ -152,5 +171,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   activeItem: { backgroundColor: "#ffffff" },
+  liquidGlassActiveItem: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.95)",
+  },
   pressed: { opacity: 0.76 },
 });

@@ -31,7 +31,7 @@ import NativeBlurBackdrop from "./NativeBlurBackdrop";
 import NativeConfirmDialog from "./NativeConfirmDialog";
 import NativeSkeleton from "./NativeSkeleton";
 import { NativeProfilePostsSkeleton } from "./NativeScreenSkeletons";
-import { useNativeTheme } from "../contexts/NativeThemeProvider";
+import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
 
 const REPORT_REASONS = [
   "Spam",
@@ -147,6 +147,7 @@ export default function NativeVibesProProfile({
   const router = useRouter();
   const { theme } = useNativeTheme();
   const isBlueSky = theme === "bluesky";
+  const colors = NATIVE_THEME_COLORS[theme];
   const carouselRef = useRef<ComponentRef<typeof ScrollView>>(null);
   const isOwnProfile = profile.id === viewerId;
   const [menuOpen, setMenuOpen] = useState(false);
@@ -437,8 +438,8 @@ export default function NativeVibesProProfile({
       ];
 
   return (
-    <View style={[styles.root, isBlueSky && styles.blueSkyRoot]}>
-      <SafeAreaView edges={["top", "bottom"]} style={[styles.safeArea, isBlueSky && styles.blueSkyRoot]}>
+    <View style={[styles.root, isBlueSky && styles.blueSkyRoot, { backgroundColor: colors.background[0] }]}>
+      <SafeAreaView edges={["top", "bottom"]} style={[styles.safeArea, isBlueSky && styles.blueSkyRoot, { backgroundColor: colors.background[0] }]}>
         <View style={[styles.hero, isBlueSky && styles.blueSkyHero, { height: Math.round((height - insets.top - insets.bottom) * 0.58) }]}>
           {!portraitUrl && isBlueSky ? (
             <LinearGradient colors={["#061a3a", "#0b3b78", "#125baa"]} style={StyleSheet.absoluteFill} />
@@ -564,11 +565,11 @@ export default function NativeVibesProProfile({
           </View>
         </View>
 
-        <View style={[styles.postsPanel, isBlueSky && styles.blueSkyPanel]}>
-          <Text style={[styles.postsHeading, isBlueSky && styles.blueSkyText]}>VIBES</Text>
+        <View style={[styles.postsPanel, isBlueSky && styles.blueSkyPanel, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.postsHeading, isBlueSky && styles.blueSkyText, { color: colors.accent }]}>VIBES</Text>
           {postsLoading ? <NativeProfilePostsSkeleton carousel /> : posts.length === 0 ? (
             <View style={styles.emptyPosts}>
-              <Text style={[styles.emptyPostsText, isBlueSky && styles.blueSkyText]}>No Vibes to show yet.</Text>
+              <Text style={[styles.emptyPostsText, isBlueSky && styles.blueSkyText, { color: colors.muted }]}>No Vibes to show yet.</Text>
             </View>
           ) : (
             <>
@@ -638,10 +639,10 @@ export default function NativeVibesProProfile({
         <View style={styles.modalBackdrop}>
           <NativeBlurBackdrop intensity={18} overlayColor="rgba(2,6,23,0.38)" />
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setMenuOpen(false)} />
-          <View style={[styles.menuCard, isBlueSky && styles.blueSkyPanel]}>
-            <View style={[styles.modalHeadingRow, isBlueSky && styles.blueSkyPanel]}>
-              <Text style={[styles.modalTitle, isBlueSky && styles.blueSkyText]}>Profile actions</Text>
-              <Pressable onPress={() => setMenuOpen(false)}><Text style={[styles.closeText, isBlueSky && styles.blueSkyText]}>×</Text></Pressable>
+          <View style={[styles.menuCard, isBlueSky && styles.blueSkyPanel, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={[styles.modalHeadingRow, isBlueSky && styles.blueSkyPanel, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.modalTitle, isBlueSky && styles.blueSkyText, { color: colors.text }]}>Profile actions</Text>
+              <Pressable onPress={() => setMenuOpen(false)}><Text style={[styles.closeText, isBlueSky && styles.blueSkyText, { color: colors.muted }]}>×</Text></Pressable>
             </View>
             <View style={styles.menuActionGrid}>
               {menuActions.map((action) => (
@@ -655,12 +656,13 @@ export default function NativeVibesProProfile({
                   style={[
                     styles.menuActionTile,
                     isBlueSky && styles.blueSkyActionTile,
+                    { backgroundColor: colors.raised, borderColor: colors.border },
                     action.danger && styles.menuDangerTile,
                     action.disabled && styles.disabled,
                   ]}
                 >
-                  <Text style={[styles.menuIcon, isBlueSky && styles.blueSkyText, action.danger && styles.dangerText]}>{action.icon}</Text>
-                  <Text style={[styles.menuLabel, isBlueSky && styles.blueSkyText, action.danger && styles.dangerText]}>{action.label}</Text>
+                  <Text style={[styles.menuIcon, isBlueSky && styles.blueSkyText, action.danger && styles.dangerText, { color: action.danger ? "#be123c" : colors.accent }]}>{action.icon}</Text>
+                  <Text style={[styles.menuLabel, isBlueSky && styles.blueSkyText, action.danger && styles.dangerText, { color: action.danger ? "#be123c" : colors.text }]}>{action.label}</Text>
                 </Pressable>
               ))}
             </View>
@@ -672,27 +674,27 @@ export default function NativeVibesProProfile({
         <View style={styles.modalBackdrop}>
           <NativeBlurBackdrop intensity={18} overlayColor="rgba(2,6,23,0.38)" />
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setProblemOpen(false)} />
-          <View style={[styles.reportCard, isBlueSky && styles.blueSkyPanel]}>
-            <View style={[styles.modalHeadingRow, isBlueSky && styles.blueSkyPanel]}>
-              <Text style={[styles.modalTitle, isBlueSky && styles.blueSkyText]}>Report a problem</Text>
-              <Pressable onPress={() => setProblemOpen(false)}><Text style={[styles.closeText, isBlueSky && styles.blueSkyText]}>×</Text></Pressable>
+          <View style={[styles.reportCard, isBlueSky && styles.blueSkyPanel, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={[styles.modalHeadingRow, isBlueSky && styles.blueSkyPanel, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.modalTitle, isBlueSky && styles.blueSkyText, { color: colors.text }]}>Report a problem</Text>
+              <Pressable onPress={() => setProblemOpen(false)}><Text style={[styles.closeText, isBlueSky && styles.blueSkyText, { color: colors.muted }]}>×</Text></Pressable>
             </View>
             <Text style={[styles.problemCategory, isBlueSky && styles.blueSkyMuted]}>Category · Profile</Text>
             <TextInput
               multiline
               onChangeText={setProblemDescription}
               placeholder="Describe the problem"
-              placeholderTextColor="#94a3b8"
-              style={[styles.detailsInput, styles.problemInput, isBlueSky && styles.blueSkyInput]}
+              placeholderTextColor={colors.muted}
+              style={[styles.detailsInput, styles.problemInput, isBlueSky && styles.blueSkyInput, { backgroundColor: colors.control, borderColor: colors.border, color: colors.text }]}
               value={problemDescription}
             />
             {problemMessage ? <Text style={[styles.problemMessage, isBlueSky && styles.blueSkyText]}>{problemMessage}</Text> : null}
             <Pressable
               disabled={problemBusy || !problemDescription.trim()}
               onPress={() => void submitProblem()}
-              style={[styles.submitReport, isBlueSky && styles.blueSkyFollowButton, (problemBusy || !problemDescription.trim()) && styles.disabled]}
+              style={[styles.submitReport, isBlueSky && styles.blueSkyFollowButton, { backgroundColor: colors.accent }, (problemBusy || !problemDescription.trim()) && styles.disabled]}
             >
-              {problemBusy ? <ActivityIndicator color={isBlueSky ? "#ffffff" : "#451a03"} /> : <Text style={[styles.submitReportText, isBlueSky && styles.blueSkyText]}>Send report</Text>}
+              {problemBusy ? <ActivityIndicator color={colors.accentText} /> : <Text style={[styles.submitReportText, isBlueSky && styles.blueSkyText, { color: colors.accentText }]}>Send report</Text>}
             </Pressable>
           </View>
         </View>
@@ -702,13 +704,13 @@ export default function NativeVibesProProfile({
         <View style={styles.modalBackdrop}>
           <NativeBlurBackdrop intensity={18} overlayColor="rgba(2,6,23,0.38)" />
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setStatusOpen(false)} />
-          <View style={[styles.statusCard, isBlueSky && styles.blueSkyPanel]}>
-            <View style={[styles.modalHeadingRow, isBlueSky && styles.blueSkyPanel]}>
-              <Text style={[styles.modalTitle, isBlueSky && styles.blueSkyText]}>Profile status</Text>
-              <Pressable onPress={() => setStatusOpen(false)}><Text style={[styles.closeText, isBlueSky && styles.blueSkyText]}>×</Text></Pressable>
+          <View style={[styles.statusCard, isBlueSky && styles.blueSkyPanel, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={[styles.modalHeadingRow, isBlueSky && styles.blueSkyPanel, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.modalTitle, isBlueSky && styles.blueSkyText, { color: colors.text }]}>Profile status</Text>
+              <Pressable onPress={() => setStatusOpen(false)}><Text style={[styles.closeText, isBlueSky && styles.blueSkyText, { color: colors.muted }]}>×</Text></Pressable>
             </View>
             {statusLoading ? (
-              <ActivityIndicator color={isBlueSky ? "#54b8ff" : "#fbbf24"} style={styles.statusLoading} />
+              <ActivityIndicator color={colors.accent} style={styles.statusLoading} />
             ) : statusError ? (
               <Text style={[styles.statusError, isBlueSky && styles.blueSkyText]}>{statusError}</Text>
             ) : accountStatus ? (
@@ -767,16 +769,16 @@ export default function NativeVibesProProfile({
         <View style={styles.modalBackdrop}>
           <NativeBlurBackdrop intensity={18} overlayColor="rgba(2,6,23,0.38)" />
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setReportOpen(false)} />
-          <View style={[styles.reportCard, isBlueSky && styles.blueSkyPanel]}>
-            <View style={[styles.modalHeadingRow, isBlueSky && styles.blueSkyPanel]}>
-              <Text style={[styles.modalTitle, isBlueSky && styles.blueSkyText]}>{reportSubmitted ? "Report submitted" : "Report profile"}</Text>
-              <Pressable onPress={() => setReportOpen(false)}><Text style={[styles.closeText, isBlueSky && styles.blueSkyText]}>×</Text></Pressable>
+          <View style={[styles.reportCard, isBlueSky && styles.blueSkyPanel, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={[styles.modalHeadingRow, isBlueSky && styles.blueSkyPanel, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.modalTitle, isBlueSky && styles.blueSkyText, { color: colors.text }]}>{reportSubmitted ? "Report submitted" : "Report profile"}</Text>
+              <Pressable onPress={() => setReportOpen(false)}><Text style={[styles.closeText, isBlueSky && styles.blueSkyText, { color: colors.muted }]}>×</Text></Pressable>
             </View>
             {reportSubmitted ? (
               <Text style={[styles.reportSuccess, isBlueSky && styles.blueSkyText]}>Our moderation team will review your report.</Text>
             ) : (
               <>
-              <Text style={[styles.modalSubtitle, isBlueSky && styles.blueSkyMuted]}>Choose a reason</Text>
+              <Text style={[styles.modalSubtitle, isBlueSky && styles.blueSkyMuted, { color: colors.muted }]}>Choose a reason</Text>
                 <View style={styles.reasonList}>
                   {REPORT_REASONS.map((reason) => (
                     <Pressable key={reason} onPress={() => setReportReason(reason)} style={styles.reasonRow}>
@@ -835,8 +837,8 @@ export default function NativeVibesProProfile({
         <View style={styles.modalBackdrop}>
           <NativeBlurBackdrop intensity={18} overlayColor="rgba(2,6,23,0.38)" />
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setCropChoiceOpen(false)} />
-          <View style={[styles.cropChoice, isBlueSky && styles.blueSkyPanel]}>
-            <Text style={[styles.cropChoiceTitle, isBlueSky && styles.blueSkyText]}>Would you like to crop your portrait?</Text>
+          <View style={[styles.cropChoice, isBlueSky && styles.blueSkyPanel, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.cropChoiceTitle, isBlueSky && styles.blueSkyText, { color: colors.text }]}>Would you like to crop your portrait?</Text>
             <View style={styles.cropChoiceButtons}>
               <Pressable
                 onPress={() => {
@@ -867,14 +869,14 @@ export default function NativeVibesProProfile({
         statusBarTranslucent
         visible={cropOpen}
       >
-        <SafeAreaView style={[styles.cropScreen, isBlueSky && styles.blueSkyCropScreen]}>
-          <View style={[styles.cropHeader, isBlueSky && styles.blueSkyCropHeader]}>
+        <SafeAreaView style={[styles.cropScreen, isBlueSky && styles.blueSkyCropScreen, { backgroundColor: colors.background[0] }]}>
+          <View style={[styles.cropHeader, isBlueSky && styles.blueSkyCropHeader, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
             <View>
-              <Text style={[styles.cropOverline, isBlueSky && styles.blueSkyText]}>PORTRAIT PREVIEW</Text>
-              <Text style={styles.cropTitle}>Adjust your crop</Text>
+              <Text style={[styles.cropOverline, isBlueSky && styles.blueSkyText, { color: colors.accent }]}>PORTRAIT PREVIEW</Text>
+              <Text style={[styles.cropTitle, { color: colors.text }]}>Adjust your crop</Text>
             </View>
             <Pressable onPress={() => { setCropOpen(false); setCropAsset(null); }}>
-              <Text style={[styles.cropCancel, isBlueSky && styles.blueSkyText]}>Cancel</Text>
+              <Text style={[styles.cropCancel, isBlueSky && styles.blueSkyText, { color: colors.muted }]}>Cancel</Text>
             </Pressable>
           </View>
           <View style={styles.cropPreviewArea}>
@@ -896,7 +898,7 @@ export default function NativeVibesProProfile({
               ]}
             />
           </View>
-          <View style={[styles.cropControls, isBlueSky && styles.blueSkyCropControls]}>
+          <View style={[styles.cropControls, isBlueSky && styles.blueSkyCropControls, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <NativeRangeControl
               isBlueSky={isBlueSky}
               label="ZOOM"
@@ -933,8 +935,8 @@ export default function NativeVibesProProfile({
               <Pressable onPress={() => { setCropOpen(false); setCropAsset(null); }} style={styles.secondaryAction}>
                 <Text style={styles.secondaryActionText}>Discard</Text>
               </Pressable>
-              <Pressable disabled={portraitBusy} onPress={() => void uploadPortrait(true)} style={[styles.goldAction, isBlueSky && styles.blueSkyFollowButton]}>
-                {portraitBusy ? <ActivityIndicator color={isBlueSky ? "#ffffff" : "#451a03"} /> : <Text style={[styles.goldActionText, isBlueSky && styles.blueSkyText]}>Use portrait</Text>}
+              <Pressable disabled={portraitBusy} onPress={() => void uploadPortrait(true)} style={[styles.goldAction, isBlueSky && styles.blueSkyFollowButton, { backgroundColor: colors.accent }]}>
+                {portraitBusy ? <ActivityIndicator color={colors.accentText} /> : <Text style={[styles.goldActionText, isBlueSky && styles.blueSkyText, { color: colors.accentText }]}>Use portrait</Text>}
               </Pressable>
             </View>
           </View>

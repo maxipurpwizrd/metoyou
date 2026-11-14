@@ -1,5 +1,6 @@
 import { NATIVE_OFFLINE_MESSAGE } from "../lib/networkStatus";
 import { useNativeConnectivity } from "../contexts/NativeQueryProvider";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useRef, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -12,31 +13,89 @@ import NativeBlurBackdrop from "./NativeBlurBackdrop";
 
 type PromptMode = "offline" | null;
 
+const HIDE_CONNECTION_HICCUP_KEY = "metoyou-native-hide-connection-hiccup";
+const CONNECTION_RECOVERY_STABILITY_MS = 10_000;
+
 export default function NativeOfflinePrompt() {
   const router = useRouter();
   const { status } = useNativeAuth();
   const music = useNativeMusic();
-  const { isConnectivityOffline, hasRequestFailure, isSlow } = useNativeConnectivity();
+  const { isConnectivityOffline, isSlow } = useNativeConnectivity();
   const { theme } = useNativeTheme();
   const colors = NATIVE_THEME_COLORS[theme];
   const insets = useSafeAreaInsets();
   const [mode, setMode] = useState<PromptMode>(null);
+  const [hideConnectionHiccup, setHideConnectionHiccup] = useState<boolean | null>(null);
+  const [preferenceSaveFailed, setPreferenceSaveFailed] = useState(false);
   const outageHandled = useRef(false);
-  const shouldShowOfflineMessage = isConnectivityOffline || hasRequestFailure || status === "offlineDeferred";
+  const recoveryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const shouldShowOfflineMessage = isConnectivityOffline || status === "offlineDeferred";
 
   useEffect(() => {
-    if (!shouldShowOfflineMessage) {
-      outageHandled.current = false;
-      setMode(null);
+    let active = true;
+    void AsyncStorage.getItem(HIDE_CONNECTION_HICCUP_KEY)
+      .then((value) => {
+        if (active) setHideConnectionHiccup(value === "true");
+      })
+      .catch((cause: unknown) => {
+        console.warn("Could not restore the connection-message preference.", cause);
+        if (active) setHideConnectionHiccup(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (shouldShowOfflineMessage) {
+      if (recoveryTimer.current) {
+        clearTimeout(recoveryTimer.current);
+        recoveryTimer.current = null;
+      }
+      if (hideConnectionHiccup === null) return;
+      if (hideConnectionHiccup) {
+        outageHandled.current = true;
+        setMode(null);
+        return;
+      }
+      if (!outageHandled.current) {
+        outageHandled.current = true;
+        setMode("offline");
+      }
       return;
     }
-    if (!outageHandled.current) {
-      outageHandled.current = true;
-      setMode("offline");
-    }
-  }, [shouldShowOfflineMessage]);
+
+    setMode(null);
+    if (recoveryTimer.current) clearTimeout(recoveryTimer.current);
+    recoveryTimer.current = setTimeout(() => {
+      outageHandled.current = false;
+      recoveryTimer.current = null;
+    }, CONNECTION_RECOVERY_STABILITY_MS);
+    return () => {
+      if (recoveryTimer.current) {
+        clearTimeout(recoveryTimer.current);
+        recoveryTimer.current = null;
+      }
+    };
+  }, [hideConnectionHiccup, shouldShowOfflineMessage]);
+
+  useEffect(() => () => {
+    if (recoveryTimer.current) clearTimeout(recoveryTimer.current);
+  }, []);
 
   const close = () => setMode(null);
+  const hideConnectionMessage = async () => {
+    setPreferenceSaveFailed(false);
+    try {
+      await AsyncStorage.setItem(HIDE_CONNECTION_HICCUP_KEY, "true");
+      outageHandled.current = true;
+      setHideConnectionHiccup(true);
+      setMode(null);
+    } catch (cause) {
+      console.warn("Could not save the connection-message preference.", cause);
+      setPreferenceSaveFailed(true);
+    }
+  };
 
   return (
     <>
@@ -97,9 +156,19 @@ export default function NativeOfflinePrompt() {
                   <Text style={[styles.actionText, { color: colors.text }]}>Play offline</Text>
                 </Pressable>
             </View>
-            <Pressable accessibilityRole="button" onPress={close} style={styles.notNowButton}>
-              <Text style={[styles.notNowText, { color: colors.muted }]}>Not now</Text>
-            </Pressable>
+            {preferenceSaveFailed ? (
+              <Text accessibilityRole="alert" style={[styles.preferenceError, { color: colors.muted }]}>
+                Could not save this preference. Please try again.
+              </Text>
+            ) : null}
+            <View style={styles.promptFooter}>
+              <Pressable accessibilityRole="button" onPress={close} style={styles.footerButton}>
+                <Text style={[styles.notNowText, { color: colors.muted }]}>Not now</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" onPress={() => void hideConnectionMessage()} style={styles.footerButton}>
+                <Text style={[styles.dontShowText, { color: colors.accent }]}>Don’t show again</Text>
+              </Pressable>
+            </View>
           </View>
         </View>
       </Modal>
@@ -186,14 +255,18 @@ const styles = StyleSheet.create({
   },
   secondaryButton: { borderWidth: 1 },
   actionText: { fontSize: 15, fontWeight: "800" },
-  doneButton: {
-    minHeight: 46,
-    minWidth: 130,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 18,
-    borderRadius: 12,
+  preferenceError: {
+    marginTop: 10,
+    fontSize: 13,
+    textAlign: "center",
   },
-  notNowButton: { minHeight: 42, alignItems: "center", justifyContent: "center", marginTop: 8 },
+  promptFooter: {
+    width: "100%",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 8,
+  },
+  footerButton: { minHeight: 42, alignItems: "center", justifyContent: "center", paddingHorizontal: 6 },
   notNowText: { fontSize: 14, fontWeight: "700" },
+  dontShowText: { fontSize: 14, fontWeight: "700" },
 });

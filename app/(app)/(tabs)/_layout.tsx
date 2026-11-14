@@ -9,6 +9,7 @@ export default function PrimaryTabsLayout() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: { display: "none" },
+        sceneStyle: { backgroundColor: "transparent" },
       }}
     >
       <Tabs.Screen name="index" />

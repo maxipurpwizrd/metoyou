@@ -1,5 +1,6 @@
 import type { PostRecord } from "../../types/post";
 import { normalizeNativeVibesProEntitlement, type NativeVibesProEntitlement } from "./entitlement";
+import { hydrateNativePostLikeCounts } from "./feed";
 import { nativeSupabase } from "./supabase";
 
 export type NativeProfile = {
@@ -85,7 +86,7 @@ export async function fetchNativeProfilePosts(
     .limit(50);
   if (error) throw error;
 
-  const posts = (data ?? []) as PostRecord[];
+  const posts = await hydrateNativePostLikeCounts((data ?? []) as PostRecord[]);
   if (posts.length === 0) return posts;
 
   let author = authorProfile;

@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { formatDisplayDate } from "../../lib/time";
 import { useNativeAuth } from "../contexts/NativeAuthProvider";
-import { useNativeTheme, NATIVE_THEME_COLORS } from "../contexts/NativeThemeProvider";
+import { useNativeTheme, NATIVE_THEME_COLORS, NATIVE_TYPE_SCALE } from "../contexts/NativeThemeProvider";
 import { clearNativeConversationActions, fetchNativeConversationActions, setNativeConversationAction } from "../lib/conversationActions";
 import { fetchNativeMessageThreads } from "../lib/messages";
 import { nativeConversationActionsQueryKey, nativeMessageThreadsQueryKey } from "../lib/queryKeys";
@@ -18,7 +18,6 @@ export default function NativeArchivedScreen() {
   const userId = session?.user.id;
   const queryClient = useQueryClient();
   const { theme } = useNativeTheme();
-  const isBlueSky = theme === "bluesky";
   const colors = NATIVE_THEME_COLORS[theme];
   const threadsQuery = useQuery({
     queryKey: nativeMessageThreadsQueryKey(userId ?? ""),
@@ -131,7 +130,7 @@ export default function NativeArchivedScreen() {
               <Text style={styles.errorText}>{threadsQuery.error?.message ?? actionsQuery.error?.message}</Text>
             ) : null}
             <View style={[styles.iconFrame, { borderColor: colors.border, backgroundColor: colors.surface }]}>
-              <Archive color={isBlueSky ? "#54b8ff" : "#fbbf24"} size={30} strokeWidth={1.8} />
+              <Archive color={colors.accent} size={30} strokeWidth={1.8} />
             </View>
             <Text style={[styles.emptyTitle, { color: colors.text }]}>No archived chats</Text>
             <Text style={[styles.emptyCopy, { color: colors.muted }]}>Chats you archive will appear here.</Text>
@@ -147,7 +146,7 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   header: { minHeight: 66, flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 16, borderBottomWidth: 1 },
   backButton: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderWidth: 1, borderRadius: 13 },
-  title: { fontSize: 18, fontWeight: "900" },
+  title: { ...NATIVE_TYPE_SCALE.screenTitle },
   info: { flexDirection: "row", alignItems: "center", gap: 11, marginHorizontal: 14, marginTop: 14, padding: 13, borderWidth: 1, borderRadius: 13 },
   infoText: { flex: 1, fontSize: 12, lineHeight: 18 },
   list: { padding: 14, gap: 8 },

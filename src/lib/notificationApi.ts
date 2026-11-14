@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { playMessageNotificationSound } from "./notificationSound";
+import { playCallRingtone, playMessageNotificationSound } from "./notificationSound";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
 type NotificationChangeHandler = () => void;
@@ -148,10 +148,16 @@ export function subscribeToNotifications(userId: string, onChange: () => void): 
     },
     (payload) => {
       const notification = payload.new as { type?: string; actor_id?: string | null };
-      if (isNonSocialNotificationType(notification.type ?? "")) return;
-      if (!isSelfPostActivityNotification(notification.type ?? "", notification.actor_id, userId)) {
+      const type = notification.type ?? "";
+
+      if (isMessageNotificationType(type)) {
+        playMessageNotificationSound();
+      } else if (isCallNotificationType(type)) {
+        playCallRingtone();
+      } else if (!isNonSocialNotificationType(type) && !isSelfPostActivityNotification(type, notification.actor_id, userId)) {
         playMessageNotificationSound();
       }
+
       for (const handler of notificationChannels.get(userId)?.handlers ?? []) {
         handler();
       }

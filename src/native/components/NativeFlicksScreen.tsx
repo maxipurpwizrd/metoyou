@@ -20,7 +20,7 @@ import { BlurTargetView } from "expo-blur";
 import * as ExpoLinking from "expo-linking";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Ban, CloudSun, Download, Flag, MessageCircle, MoonStar, Repeat2, Share2, Trash2 } from "lucide-react-native";
+import { Ban, Download, Flag, MessageCircle, Repeat2, Share2, Trash2 } from "lucide-react-native";
 import { useNativeAuth } from "../contexts/NativeAuthProvider";
 import { useNativeMusic } from "../contexts/NativeMusicProvider";
 import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
@@ -36,6 +36,7 @@ import { blockNativeUser, deleteNativePost, reportNativePost, toggleNativePostLi
 import NativeBlurBackdrop, { NativeBlurTargetContext, type NativeBlurTargetRef } from "./NativeBlurBackdrop";
 import NativeCommentsSheet from "./NativeCommentsSheet";
 import NativeConfirmDialog from "./NativeConfirmDialog";
+import NativeSurfaceShareButton from "./NativeSurfaceShareButton";
 import { NativeVerticalMediaSkeleton } from "./NativeScreenSkeletons";
 import NativeSurfaceDock, { NATIVE_SURFACE_DOCK_HEIGHT, useNativeSurfaceDockVisibility } from "./NativeSurfaceDock";
 
@@ -60,7 +61,8 @@ export default function NativeFlicksScreen() {
   const router = useRouter();
   const music = useNativeMusic();
   const { session } = useNativeAuth();
-  const { theme, setTheme } = useNativeTheme();
+  const { theme } = useNativeTheme();
+  const colors = NATIVE_THEME_COLORS[theme];
   const userId = session?.user.id;
   const params = useLocalSearchParams<{
     postId?: string | string[];
@@ -321,10 +323,10 @@ export default function NativeFlicksScreen() {
               refreshControl={
                 requestedPostId ? undefined : (
                   <RefreshControl
-                    colors={["#0284c7"]}
+                    colors={[colors.accent]}
                     onRefresh={() => void loadFirstPage(true)}
                     refreshing={refreshing}
-                    tintColor="#0284c7"
+                    tintColor={colors.accent}
                   />
                 )
               }
@@ -450,16 +452,9 @@ export default function NativeFlicksScreen() {
               </Pressable>
               <View style={styles.heading}>
                 <Text style={[styles.kicker, theme === "dark" && styles.darkKicker]}>VIBESPRO</Text>
-                <Text style={[styles.title, theme === "dark" && styles.darkTitle, theme === "bluesky" && styles.blueSkyTitle]}>Flicks</Text>
+                <Text style={[styles.title, theme === "dark" && styles.darkTitle, theme === "bluesky" && styles.blueSkyTitle, { color: colors.text }]}>Flicks</Text>
               </View>
-              <View style={styles.themeButtons}>
-                <Pressable accessibilityLabel="Blue Sky theme" onPress={() => setTheme("bluesky")} style={[styles.themeButton, theme === "bluesky" && styles.activeBlue]}>
-                  <CloudSun color={theme === "bluesky" ? "#ffffff" : "#0369a1"} size={19} />
-                </Pressable>
-                <Pressable accessibilityLabel="Dark Gold theme" onPress={() => setTheme("dark")} style={[styles.themeButton, theme === "dark" && styles.activeGold]}>
-                  <MoonStar color={theme === "dark" ? "#0f172a" : "#a16207"} size={19} />
-                </Pressable>
-              </View>
+              <NativeSurfaceShareButton onPublished={() => void loadFirstPage(true)} surface="flicks" />
             </View>
             {loadingMore ? <ActivityIndicator color="#0284c7" style={styles.headerSpinner} /> : null}
 

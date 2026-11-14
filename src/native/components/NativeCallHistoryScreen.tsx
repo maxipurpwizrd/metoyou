@@ -12,14 +12,13 @@ import {
   View,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import Constants from "expo-constants";
 import { useRouter } from "expo-router";
 import { PhoneCall, Video } from "lucide-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { formatDisplayDateTime } from "../../lib/time";
 import { useNativeAuth } from "../contexts/NativeAuthProvider";
 import { useNativeCalls } from "../contexts/NativeCallContext";
-import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
+import { NATIVE_THEME_COLORS, NATIVE_TYPE_SCALE, useNativeTheme } from "../contexts/NativeThemeProvider";
 import {
   fetchNativeCallHistoryPage,
   fetchNativeCallParticipantNames,
@@ -29,9 +28,11 @@ import {
 import { resolveNativeConversation } from "../lib/chat";
 import { nativeCallHistoryQueryKey, nativeCallParticipantProfilesQueryKey } from "../lib/queryKeys";
 import { NATIVE_OFFLINE_MESSAGE } from "../lib/networkStatus";
+import { getNativeCallUnavailableReason, getNativeRuntimeDiagnostics } from "../lib/nativeRuntimeDiagnostics";
 import NativeBlurBackdrop from "./NativeBlurBackdrop";
 import NativeSkeleton from "./NativeSkeleton";
 import { NativeCallHistoryRowsSkeleton } from "./NativeScreenSkeletons";
+import NativeGlassSurface, { NATIVE_LIQUID_GLASS_PRESSED } from "./NativeGlassSurface";
 
 type CallTarget = { id: string; username: string };
 
@@ -57,6 +58,8 @@ export default function NativeCallHistoryScreen() {
   const { startCall, isStartingCall } = useNativeCalls();
   const { theme } = useNativeTheme();
   const isBlueSky = theme === "bluesky";
+  const colors = NATIVE_THEME_COLORS[theme];
+  const isLiquidGlass = theme === "liquidGlass";
   const userId = session?.user.id;
   const cacheOwnerId = cacheUserId;
   const [pendingTarget, setPendingTarget] = useState<CallTarget | null>(null);
@@ -100,12 +103,9 @@ export default function NativeCallHistoryScreen() {
 
   const redial = async (callType: "audio" | "video") => {
     if (!pendingTarget || redialInFlightRef.current || isStartingCall) return;
-    if (Constants.expoGoConfig !== null) {
+    if (!getNativeRuntimeDiagnostics().nativeCallSupported) {
       setPendingTarget(null);
-      Alert.alert(
-        "Development build required",
-        "Audio and video calls need the MeToYou development build. Expo Go does not include the native WebRTC module.",
-      );
+      Alert.alert("Calls unavailable", getNativeCallUnavailableReason());
       return;
     }
     const target = pendingTarget;
@@ -134,37 +134,37 @@ export default function NativeCallHistoryScreen() {
   return (
     <LinearGradient colors={NATIVE_THEME_COLORS[theme].background} style={styles.root}>
       <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
-        <View style={[styles.header, isBlueSky && styles.blueSkyHeader]}>
+        <NativeGlassSurface enabled={isLiquidGlass} style={[styles.header, isBlueSky && styles.blueSkyHeader, { borderBottomColor: colors.border, backgroundColor: isLiquidGlass ? "transparent" : colors.surface }]}>
           <Pressable
             accessibilityLabel="Back to messages"
             accessibilityRole="button"
             onPress={() => router.replace("/(app)/(tabs)/messages")}
-            style={[styles.backButton, isBlueSky && styles.blueSkyControl]}
+            style={[styles.backButton, isBlueSky && styles.blueSkyControl, { borderColor: colors.border, backgroundColor: colors.control }]}
           >
-            <Text style={styles.backText}>‹</Text>
+            <Text style={[styles.backText, { color: colors.text }]}>‹</Text>
           </Pressable>
           <View style={styles.headerCopy}>
-            <Text style={styles.eyebrow}>CONNECTIONS</Text>
-            <Text style={styles.title}>Call history</Text>
-            <Text style={styles.subtitle}>Your recent calls</Text>
+            <Text style={[styles.eyebrow, { color: colors.muted }]}>CONNECTIONS</Text>
+            <Text style={[styles.title, { color: colors.text }]}>Call history</Text>
+            <Text style={[styles.subtitle, { color: colors.muted }]}>Your recent calls</Text>
           </View>
           <View style={styles.headerSpacer} />
-        </View>
+        </NativeGlassSurface>
 
         {loading ? (
           <NativeCallHistoryRowsSkeleton count={5} />
         ) : error && calls.length === 0 ? (
           <View style={styles.stateCard}>
-            <Text accessibilityRole="alert" style={styles.errorText}>{error}</Text>
-            <Pressable onPress={() => void loadCalls()} style={styles.retryButton}>
+            <Text accessibilityRole="alert" style={[styles.errorText, { color: colors.text }]}>{error}</Text>
+            <Pressable onPress={() => void loadCalls()} style={[styles.retryButton, { backgroundColor: colors.accent }]}>
               <Text style={styles.retryText}>Try again</Text>
             </Pressable>
           </View>
         ) : calls.length === 0 ? (
           <View style={styles.stateCard}>
-            <PhoneCall color="#ffffff" size={36} />
-            <Text style={styles.emptyTitle}>No calls yet</Text>
-            <Text style={styles.stateText}>Completed and missed calls will appear here.</Text>
+            <PhoneCall color={colors.accent} size={36} />
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>No calls yet</Text>
+            <Text style={[styles.stateText, { color: colors.muted }]}>Completed and missed calls will appear here.</Text>
           </View>
         ) : (
           <ScrollView
@@ -174,15 +174,15 @@ export default function NativeCallHistoryScreen() {
                 colors={["#ffffff"]}
                 onRefresh={() => void loadCalls()}
                 refreshing={refreshing}
-                tintColor="#ffffff"
+                tintColor={colors.accent}
               />
             }
             showsVerticalScrollIndicator={false}
           >
             {error ? (
               <View style={styles.stateCard}>
-                <Text accessibilityRole="alert" style={styles.errorText}>{error}</Text>
-                <Pressable onPress={() => void loadCalls()} style={styles.retryButton}>
+                <Text accessibilityRole="alert" style={[styles.errorText, { color: colors.text }]}>{error}</Text>
+                <Pressable onPress={() => void loadCalls()} style={[styles.retryButton, { backgroundColor: colors.accent }]}>
                   <Text style={styles.retryText}>Retry</Text>
                 </Pressable>
               </View>
@@ -197,27 +197,32 @@ export default function NativeCallHistoryScreen() {
                   accessibilityRole="button"
                   key={call.id}
                   onPress={() => setPendingTarget({ id: otherId, username })}
-                  style={({ pressed }) => [styles.callCard, isBlueSky && styles.blueSkyCard, pressed && styles.pressed]}
+                  style={({ pressed }) => [
+                    styles.callCard,
+                    isBlueSky && styles.blueSkyCard,
+                    { borderColor: colors.border, backgroundColor: colors.surface },
+                    pressed && (isLiquidGlass ? NATIVE_LIQUID_GLASS_PRESSED : styles.pressed),
+                  ]}
                 >
-                  <View style={[styles.callIcon, isBlueSky && styles.blueSkyControl]}>
+                  <View style={[styles.callIcon, isBlueSky && styles.blueSkyControl, { backgroundColor: colors.control, borderColor: colors.border }]}>
                     {call.call_type === "video"
-                      ? <Video color="#ffffff" size={20} />
-                      : <PhoneCall color="#ffffff" size={20} />}
+                      ? <Video color={colors.accent} size={20} />
+                      : <PhoneCall color={colors.accent} size={20} />}
                   </View>
                   <View style={styles.callCopy}>
                     {participantProfilesQuery.isPending && !participantProfilesQuery.data ? (
                       <NativeSkeleton style={styles.usernameSkeleton} />
                     ) : (
-                      <Text numberOfLines={1} style={styles.username}>{username ?? "MeToYou user"}</Text>
+                      <Text numberOfLines={1} style={[styles.username, { color: colors.text }]}>{username ?? "MeToYou user"}</Text>
                     )}
-                    <Text numberOfLines={1} style={styles.callMeta}>
+                    <Text numberOfLines={1} style={[styles.callMeta, { color: colors.muted }]}>
                       {isOutgoing ? "Outgoing" : "Incoming"} · {statusLabel(call.status)}
                     </Text>
                   </View>
                   <View style={styles.callTime}>
-                    <Text numberOfLines={1} style={styles.timestamp}>{formatDisplayDateTime(call.created_at)}</Text>
+                    <Text numberOfLines={1} style={[styles.timestamp, { color: colors.muted }]}>{formatDisplayDateTime(call.created_at)}</Text>
                     {call.duration_seconds !== null
-                      ? <Text style={styles.duration}>{formatDuration(call.duration_seconds)}</Text>
+                      ? <Text style={[styles.duration, { color: colors.muted }]}>{formatDuration(call.duration_seconds)}</Text>
                       : null}
                   </View>
                 </Pressable>
@@ -231,8 +236,8 @@ export default function NativeCallHistoryScreen() {
                 style={styles.retryButton}
               >
                 {callsQuery.isFetchingNextPage
-                  ? <ActivityIndicator color="#ffffff" />
-                  : <Text style={styles.retryText}>Load older calls</Text>}
+                  ? <ActivityIndicator color={colors.text} />
+                  : <Text style={[styles.retryText, { color: colors.text }]}>Load older calls</Text>}
               </Pressable>
             ) : null}
           </ScrollView>
@@ -242,20 +247,20 @@ export default function NativeCallHistoryScreen() {
           <View style={styles.modalBackdrop}>
             <NativeBlurBackdrop intensity={22} overlayColor="rgba(0,0,0,0.58)" />
             <Pressable onPress={() => { if (!isResolvingRedial && !isStartingCall) setPendingTarget(null); }} style={StyleSheet.absoluteFill} />
-            <View style={[styles.modalCard, isBlueSky && styles.blueSkyModal]}>
-              <Text style={styles.modalOverline}>CALL AGAIN</Text>
-              <Text style={styles.modalTitle}>Choose a call type</Text>
-              <Text style={styles.modalSubtitle}>{pendingTarget?.username}</Text>
-              <Pressable disabled={isResolvingRedial || isStartingCall} onPress={() => void redial("audio")} style={[styles.primaryModalButton, isBlueSky && styles.blueSkyControl, (isResolvingRedial || isStartingCall) && styles.disabledButton]}>
-                <PhoneCall color="#ffffff" size={19} />
-                <Text style={styles.primaryModalText}>{isResolvingRedial || isStartingCall ? "Starting call…" : "Start audio call"}</Text>
+            <View style={[styles.modalCard, isBlueSky && styles.blueSkyModal, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+              <Text style={[styles.modalOverline, { color: colors.muted }]}>CALL AGAIN</Text>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Choose a call type</Text>
+              <Text style={[styles.modalSubtitle, { color: colors.muted }]}>{pendingTarget?.username}</Text>
+              <Pressable disabled={isResolvingRedial || isStartingCall} onPress={() => void redial("audio")} style={[styles.primaryModalButton, isBlueSky && styles.blueSkyControl, { backgroundColor: colors.accent }, (isResolvingRedial || isStartingCall) && styles.disabledButton]}>
+                <PhoneCall color={colors.accentText} size={19} />
+                <Text style={[styles.primaryModalText, { color: colors.accentText }]}>{isResolvingRedial || isStartingCall ? "Starting call…" : "Start audio call"}</Text>
               </Pressable>
-              <Pressable disabled={isResolvingRedial || isStartingCall} onPress={() => void redial("video")} style={[styles.secondaryModalButton, isBlueSky && styles.blueSkyCard, (isResolvingRedial || isStartingCall) && styles.disabledButton]}>
-                <Video color="#ffffff" size={19} />
-                <Text style={styles.secondaryModalText}>{isResolvingRedial || isStartingCall ? "Starting call…" : "Start video call"}</Text>
+              <Pressable disabled={isResolvingRedial || isStartingCall} onPress={() => void redial("video")} style={[styles.secondaryModalButton, isBlueSky && styles.blueSkyCard, { borderColor: colors.border, backgroundColor: colors.raised }, (isResolvingRedial || isStartingCall) && styles.disabledButton]}>
+                <Video color={colors.text} size={19} />
+                <Text style={[styles.secondaryModalText, { color: colors.text }]}>{isResolvingRedial || isStartingCall ? "Starting call…" : "Start video call"}</Text>
               </Pressable>
               <Pressable accessibilityRole="button" disabled={isResolvingRedial || isStartingCall} onPress={() => setPendingTarget(null)} style={[styles.cancelButton, (isResolvingRedial || isStartingCall) && styles.disabledButton]}>
-                <Text style={styles.cancelText}>Cancel</Text>
+                <Text style={[styles.cancelText, { color: colors.muted }]}>Cancel</Text>
               </Pressable>
             </View>
           </View>
@@ -273,10 +278,10 @@ const styles = StyleSheet.create({
   backButton: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#353b46", borderRadius: 15, backgroundColor: "#151a22" },
   blueSkyControl: { borderColor: "#3478bd", backgroundColor: "#155192" },
   backText: { color: "#ffffff", fontSize: 34, lineHeight: 38 },
-  eyebrow: { color: "#ffffff", fontSize: 9, fontWeight: "800", letterSpacing: 2 },
+  eyebrow: { ...NATIVE_TYPE_SCALE.overline, color: "#ffffff" },
   headerCopy: { flex: 1 },
-  title: { color: "#ffffff", fontSize: 19, fontWeight: "900" },
-  subtitle: { color: "#ffffff", fontSize: 12, marginTop: 2 },
+  title: { ...NATIVE_TYPE_SCALE.screenTitle, color: "#ffffff" },
+  subtitle: { ...NATIVE_TYPE_SCALE.caption, color: "#ffffff", marginTop: 2 },
   headerSpacer: { width: 42 },
   list: { gap: 12, padding: 14, paddingTop: 16, paddingBottom: 30 },
   callCard: { minHeight: 66, flexDirection: "row", alignItems: "center", gap: 11, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, borderColor: "#2e3540", borderRadius: 20, backgroundColor: "#171c25" },

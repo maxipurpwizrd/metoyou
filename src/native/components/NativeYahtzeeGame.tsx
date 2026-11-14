@@ -4,7 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } fr
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowLeft, Dice5, Play, RotateCcw, Trophy, X } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { useNativeTheme, NATIVE_THEME_COLORS } from "../contexts/NativeThemeProvider";
+import { useNativeTheme, NATIVE_THEME_COLORS, type NativeThemePalette } from "../contexts/NativeThemeProvider";
 import NativeGameHelp from "./NativeGameHelp";
 import {
   createYahtzeeState,
@@ -258,7 +258,7 @@ export default function NativeYahtzeeGame({ onExit }: { onExit: () => void }) {
   );
 }
 
-function ScoreSummary({ game, colors }: { game: YahtzeeState; colors: typeof NATIVE_THEME_COLORS.dark | typeof NATIVE_THEME_COLORS.bluesky }) {
+function ScoreSummary({ game, colors }: { game: YahtzeeState; colors: NativeThemePalette }) {
   return (
     <ScrollView style={styles.finalScoreList} contentContainerStyle={styles.scoreList} showsVerticalScrollIndicator={false}>
       {YAHTZEE_CATEGORIES.map((category) => (

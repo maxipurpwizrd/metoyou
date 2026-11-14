@@ -47,14 +47,14 @@ import {
 import { useNativeAuth } from "../contexts/NativeAuthProvider";
 import { useNativeEntitlement } from "../contexts/NativeEntitlementProvider";
 import { useNativeMusic } from "../contexts/NativeMusicProvider";
-import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
+import { NATIVE_THEME_COLORS, NATIVE_TYPE_SCALE, useNativeTheme } from "../contexts/NativeThemeProvider";
 import type { PostRecord } from "../../types/post";
 import NativeBlurBackdrop from "./NativeBlurBackdrop";
 import NativeConfirmDialog from "./NativeConfirmDialog";
+import NativeGlassSurface, { NATIVE_LIQUID_GLASS_PRESSED } from "./NativeGlassSurface";
 import NativePostCard from "./NativePostCard";
 import NativeSkeleton from "./NativeSkeleton";
 import { NativeProfilePostsSkeleton, NativeProfileSkeleton } from "./NativeScreenSkeletons";
-import NativeSurfaceDock from "./NativeSurfaceDock";
 import NativeVibesProProfile from "./NativeVibesProProfile";
 
 function isVibesPro(profile: NativeProfile | null) {
@@ -111,6 +111,8 @@ export default function NativeProfileScreen() {
   const { entitlement, refresh: refreshEntitlement } = useNativeEntitlement();
   const { theme } = useNativeTheme();
   const isBlueSky = theme === "bluesky";
+  const isLiquidGlass = theme === "liquidGlass";
+  const colors = NATIVE_THEME_COLORS[theme];
   const viewerId = session?.user.id;
   const cacheOwnerId = cacheUserId;
   const queryClient = useQueryClient();
@@ -391,6 +393,7 @@ export default function NativeProfileScreen() {
         updatePostsCache((current) => current.map((item) => item.id === postId ? { ...item, text } : item));
       }}
       onHighlight={updateHighlight}
+      onOpen={() => router.push({ pathname: "/(app)/(tabs)", params: { postId: post.id } })}
       onReport={async (item, reason) => {
         await reportNativePost({ postId: item.id, authorId: item.author_id, reason });
         Alert.alert("Report submitted", "Our moderation team will review it.");
@@ -429,23 +432,26 @@ export default function NativeProfileScreen() {
 
   const content = (
     <LinearGradient
-      colors={isBlueSky ? NATIVE_THEME_COLORS.bluesky.background : vibesPro ? NATIVE_THEME_COLORS.dark.background : ["#d9f3ff", "#eefaff", "#ffffff"]}
+      colors={colors.background}
       style={styles.root}
     >
       <SafeAreaView edges={["top"]} style={styles.safeArea}>
-        <View style={[styles.header, isBlueSky && styles.blueSkyHeader]}>
+        <NativeGlassSurface
+          enabled={isLiquidGlass}
+          style={[styles.header, isBlueSky && styles.blueSkyHeader, { backgroundColor: isLiquidGlass ? "transparent" : colors.surface, borderBottomColor: colors.border }]}
+        >
           <Pressable
             accessibilityLabel="Go back"
             onPress={() => isOwnProfile
               ? router.navigate("/(app)/(tabs)")
               : router.canGoBack() ? router.back() : router.navigate("/(app)/(tabs)")}
-            style={styles.headerButton}
+            style={[styles.headerButton, { backgroundColor: colors.control, borderColor: colors.border }]}
           >
-            <Text style={[styles.backText, isBlueSky && styles.blueSkyText]}>‹</Text>
+            <Text style={[styles.backText, isBlueSky && styles.blueSkyText, { color: colors.text }]}>‹</Text>
           </Pressable>
-          <Text style={[styles.headerTitle, vibesPro && styles.goldText, isBlueSky && styles.blueSkyText]}>Profile</Text>
+          <Text style={[styles.headerTitle, vibesPro && !isLiquidGlass && styles.goldText, isBlueSky && styles.blueSkyText, { color: colors.text }]}>Profile</Text>
           <View style={styles.headerSpacer} />
-        </View>
+        </NativeGlassSurface>
 
         {loading || ownEntitlementLoading ? (
           <ScrollView
@@ -481,9 +487,17 @@ export default function NativeProfileScreen() {
                 </Pressable>
               </View>
             ) : null}
-            <LinearGradient
-              colors={isBlueSky ? ["#0b2d5b", "#104078"] : vibesPro ? ["#fcd34d", "#f59e0b", "#d97706"] : ["rgba(255,255,255,0.96)", "rgba(240,249,255,0.94)"]}
-              style={[styles.profileCard, vibesPro && styles.premiumCard, isBlueSky && styles.blueSkyCard]}
+            <NativeGlassSurface
+              enabled={isLiquidGlass}
+              gradientColors={isLiquidGlass
+                ? ["rgba(235,240,242,0.24)", "rgba(30,32,34,0.34)", "rgba(235,240,242,0.2)"]
+                : [colors.surface, colors.raised, colors.surface]}
+              style={[
+                styles.profileCard,
+                vibesPro && !isLiquidGlass && styles.premiumCard,
+                isBlueSky && styles.blueSkyCard,
+                { borderColor: colors.border, backgroundColor: isLiquidGlass ? "transparent" : colors.surface },
+              ]}
             >
               <View
                 style={[
@@ -495,7 +509,11 @@ export default function NativeProfileScreen() {
                   accessibilityLabel="Profile menu"
                   accessibilityRole="button"
                   onPress={() => setProfileMenuOpen(true)}
-                  style={styles.cardMenuButton}
+                  style={({ pressed }) => [
+                    styles.cardMenuButton,
+                    { backgroundColor: colors.control, borderColor: colors.border },
+                    pressed && isLiquidGlass && NATIVE_LIQUID_GLASS_PRESSED,
+                  ]}
                 >
                   <View style={styles.menuGridIcon}>
                     {Array.from({ length: 4 }, (_, index) => (
@@ -508,10 +526,14 @@ export default function NativeProfileScreen() {
                     accessibilityLabel="Open settings"
                     accessibilityRole="button"
                     onPress={() => router.push("/(app)/settings")}
-                    style={styles.settingsButton}
+                    style={({ pressed }) => [
+                      styles.settingsButton,
+                      { backgroundColor: colors.control, borderColor: colors.border },
+                      pressed && isLiquidGlass && NATIVE_LIQUID_GLASS_PRESSED,
+                    ]}
                   >
-                    <Text style={styles.settingsIcon}>⚙</Text>
-                    <Text style={styles.settingsButtonText}>Settings</Text>
+                    <Text style={[styles.settingsIcon, { color: colors.text }]}>⚙</Text>
+                    <Text style={[styles.settingsButtonText, { color: colors.text }]}>Settings</Text>
                   </Pressable>
                 ) : null}
               </View>
@@ -519,7 +541,12 @@ export default function NativeProfileScreen() {
                 accessibilityLabel={isOwnProfile ? "Change profile picture" : `${profile.username}'s profile picture`}
                 disabled={!isOwnProfile || photoLoading}
                 onPress={() => void changeProfilePhoto()}
-                style={[styles.avatarRing, vibesPro && styles.avatarRingGold]}
+                style={[
+                  styles.avatarRing,
+                  vibesPro && !isLiquidGlass && styles.avatarRingGold,
+                  isLiquidGlass && { backgroundColor: colors.control },
+                  { borderColor: colors.accent },
+                ]}
               >
                 {displayPhoto ? (
                   <Image source={{ uri: displayPhoto }} style={styles.avatar} />
@@ -533,15 +560,36 @@ export default function NativeProfileScreen() {
                 ) : null}
               </Pressable>
               {isOwnProfile ? (
-                <Text style={[styles.photoHint, vibesPro && styles.premiumSubtext]}>Tap photo to update</Text>
+                <Text style={[
+                  styles.photoHint,
+                  vibesPro && !isLiquidGlass && styles.premiumSubtext,
+                  isLiquidGlass && { color: colors.muted },
+                ]}>
+                  Tap photo to update
+                </Text>
               ) : null}
-              <Text style={[styles.username, vibesPro && styles.premiumText, isBlueSky && styles.blueSkyText]}>@{profile.username}</Text>
-              {vibesPro ? <Text style={styles.vibesBadge}>👑 VibesPro</Text> : null}
-              {profile.email && isOwnProfile ? <Text style={[styles.email, vibesPro && styles.premiumSubtext]}>{profile.email}</Text> : null}
-              {bio ? <Text style={[styles.bio, vibesPro && styles.premiumText, isBlueSky && styles.blueSkyText]}>{bio}</Text> : null}
+              <Text style={[styles.username, vibesPro && styles.premiumText, isBlueSky && styles.blueSkyText, { color: colors.text }]}>@{profile.username}</Text>
+              {vibesPro ? (
+                <Text style={[
+                  styles.vibesBadge,
+                  isLiquidGlass && { color: colors.text, backgroundColor: colors.raised, borderColor: colors.border, borderWidth: 1 },
+                ]}>
+                  👑 VibesPro
+                </Text>
+              ) : null}
+              {profile.email && isOwnProfile ? <Text style={[styles.email, vibesPro && styles.premiumSubtext, { color: colors.muted }]}>{profile.email}</Text> : null}
+              {bio ? <Text style={[styles.bio, vibesPro && styles.premiumText, isBlueSky && styles.blueSkyText, { color: colors.text }]}>{bio}</Text> : null}
               {interests.length ? (
                 <View style={styles.interests}>
-                  {interests.map((interest) => <Text key={interest} style={styles.interest}>{interest}</Text>)}
+                  {interests.map((interest) =>                   <Text
+                    key={interest}
+                    style={[
+                      styles.interest,
+                      isLiquidGlass && { color: colors.text, backgroundColor: colors.control, borderColor: colors.border, borderWidth: 1 },
+                    ]}
+                  >
+                    {interest}
+                  </Text>)}
                 </View>
               ) : null}
 
@@ -554,23 +602,35 @@ export default function NativeProfileScreen() {
                       pathname: "/messages/[recipientId]",
                       params: { recipientId: profile.id },
                     })}
-                    style={styles.messageButton}
+                    style={[
+                      styles.messageButton,
+                      isLiquidGlass && { backgroundColor: colors.control, borderColor: colors.border },
+                    ]}
                   >
-                    <MessageCircle color="#0369a1" size={17} />
-                    <Text style={styles.messageButtonText}>Message</Text>
+                    <MessageCircle color={isLiquidGlass ? colors.text : "#0369a1"} size={17} />
+                    <Text style={[styles.messageButtonText, isLiquidGlass && { color: colors.text }]}>Message</Text>
                   </Pressable>
                   <Pressable
                     accessibilityRole="button"
                     disabled={followLoading}
                     onPress={() => void toggleFollow()}
-                    style={[styles.primaryButton, followLoading && styles.disabled]}
+                    style={[
+                      styles.primaryButton,
+                      isLiquidGlass && { backgroundColor: colors.accent },
+                      followLoading && styles.disabled,
+                    ]}
                   >
-                    {followLoading ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.primaryButtonText}>{followLabel}</Text>}
+                    {followLoading
+                      ? <ActivityIndicator color={isLiquidGlass ? colors.accentText : "#ffffff"} />
+                      : <Text style={[styles.primaryButtonText, isLiquidGlass && { color: colors.accentText }]}>{followLabel}</Text>}
                   </Pressable>
                 </View>
               ) : (
-                <Pressable onPress={editProfile} style={styles.secondaryButton}>
-                  <Text style={styles.secondaryButtonText}>Edit profile</Text>
+                <Pressable
+                  onPress={editProfile}
+                  style={[styles.secondaryButton, isLiquidGlass && { backgroundColor: colors.control, borderColor: colors.border }]}
+                >
+                  <Text style={[styles.secondaryButtonText, isLiquidGlass && { color: colors.text }]}>Edit profile</Text>
                 </Pressable>
               )}
 
@@ -584,30 +644,42 @@ export default function NativeProfileScreen() {
                   style={styles.stat}
                 >
                   {followInfoLoading ? <NativeSkeleton style={styles.statSkeleton} /> : (
-                    <Text style={[styles.statValue, vibesPro && styles.premiumText]}>
+                    <Text style={[
+                      styles.statValue,
+                      vibesPro && !isLiquidGlass && styles.premiumText,
+                      isLiquidGlass && { color: colors.text },
+                    ]}>
                       {followInfoQuery.isError && !followInfo ? "—" : followInfo?.followerCount ?? 0}
                     </Text>
                   )}
-                  <Text style={[styles.statLabel, vibesPro && styles.premiumSubtext]}>Followers</Text>
+                  <Text style={[styles.statLabel, vibesPro && !isLiquidGlass && styles.premiumSubtext, isLiquidGlass && { color: colors.muted }]}>Followers</Text>
                 </Pressable>
                 <View style={styles.stat}>
-                  <Text style={[styles.statValue, vibesPro && styles.premiumText]}>{snapshotsCount}</Text>
-                  <Text style={[styles.statLabel, vibesPro && styles.premiumSubtext]}>Snapshots</Text>
+                  <Text style={[styles.statValue, vibesPro && !isLiquidGlass && styles.premiumText, isLiquidGlass && { color: colors.text }]}>{snapshotsCount}</Text>
+                  <Text style={[styles.statLabel, vibesPro && !isLiquidGlass && styles.premiumSubtext, isLiquidGlass && { color: colors.muted }]}>Snapshots</Text>
                 </View>
                 <View style={styles.stat}>
-                  <Text style={[styles.statValue, vibesPro && styles.premiumText]}>{posts.length}</Text>
-                  <Text style={[styles.statLabel, vibesPro && styles.premiumSubtext]}>Vibes</Text>
+                  <Text style={[styles.statValue, vibesPro && !isLiquidGlass && styles.premiumText, isLiquidGlass && { color: colors.text }]}>{posts.length}</Text>
+                  <Text style={[styles.statLabel, vibesPro && !isLiquidGlass && styles.premiumSubtext, isLiquidGlass && { color: colors.muted }]}>Vibes</Text>
                 </View>
               </View>
-            </LinearGradient>
+            </NativeGlassSurface>
 
             <View style={styles.section}>
-              <Text style={[styles.sectionTitle, vibesPro && styles.goldText]}>Highlights</Text>
+              <Text style={[styles.sectionTitle, vibesPro && !isLiquidGlass && styles.goldText, isLiquidGlass && { color: colors.text }]}>Highlights</Text>
               {postsLoading ? <NativeProfilePostsSkeleton /> : posts.some((post) => post.highlighted) ? (
                 posts.filter((post) => post.highlighted).map((post) => (
-                  <View key={`highlight-${post.id}`} style={[styles.highlightCard, vibesPro && styles.highlightCardGold]}>
+                  <View key={`highlight-${post.id}`} style={[
+                    styles.highlightCard,
+                    vibesPro && !isLiquidGlass && styles.highlightCardGold,
+                    isLiquidGlass && { borderColor: colors.border, backgroundColor: colors.surface },
+                  ]}>
                     {post.image_url ? <Image source={{ uri: post.image_url }} style={styles.highlightImage} /> : null}
-                    <Text numberOfLines={3} style={[styles.highlightText, vibesPro && styles.premiumText]}>
+                    <Text numberOfLines={3} style={[
+                      styles.highlightText,
+                      vibesPro && !isLiquidGlass && styles.premiumText,
+                      isLiquidGlass && { color: colors.text },
+                    ]}>
                       {post.text || "A highlighted snapshot"}
                     </Text>
                   </View>
@@ -618,7 +690,7 @@ export default function NativeProfileScreen() {
             </View>
 
             <View style={styles.section}>
-              <Text style={[styles.sectionTitle, vibesPro && styles.goldText]}>
+              <Text style={[styles.sectionTitle, vibesPro && !isLiquidGlass && styles.goldText, isLiquidGlass && { color: colors.text }]}>
                 {isOwnProfile ? "My Snapshots" : "Snapshots"}
               </Text>
               {postsLoading ? <NativeProfilePostsSkeleton /> : posts.length === 0 && !profilePostsQuery.isError ? (
@@ -629,33 +701,26 @@ export default function NativeProfileScreen() {
         ) : null}
       </SafeAreaView>
 
-      <NativeSurfaceDock
-        activeSurface="feed"
-        bottomInset={insets.bottom}
-        onClipsPress={() => {
-          music.pause();
-          router.navigate("/(app)/(tabs)/clips");
-        }}
-        onFeedPress={() => router.navigate("/(app)/(tabs)")}
-        onFlicksPress={() => router.navigate("/(app)/(tabs)/flicks")}
-        onTracksPress={() => router.navigate("/(app)/(tabs)/tracks")}
-        visible
-      />
-
       <Modal
         animationType="fade"
         onRequestClose={() => setProfileMenuOpen(false)}
         transparent
         visible={profileMenuOpen}
       >
-        <View style={styles.menuBackdrop}>
+        <View style={[styles.menuBackdrop, isLiquidGlass && { backgroundColor: "rgba(18,20,22,0.34)" }]}>
           <NativeBlurBackdrop intensity={18} overlayColor="rgba(15,23,42,0.48)" />
           <Pressable onPress={() => setProfileMenuOpen(false)} style={StyleSheet.absoluteFill} />
-          <Pressable onPress={(event) => event.stopPropagation()} style={styles.profileMenuCard}>
+          <Pressable
+            onPress={(event) => event.stopPropagation()}
+            style={[
+              styles.profileMenuCard,
+              isLiquidGlass && { borderColor: colors.border, backgroundColor: colors.surface },
+            ]}
+          >
             <View style={styles.menuHeading}>
               <View>
-                <Text style={styles.menuTitle}>Profile menu</Text>
-                <Text style={styles.menuSubtitle}>@{profile?.username}</Text>
+                <Text style={[styles.menuTitle, isLiquidGlass && { color: colors.text }]}>Profile menu</Text>
+                <Text style={[styles.menuSubtitle, isLiquidGlass && { color: colors.muted }]}>@{profile?.username}</Text>
               </View>
               <Pressable
                 accessibilityLabel="Close profile menu"
@@ -717,27 +782,27 @@ export default function NativeProfileScreen() {
       </Modal>
 
       <Modal animationType="fade" onRequestClose={() => setEditOpen(false)} transparent visible={editOpen}>
-        <View style={styles.modalBackdrop}>
+        <View style={[styles.modalBackdrop, isLiquidGlass && { backgroundColor: "rgba(18,20,22,0.34)" }]}>
           <NativeBlurBackdrop intensity={26} overlayColor="rgba(15,23,42,0.42)" />
           <Pressable onPress={() => setEditOpen(false)} style={StyleSheet.absoluteFill} />
-          <View style={styles.editCard}>
-            <Text style={styles.editTitle}>Edit profile</Text>
-            <Text style={styles.inputLabel}>About me</Text>
+          <View style={[styles.editCard, isLiquidGlass && { borderColor: colors.border, backgroundColor: colors.surface }]}>
+            <Text style={[styles.editTitle, isLiquidGlass && { color: colors.text }]}>Edit profile</Text>
+            <Text style={[styles.inputLabel, isLiquidGlass && { color: colors.text }]}>About me</Text>
             <TextInput
               multiline
               onChangeText={setEditBio}
               placeholder="Tell people a little about you"
-              style={[styles.textInput, styles.bioInput]}
+              style={[styles.textInput, styles.bioInput, isLiquidGlass && { color: colors.text, borderColor: colors.border, backgroundColor: colors.control }]}
               value={editBio}
             />
-            <Text style={styles.inputLabel}>Interests</Text>
+            <Text style={[styles.inputLabel, isLiquidGlass && { color: colors.text }]}>Interests</Text>
             <TextInput
               onChangeText={setEditInterests}
               placeholder="Music, art, travel"
-              style={styles.textInput}
+              style={[styles.textInput, isLiquidGlass && { color: colors.text, borderColor: colors.border, backgroundColor: colors.control }]}
               value={editInterests}
             />
-            <Text style={styles.inputHint}>Separate interests with commas.</Text>
+            <Text style={[styles.inputHint, isLiquidGlass && { color: colors.muted }]}>Separate interests with commas.</Text>
             <View style={styles.editActions}>
               <Pressable disabled={savingEdit} onPress={() => setEditOpen(false)} style={styles.cancelButton}>
                 <Text style={styles.cancelText}>Cancel</Text>
@@ -775,7 +840,7 @@ const styles = StyleSheet.create({
   headerButton: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 15, backgroundColor: "rgba(255,255,255,0.72)" },
   headerSpacer: { width: 42 },
   backText: { color: "#0369a1", fontSize: 36, lineHeight: 39 },
-  headerTitle: { color: "#082f49", fontSize: 17, fontWeight: "900" },
+  headerTitle: { ...NATIVE_TYPE_SCALE.screenTitle, color: "#082f49" },
   shareIcon: { color: "#0369a1", fontSize: 22, fontWeight: "800" },
   settingsIcon: { color: "#0369a1", fontSize: 20, fontWeight: "800" },
   menuGridIcon: { width: 20, height: 20, flexDirection: "row", flexWrap: "wrap", gap: 3 },
@@ -822,13 +887,13 @@ const styles = StyleSheet.create({
   statSkeleton: { width: 42, height: 22, borderRadius: 8 },
   statLabel: { marginTop: 4, color: "#64748b", fontSize: 11, fontWeight: "700" },
   section: { gap: 10 },
-  sectionTitle: { color: "#0c4a6e", fontSize: 20, fontWeight: "900" },
+  sectionTitle: { ...NATIVE_TYPE_SCALE.sectionTitle, color: "#0c4a6e" },
   highlightCard: { overflow: "hidden", borderWidth: 1, borderColor: "#dbeafe", borderRadius: 18, backgroundColor: "#ffffff" },
   highlightCardGold: { borderColor: "#fbbf24", backgroundColor: "#fef3c7" },
   highlightImage: { width: "100%", height: 150 },
   highlightText: { padding: 12, color: "#334155", fontSize: 13, lineHeight: 18 },
   emptyText: { paddingVertical: 18, color: "#64748b", fontSize: 13, textAlign: "center" },
-  postWrap: { marginBottom: 4 },
+  postWrap: { marginHorizontal: -16, marginBottom: 4 },
   modalBackdrop: { flex: 1, alignItems: "center", justifyContent: "center", padding: 20, backgroundColor: "rgba(15,23,42,0.42)" },
   menuBackdrop: { flex: 1, alignItems: "center", justifyContent: "center", padding: 22, backgroundColor: "rgba(15,23,42,0.48)" },
   profileMenuCard: { width: "100%", maxWidth: 390, padding: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.85)", borderRadius: 26, backgroundColor: "#f8fdff", elevation: 14 },

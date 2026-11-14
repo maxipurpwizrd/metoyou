@@ -54,15 +54,55 @@ export async function fetchNativeClipById(postId: string): Promise<NativeClip | 
 
 export async function hydrateNativeClipLikes(clips: NativeClip[], userId: string) {
   if (clips.length === 0) return clips;
-  const { data, error } = await nativeSupabase
-    .from("post_likes")
-    .select("post_id")
-    .eq("user_id", userId)
-    .in("post_id", clips.map((clip) => clip.id));
-  if (error) throw error;
 
-  const likedIds = new Set((data ?? []).map((like) => like.post_id));
-  return clips.map((clip) => ({ ...clip, liked: likedIds.has(clip.id) }));
+  const postIds = [...new Set(clips.map((clip) => clip.id))];
+
+  const [likedResult, likeCountsResult, commentCountsResult] = await Promise.all([
+    nativeSupabase
+      .from("post_likes")
+      .select("post_id")
+      .eq("user_id", userId)
+      .in("post_id", postIds),
+    Promise.all(
+      postIds.map(async (postId) => {
+        const { count, error } = await nativeSupabase
+          .from("post_likes")
+          .select("id", { count: "exact", head: true })
+          .eq("post_id", postId);
+        if (error) {
+          console.warn("Could not refresh the Clip like count.", error);
+          return { postId, count: null as number | null };
+        }
+        return { postId, count: count ?? 0 };
+      }),
+    ),
+    Promise.all(
+      postIds.map(async (postId) => {
+        const { count, error } = await nativeSupabase
+          .from("comments")
+          .select("id", { count: "exact", head: true })
+          .eq("post_id", postId);
+        if (error) {
+          console.warn("Could not refresh the Clip comment count.", error);
+          return { postId, count: null as number | null };
+        }
+        return { postId, count: count ?? 0 };
+      }),
+    ),
+  ]);
+
+  if (likedResult.error) throw likedResult.error;
+
+  const likedIds = new Set((likedResult.data ?? []).map((like) => like.post_id));
+  const likeCounts = new Map((likeCountsResult as Array<{ postId: string; count: number | null }>).map((entry) => [entry.postId, entry.count ?? 0]));
+  const commentCounts = new Map((commentCountsResult as Array<{ postId: string; count: number | null }>).map((entry) => [entry.postId, entry.count ?? 0]));
+
+  return clips.map((clip) => ({
+    ...clip,
+    liked: likedIds.has(clip.id),
+    likes_count: likeCounts.get(clip.id) ?? clip.likes_count,
+    comments_count: commentCounts.get(clip.id) ?? clip.comments_count,
+  }));
 }
 
 export async function repostNativeClip(clip: NativeClip, authorId: string) {

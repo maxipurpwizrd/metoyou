@@ -2,7 +2,7 @@ export const RALLY_LANES = 3;
 export const RALLY_PLAYER_ROW = 7;
 export const RALLY_STARTING_LIVES = 3;
 
-export type RallyObstacleType = "cone" | "coffee";
+export type RallyObstacleType = "car" | "cone" | "coffee";
 
 export type RallyObstacle = {
   id: number;
@@ -48,6 +48,19 @@ export function moveRallyCar(state: RallyState, direction: -1 | 1): RallyState {
   return { ...state, lane: Math.max(0, Math.min(RALLY_LANES - 1, state.lane + direction)) };
 }
 
+export function steerRallyCar(state: RallyState, lane: number): RallyState {
+  if (state.isGameOver || !Number.isFinite(lane)) return state;
+  return { ...state, lane: Math.max(0, Math.min(RALLY_LANES - 1, lane)) };
+}
+
+export function getRallySteeringLane(tilt: number): number {
+  if (!Number.isFinite(tilt)) return 1;
+  const deadZone = 0.055;
+  const steeringRange = 0.3;
+  const amount = Math.max(0, Math.min(1, (Math.abs(tilt) - deadZone) / (steeringRange - deadZone)));
+  return Math.max(0, Math.min(RALLY_LANES - 1, 1 - Math.sign(tilt) * amount));
+}
+
 export function activateRallyNitro(state: RallyState): RallyState {
   if (state.isGameOver || state.nitroTicks > 0 || state.nitroFuel < 40) return state;
   return { ...state, nitroFuel: state.nitroFuel - 40, nitroTicks: 8 };
@@ -70,7 +83,7 @@ export function advanceRally(state: RallyState, random: () => number = Math.rand
   for (const obstacle of state.obstacles) {
     const row = obstacle.row + 1;
     if (row >= RALLY_PLAYER_ROW) {
-      if (row === RALLY_PLAYER_ROW && obstacle.lane === state.lane) {
+      if (row === RALLY_PLAYER_ROW && obstacle.lane === Math.round(state.lane)) {
         if (obstacle.type === "coffee") snacks += 1;
         else if (state.flightTicks === 0) lives -= 1;
       }
@@ -82,11 +95,12 @@ export function advanceRally(state: RallyState, random: () => number = Math.rand
   const spawnInterval = Math.max(2, 4 - Math.floor(distance / 350));
   let nextObstacleId = state.nextObstacleId;
   if (tick % spawnInterval === 0) {
+    const roll = random();
     obstacles.push({
       id: nextObstacleId,
       lane: Math.min(RALLY_LANES - 1, Math.floor(random() * RALLY_LANES)),
       row: 0,
-      type: random() < 0.26 ? "coffee" : "cone",
+      type: roll < 0.12 ? "coffee" : roll < 0.64 ? "car" : "cone",
     });
     nextObstacleId += 1;
   }

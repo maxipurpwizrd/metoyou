@@ -5,5 +5,12 @@ export const unstable_settings = {
 };
 
 export default function MessagesStackLayout() {
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return (
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: "transparent" },
+      }}
+    />
+  );
 }

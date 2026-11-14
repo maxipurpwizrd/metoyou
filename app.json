@@ -6,6 +6,8 @@
     "scheme": "metoyou",
     "android": {
       "package": "com.wizrd.metoyou",
+      "softwareKeyboardLayoutMode": "resize",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./src/assets/adaptive-foreground.png",
         "backgroundColor": "#000000"
@@ -37,6 +39,13 @@
     "userInterfaceStyle": "automatic",
     "plugins": [
       "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow MeToYou to use your camera to capture Clips and Flicks.",
+          "microphonePermission": "Allow MeToYou to record audio in your Clips."
+        }
+      ],
       "expo-status-bar",
       [
         "expo-navigation-bar",

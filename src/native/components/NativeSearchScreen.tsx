@@ -13,15 +13,18 @@ import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useNativeEntitlement } from "../contexts/NativeEntitlementProvider";
-import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
+import { NATIVE_THEME_COLORS, NATIVE_TYPE_SCALE, useNativeTheme } from "../contexts/NativeThemeProvider";
 import { searchNativeUsersByUsername, type NativeSearchUser } from "../lib/search";
 import { NativeSearchRowsSkeleton } from "./NativeScreenSkeletons";
+import NativeGlassSurface, { NATIVE_LIQUID_GLASS_PRESSED } from "./NativeGlassSurface";
 
 export default function NativeSearchScreen() {
   const router = useRouter();
   const { entitlement, refresh: refreshEntitlement } = useNativeEntitlement();
   const { theme } = useNativeTheme();
   const isBlueSky = theme === "bluesky";
+  const colors = NATIVE_THEME_COLORS[theme];
+  const isLiquidGlass = theme === "liquidGlass";
   const [query, setQuery] = useState("");
   const [users, setUsers] = useState<NativeSearchUser[]>([]);
   const [searching, setSearching] = useState(false);
@@ -72,24 +75,24 @@ export default function NativeSearchScreen() {
 
   return (
     <LinearGradient
-      colors={isBlueSky ? NATIVE_THEME_COLORS.bluesky.background : isVibesPro ? NATIVE_THEME_COLORS.dark.background : ["#d9f3ff", "#eefaff", "#ffffff"]}
+      colors={colors.background}
       end={{ x: 1, y: 1 }}
       start={{ x: 0, y: 0 }}
       style={styles.root}
     >
       <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
-        <View style={[styles.header, isVibesPro && styles.vibesProHeader, isBlueSky && styles.blueSkyHeader]}>
+        <NativeGlassSurface enabled={isLiquidGlass} style={[styles.header, isVibesPro && styles.vibesProHeader, isBlueSky && styles.blueSkyHeader, { backgroundColor: isLiquidGlass ? "transparent" : colors.surface, borderBottomColor: colors.border }]}>
           <Pressable
             accessibilityLabel="Go back"
             accessibilityRole="button"
             onPress={() => router.canGoBack() ? router.back() : router.navigate("/(app)/(tabs)")}
-            style={[styles.backButton, isVibesPro && styles.vibesProBackButton]}
+            style={[styles.backButton, isVibesPro && styles.vibesProBackButton, { backgroundColor: colors.control, borderColor: colors.border }]}
           >
-            <Text style={[styles.backText, isVibesPro && styles.vibesProText]}>‹</Text>
+            <Text style={[styles.backText, isVibesPro && styles.vibesProText, { color: colors.text }]}>‹</Text>
           </Pressable>
-          <Text style={[styles.title, isVibesPro && styles.vibesProText, isBlueSky && styles.blueSkyText]}>Search</Text>
+          <Text style={[styles.title, isVibesPro && styles.vibesProText, isBlueSky && styles.blueSkyText, { color: colors.text }]}>Search</Text>
           <View style={styles.headerSpacer} />
-        </View>
+        </NativeGlassSurface>
 
         <ScrollView
           contentContainerStyle={styles.content}
@@ -97,12 +100,12 @@ export default function NativeSearchScreen() {
           showsVerticalScrollIndicator={false}
         >
           {entitlement.status === "error" ? (
-            <View style={[styles.messageCard, isVibesPro && styles.vibesProCard, isBlueSky && styles.blueSkyCard]}>
-              <Text style={[styles.messageText, isBlueSky && styles.blueSkyText]}>
+            <View style={[styles.messageCard, isVibesPro && styles.vibesProCard, isBlueSky && styles.blueSkyCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.messageText, isBlueSky && styles.blueSkyText, { color: colors.text }]}>
                 VibesPro appearance could not be checked.
               </Text>
-              <Pressable accessibilityRole="button" onPress={() => void refreshEntitlement()} style={styles.retryButton}>
-                <Text style={styles.retryText}>Retry account status</Text>
+              <Pressable accessibilityRole="button" onPress={() => void refreshEntitlement()} style={[styles.retryButton, { backgroundColor: colors.accent }]}>
+                <Text style={[styles.retryText, { color: colors.accentText }]}>Retry account status</Text>
               </Pressable>
             </View>
           ) : null}
@@ -116,47 +119,47 @@ export default function NativeSearchScreen() {
               void runSearch(query, currentRequest);
             }}
             placeholder="Search by username..."
-            placeholderTextColor={isBlueSky || isVibesPro ? "rgba(255,255,255,0.6)" : "#64748b"}
+            placeholderTextColor={colors.muted}
             returnKeyType="search"
-            style={[styles.searchInput, isVibesPro && styles.vibesProSearchInput, isBlueSky && styles.blueSkyInput]}
+            style={[styles.searchInput, isVibesPro && styles.vibesProSearchInput, isBlueSky && styles.blueSkyInput, { backgroundColor: colors.control, borderColor: colors.border, color: colors.text }]}
             value={query}
           />
 
           {!hasSearched ? (
-            <View style={[styles.messageCard, isVibesPro && styles.vibesProCard, isBlueSky && styles.blueSkyCard]}>
-              <Text style={[styles.messageText, isVibesPro && styles.vibesProMutedText, isBlueSky && styles.blueSkyMuted]}>
+            <View style={[styles.messageCard, isVibesPro && styles.vibesProCard, isBlueSky && styles.blueSkyCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.messageText, isVibesPro && styles.vibesProMutedText, isBlueSky && styles.blueSkyMuted, { color: colors.muted }]}>
                 Search for people by their username
               </Text>
             </View>
           ) : searchError && users.length === 0 ? (
-            <View style={[styles.messageCard, isVibesPro && styles.vibesProCard, isBlueSky && styles.blueSkyCard]}>
-              <Text accessibilityRole="alert" style={[styles.errorText, isBlueSky && styles.blueSkyText]}>{searchError}</Text>
+            <View style={[styles.messageCard, isVibesPro && styles.vibesProCard, isBlueSky && styles.blueSkyCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text accessibilityRole="alert" style={[styles.errorText, isBlueSky && styles.blueSkyText, { color: colors.text }]}>{searchError}</Text>
               <Pressable
                 accessibilityRole="button"
                 onPress={() => {
                   const currentRequest = ++requestId.current;
                   void runSearch(query, currentRequest);
                 }}
-                style={styles.retryButton}
+                style={[styles.retryButton, { backgroundColor: colors.accent }]}
               >
-                <Text style={styles.retryText}>Try again</Text>
+                <Text style={[styles.retryText, { color: colors.accentText }]}>Try again</Text>
               </Pressable>
             </View>
           ) : searching && users.length === 0 ? (
             <NativeSearchRowsSkeleton count={4} />
           ) : users.length === 0 ? (
-            <View style={[styles.messageCard, isVibesPro && styles.vibesProCard, isBlueSky && styles.blueSkyCard]}>
-              <Text style={[styles.messageText, isVibesPro && styles.vibesProMutedText, isBlueSky && styles.blueSkyMuted]}>
+            <View style={[styles.messageCard, isVibesPro && styles.vibesProCard, isBlueSky && styles.blueSkyCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.messageText, isVibesPro && styles.vibesProMutedText, isBlueSky && styles.blueSkyMuted, { color: colors.muted }]}>
                 No people found
               </Text>
             </View>
           ) : (
             <View>
-              <Text style={[styles.resultsTitle, isVibesPro && styles.vibesProText, isBlueSky && styles.blueSkyText]}>
+              <Text style={[styles.resultsTitle, isVibesPro && styles.vibesProText, isBlueSky && styles.blueSkyText, { color: colors.text }]}>
                 👥 {users.length} {users.length === 1 ? "person" : "people"}
                 {searching ? " · Updating" : ""}
               </Text>
-              {searchError ? <Text accessibilityRole="alert" style={styles.errorText}>{searchError}</Text> : null}
+              {searchError ? <Text accessibilityRole="alert"               style={[styles.errorText, { color: colors.text }]}>{searchError}</Text> : null}
               <View style={styles.resultsList}>
                 {users.map((user) => (
                   <Pressable
@@ -168,7 +171,8 @@ export default function NativeSearchScreen() {
                       styles.userCard,
                       isVibesPro && styles.vibesProCard,
                       isBlueSky && styles.blueSkyCard,
-                      pressed && styles.pressed,
+                      { backgroundColor: colors.surface, borderColor: colors.border },
+                      pressed && (isLiquidGlass ? NATIVE_LIQUID_GLASS_PRESSED : styles.pressed),
                     ]}
                   >
                     {user.profile_pic ? (
@@ -178,21 +182,21 @@ export default function NativeSearchScreen() {
                       />
                     ) : (
                       <LinearGradient
-                        colors={isVibesPro ? ["#D4AF37", "#F0C75E"] : ["#38bdf8", "#06b6d4", "#2563eb"]}
+                        colors={[colors.accent, colors.surface]}
                         style={styles.avatarFallback}
                       >
                         <Text style={styles.avatarInitial}>{user.username.slice(0, 1).toUpperCase()}</Text>
                       </LinearGradient>
                     )}
                     <View style={styles.userDetails}>
-                      <Text numberOfLines={1} style={[styles.username, isVibesPro && styles.vibesProText, isBlueSky && styles.blueSkyText]}>
+                      <Text numberOfLines={1} style={[styles.username, isVibesPro && styles.vibesProText, isBlueSky && styles.blueSkyText, { color: colors.text }]}>
                         {user.username}
                       </Text>
-                      <Text numberOfLines={1} style={[styles.handle, isVibesPro && styles.vibesProMutedText, isBlueSky && styles.blueSkyMuted]}>
+                      <Text numberOfLines={1} style={[styles.handle, isVibesPro && styles.vibesProMutedText, isBlueSky && styles.blueSkyMuted, { color: colors.muted }]}>
                         @{user.username.toLowerCase()}
                       </Text>
                     </View>
-                    <Text style={[styles.chevron, isVibesPro && styles.vibesProMutedText]}>›</Text>
+                    <Text style={[styles.chevron, isVibesPro && styles.vibesProMutedText, { color: colors.muted }]}>›</Text>
                   </Pressable>
                 ))}
               </View>
@@ -237,7 +241,7 @@ const styles = StyleSheet.create({
   },
   vibesProBackButton: { backgroundColor: "#181818" },
   backText: { color: "#0369a1", fontSize: 34, lineHeight: 38 },
-  title: { color: "#082f49", fontSize: 19, fontWeight: "900" },
+  title: { ...NATIVE_TYPE_SCALE.screenTitle, color: "#082f49" },
   vibesProText: { color: "#ffffff" },
   headerSpacer: { width: 42 },
   content: { gap: 18, padding: 18, paddingBottom: 36 },
@@ -270,7 +274,7 @@ const styles = StyleSheet.create({
   messageText: { color: "#475569", fontSize: 14, textAlign: "center" },
   vibesProMutedText: { color: "rgba(255,255,255,0.7)" },
   loadingState: { alignItems: "center", gap: 10, padding: 24 },
-  resultsTitle: { marginBottom: 13, color: "#0f172a", fontSize: 19, fontWeight: "900" },
+  resultsTitle: { ...NATIVE_TYPE_SCALE.sectionTitle, marginBottom: 13, color: "#0f172a" },
   resultsList: { gap: 10 },
   userCard: {
     minHeight: 72,

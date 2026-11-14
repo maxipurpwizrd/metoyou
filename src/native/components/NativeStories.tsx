@@ -17,16 +17,18 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import { LinearGradient } from "expo-linear-gradient";
+import NativeGlassSurface, { NATIVE_LIQUID_GLASS_PRESSED } from "./NativeGlassSurface";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import NativeBlurBackdrop from "./NativeBlurBackdrop";
 import NativeConfirmDialog from "./NativeConfirmDialog";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNativeAuth } from "../contexts/NativeAuthProvider";
-import { useNativeTheme } from "../contexts/NativeThemeProvider";
+import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
 import { nativeSavedStoriesCacheKey } from "../lib/nativeAccountStorage";
 import { NATIVE_OFFLINE_MESSAGE } from "../lib/networkStatus";
 import { createNativeStory, deleteNativeStory, fetchNativeStories, type NativeStory } from "../lib/stories";
 import { nativeStoriesQueryKey } from "../lib/queryKeys";
+import { groupNativeStoriesByAuthor } from "../lib/storyGrouping";
 
 const STORY_DURATIONS = [2, 4, 8, 12, 24];
 const EMPTY_STORIES: NativeStory[] = [];
@@ -39,13 +41,17 @@ function getTimeLeft(expiresAt: string) {
 export default function NativeStories({
   isVibesPro = false,
   messagesList = false,
+  compactSpacing = false,
 }: {
   isVibesPro?: boolean;
   messagesList?: boolean;
+  compactSpacing?: boolean;
 }) {
   const { session, cacheUserId, status } = useNativeAuth();
   const { theme } = useNativeTheme();
   const isBlueSky = theme === "bluesky";
+  const isLiquidGlass = theme === "liquidGlass";
+  const colors = NATIVE_THEME_COLORS[theme];
   const authorId = session?.user.id;
   const cacheOwnerId = cacheUserId;
   const username =
@@ -69,7 +75,9 @@ export default function NativeStories({
   const loading = storiesQuery.isPending && status !== "offlineDeferred";
   const loadError = storiesQuery.error?.message ??
     (status === "offlineDeferred" && !storiesQuery.data ? NATIVE_OFFLINE_MESSAGE : null);
+  const groupedStories = useMemo(() => groupNativeStoriesByAuthor(stories), [stories]);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [activeStoryIndex, setActiveStoryIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const [composerOpen, setComposerOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -86,7 +94,9 @@ export default function NativeStories({
   const savedStoryIds = savedStoryState?.userId === cacheOwnerId ? savedStoryState.ids : new Set<string>();
   const [busy, setBusy] = useState(false);
   const [composerError, setComposerError] = useState<string | null>(null);
-  const selectedStory = selectedIndex === null ? null : stories[selectedIndex] ?? null;
+  const selectedGroup = selectedIndex === null ? null : groupedStories[selectedIndex] ?? null;
+  const viewerStories = selectedGroup?.stories ?? [];
+  const selectedStory = viewerStories[activeStoryIndex] ?? viewerStories[0] ?? null;
   const isOwner = Boolean(selectedStory && selectedStory.author_id === authorId);
 
   useEffect(() => {
@@ -125,7 +135,7 @@ export default function NativeStories({
   }, [authorId, queryClient]);
 
   useEffect(() => {
-    if (!selectedStory || selectedIndex === null) return;
+    if (!selectedStory || selectedIndex === null || viewerStories.length === 0) return;
     setProgress(0);
     const durationMs = selectedStory.story_type === "voice" ? 3000 : 5000;
     const tickMs = 100;
@@ -133,19 +143,27 @@ export default function NativeStories({
       setProgress((current) => Math.min(100, current + (tickMs / durationMs) * 100));
     }, tickMs);
     const timeout = setTimeout(() => {
-      if (selectedIndex < stories.length - 1) {
-        setSelectedIndex(selectedIndex + 1);
-      } else if (stories.length > 1) {
-        setSelectedIndex(0);
-      } else {
-        setSelectedIndex(null);
+      if (activeStoryIndex < viewerStories.length - 1) {
+        setActiveStoryIndex((current) => current + 1);
+        return;
       }
+      if (selectedIndex < groupedStories.length - 1) {
+        setSelectedIndex(selectedIndex + 1);
+        setActiveStoryIndex(0);
+        return;
+      }
+      if (groupedStories.length > 1) {
+        setSelectedIndex(0);
+        setActiveStoryIndex(0);
+        return;
+      }
+      setSelectedIndex(null);
     }, durationMs);
     return () => {
       clearInterval(interval);
       clearTimeout(timeout);
     };
-  }, [selectedIndex, selectedStory, stories.length]);
+  }, [activeStoryIndex, groupedStories.length, selectedIndex, selectedStory, viewerStories.length]);
 
   const openComposer = () => {
     setComposerError(null);
@@ -299,22 +317,32 @@ export default function NativeStories({
   );
 
   const goPrevious = () => {
-    if (selectedIndex === null || stories.length < 2) return;
-    setSelectedIndex((selectedIndex - 1 + stories.length) % stories.length);
+    if (selectedIndex === null || groupedStories.length === 0) return;
+    if (viewerStories.length > 1 && activeStoryIndex > 0) {
+      setActiveStoryIndex((current) => current - 1);
+      return;
+    }
+    setSelectedIndex((selectedIndex - 1 + groupedStories.length) % groupedStories.length);
+    setActiveStoryIndex(0);
   };
   const goNext = () => {
-    if (selectedIndex === null || stories.length < 2) {
+    if (selectedIndex === null || groupedStories.length === 0) {
       setSelectedIndex(null);
       return;
     }
-    setSelectedIndex((selectedIndex + 1) % stories.length);
+    if (viewerStories.length > 1 && activeStoryIndex < viewerStories.length - 1) {
+      setActiveStoryIndex((current) => current + 1);
+      return;
+    }
+    setSelectedIndex((selectedIndex + 1) % groupedStories.length);
+    setActiveStoryIndex(0);
   };
 
   return (
     <>
-      <View style={styles.section}>
+      <View style={[styles.section, compactSpacing && styles.compactSection]}>
         <ScrollView
-          contentContainerStyle={styles.storyStrip}
+          contentContainerStyle={[styles.storyStrip, compactSpacing && styles.compactStoryStrip]}
           horizontal
           showsHorizontalScrollIndicator={false}
         >
@@ -326,12 +354,23 @@ export default function NativeStories({
               styles.addStory,
               isVibesPro && styles.vibesProAddStory,
               isBlueSky && styles.blueSkyAddStory,
+              isLiquidGlass && styles.liquidGlassStoryTile,
               messagesList && styles.messagesListStoryTile,
               pressed && styles.pressed,
             ]}
           >
-            <Text style={[styles.addIcon, isVibesPro && styles.vibesProAddIcon, isBlueSky && styles.blueSkyText]}>+</Text>
-            <Text style={[styles.addLabel, isVibesPro && styles.vibesProAddLabel, isBlueSky && styles.blueSkyText]}>Your Story</Text>
+            <Text style={[
+              styles.addIcon,
+              isVibesPro && styles.vibesProAddIcon,
+              isBlueSky && styles.blueSkyText,
+              isLiquidGlass && { color: colors.text },
+            ]}>+</Text>
+            <Text style={[
+              styles.addLabel,
+              isVibesPro && styles.vibesProAddLabel,
+              isBlueSky && styles.blueSkyText,
+              isLiquidGlass && { color: colors.text },
+            ]}>Your Story</Text>
           </Pressable>
           {loading && stories.length === 0
             ? Array.from({ length: 4 }, (_, index) => (
@@ -341,69 +380,81 @@ export default function NativeStories({
                     styles.skeleton,
                     isVibesPro && styles.vibesProSkeleton,
                     isBlueSky && styles.blueSkyStoryTile,
+                    isLiquidGlass && styles.liquidGlassStoryTile,
+                    isLiquidGlass && styles.liquidGlassSkeleton,
                     messagesList && styles.messagesListStoryTile,
                   ]}
                 />
               ))
-            : stories.map((story, index) => (
-                <Pressable
-                  accessibilityLabel={`View ${story.author_username}'s story`}
-                  accessibilityRole="button"
-                  key={story.id}
-                  onPress={() => setSelectedIndex(index)}
-                  style={({ pressed }) => [
-                    styles.storyCard,
-                    isVibesPro && styles.vibesProStoryCard,
-                    isBlueSky && styles.blueSkyStoryTile,
-                    messagesList && styles.messagesListStoryTile,
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  {story.image_url ? (
-                    <Image resizeMode="cover" source={{ uri: story.image_url }} style={styles.storyImage} />
-                  ) : (
-                    <LinearGradient
-                      colors={
-                        isBlueSky
-                          ? ["#061a3a", "#0b3b78", "#125baa"]
-                          : isVibesPro
-                          ? ["#7C5CFF", "#00D4FF", "#D4AF37"]
-                          : ["#38bdf8", "#06b6d4", "#2563eb"]
-                      }
-                      end={{ x: 1, y: 1 }}
-                      start={{ x: 0, y: 0 }}
-                      style={styles.storyTextPreview}
-                    >
-                      <Text numberOfLines={4} style={styles.storyPreviewText}>
-                        {story.text || (story.voice_url ? "Audio story" : "Text story")}
+            : groupedStories.map((group, index) => {
+                const story = group.stories[0];
+                if (!story) return null;
+                return (
+                  <Pressable
+                    accessibilityLabel={`View ${story.author_username}'s story`}
+                    accessibilityRole="button"
+                    key={`${story.author_id}-${story.id}`}
+                    onPress={() => {
+                      setSelectedIndex(index);
+                      setActiveStoryIndex(0);
+                    }}
+                    style={({ pressed }) => [
+                      styles.storyCard,
+                      isVibesPro && styles.vibesProStoryCard,
+                      isBlueSky && styles.blueSkyStoryTile,
+                      isLiquidGlass && styles.liquidGlassStoryTile,
+                      messagesList && styles.messagesListStoryTile,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    {story.image_url ? (
+                      <Image resizeMode="cover" source={{ uri: story.image_url }} style={styles.storyImage} />
+                    ) : (
+                      <LinearGradient
+                        colors={isLiquidGlass
+                          ? ["rgba(235,240,242,0.22)", "rgba(30,32,34,0.5)", "rgba(235,240,242,0.18)"]
+                          : [colors.background[0], colors.surface, colors.accent]}
+                        end={{ x: 1, y: 1 }}
+                        start={{ x: 0, y: 0 }}
+                        style={styles.storyTextPreview}
+                      >
+                        <Text numberOfLines={4} style={[styles.storyPreviewText, isLiquidGlass && styles.liquidGlassStoryPreview]}>
+                          {story.text || (story.voice_url ? "Audio story" : "Text story")}
+                        </Text>
+                      </LinearGradient>
+                    )}
+                    {group.count > 1 ? (
+                      <View style={[
+                        styles.storyCountBadge,
+                        isLiquidGlass && { backgroundColor: colors.control, borderColor: colors.border, borderWidth: 1 },
+                      ]}>
+                        <Text style={styles.storyCountText}>+{group.count - 1}</Text>
+                      </View>
+                    ) : null}
+                    {story.author_profile_pic ? (
+                      <Image
+                        source={{ uri: story.author_profile_pic }}
+                        style={styles.storyAvatar}
+                      />
+                    ) : (
+                      <View style={[
+                        styles.storyAvatarFallback,
+                        isLiquidGlass && { backgroundColor: colors.control, borderColor: colors.border },
+                      ]}>
+                        <Text style={styles.storyAvatarInitial}>
+                          {story.author_username.slice(0, 1).toUpperCase()}
+                        </Text>
+                      </View>
+                    )}
+                    <View style={styles.storyCaption}>
+                      <Text numberOfLines={1} style={[styles.storyAuthor, isLiquidGlass && styles.liquidGlassStoryCaptionText]}>
+                        {story.author_username}
                       </Text>
-                    </LinearGradient>
-                  )}
-                  <LinearGradient
-                    colors={["transparent", "rgba(0,0,0,0.72)"]}
-                    locations={[0.35, 1]}
-                    style={styles.storyShade}
-                  />
-                  {story.author_profile_pic ? (
-                    <Image
-                      source={{ uri: story.author_profile_pic }}
-                      style={styles.storyAvatar}
-                    />
-                  ) : (
-                    <View style={styles.storyAvatarFallback}>
-                      <Text style={styles.storyAvatarInitial}>
-                        {story.author_username.slice(0, 1).toUpperCase()}
-                      </Text>
+                      <Text style={[styles.storyExpiry, isLiquidGlass && styles.liquidGlassStoryCaptionText]}>{getTimeLeft(story.expires_at)}</Text>
                     </View>
-                  )}
-                  <View style={styles.storyCaption}>
-                    <Text numberOfLines={1} style={styles.storyAuthor}>
-                      {story.author_username}
-                    </Text>
-                    <Text style={styles.storyExpiry}>{getTimeLeft(story.expires_at)}</Text>
-                  </View>
-                </Pressable>
-              ))}
+                  </Pressable>
+                );
+              })}
         </ScrollView>
         {loadError ? (
           <View style={styles.errorRow}>
@@ -429,18 +480,18 @@ export default function NativeStories({
         {selectedStory ? (
           <SafeAreaView edges={["top", "bottom"]} style={[styles.viewer, isBlueSky && styles.blueSkyViewer]}>
             <View style={styles.progressRow}>
-              {stories.map((story, index) => (
+              {viewerStories.map((story, index) => (
                 <View key={story.id} style={styles.progressTrack}>
                   <View
                     style={[
                       styles.progressFill,
-                      { width: index < (selectedIndex ?? 0) ? "100%" : index === selectedIndex ? `${progress}%` : "0%" },
+                      { width: index < activeStoryIndex ? "100%" : index === activeStoryIndex ? `${progress}%` : "0%" },
                     ]}
                   />
                 </View>
               ))}
             </View>
-            <View style={styles.viewerHeader}>
+            <View style={[styles.viewerHeader, isLiquidGlass && styles.liquidGlassViewerHeader]}>
               <View style={styles.viewerAuthor}>
                 {selectedStory.author_profile_pic ? (
                   <Image source={{ uri: selectedStory.author_profile_pic }} style={styles.viewerAvatar} />
@@ -457,11 +508,19 @@ export default function NativeStories({
                 </View>
               </View>
               <View style={styles.viewerActions}>
-                <Pressable accessibilityLabel="Story options" onPress={() => setMenuOpen(true)} style={styles.viewerIconButton}>
-                  <Text style={styles.viewerIcon}>•••</Text>
+                <Pressable
+                  accessibilityLabel="Story options"
+                  onPress={() => setMenuOpen(true)}
+                  style={[styles.viewerIconButton, isLiquidGlass && styles.liquidGlassViewerButton]}
+                >
+                  <Text style={[styles.viewerIcon, isLiquidGlass && styles.liquidGlassViewerButtonText]}>•••</Text>
                 </Pressable>
-                <Pressable accessibilityLabel="Close story" onPress={() => setSelectedIndex(null)} style={styles.viewerIconButton}>
-                  <Text style={styles.viewerIcon}>×</Text>
+                <Pressable
+                  accessibilityLabel="Close story"
+                  onPress={() => setSelectedIndex(null)}
+                  style={[styles.viewerIconButton, isLiquidGlass && styles.liquidGlassViewerButton]}
+                >
+                  <Text style={[styles.viewerIcon, isLiquidGlass && styles.liquidGlassViewerButtonText]}>×</Text>
                 </Pressable>
               </View>
             </View>
@@ -473,7 +532,9 @@ export default function NativeStories({
               />
             ) : (
               <LinearGradient
-                colors={["#0ea5e9", "#06b6d4", "#2563eb"]}
+                colors={isLiquidGlass
+                  ? ["rgba(235,240,242,0.22)", "rgba(30,32,34,0.5)", "rgba(235,240,242,0.18)"]
+                  : ["#0ea5e9", "#06b6d4", "#2563eb"]}
                 end={{ x: 1, y: 1 }}
                 start={{ x: 0, y: 0 }}
                 style={styles.viewerTextBackground}
@@ -496,15 +557,30 @@ export default function NativeStories({
               <View style={styles.menuBackdrop}>
                 <NativeBlurBackdrop intensity={18} overlayColor="rgba(2,6,23,0.25)" />
                 <Pressable onPress={() => setMenuOpen(false)} style={StyleSheet.absoluteFill} />
-                <View style={[styles.menuCard, isBlueSky && styles.blueSkyMenuCard]}>
+                <NativeGlassSurface
+                  enabled={isLiquidGlass}
+                  style={[
+                    styles.menuCard,
+                    isBlueSky && styles.blueSkyMenuCard,
+                    isLiquidGlass && { borderColor: colors.border, backgroundColor: colors.surface },
+                  ]}
+                >
                   {menuActions.map((item) => (
-                    <Pressable key={item.label} onPress={item.action} style={styles.menuAction}>
-                      <Text style={[styles.menuActionText, item.label === "Delete story" && styles.deleteText]}>
+                    <Pressable
+                      key={item.label}
+                      onPress={item.action}
+                      style={({ pressed }) => [styles.menuAction, pressed && isLiquidGlass && NATIVE_LIQUID_GLASS_PRESSED]}
+                    >
+                      <Text style={[
+                        styles.menuActionText,
+                        isLiquidGlass && { color: colors.text },
+                        item.label === "Delete story" && styles.deleteText,
+                      ]}>
                         {item.label}
                       </Text>
                     </Pressable>
                   ))}
-                </View>
+                </NativeGlassSurface>
               </View>
             </Modal>
           </SafeAreaView>
@@ -522,18 +598,27 @@ export default function NativeStories({
         <SafeAreaView style={styles.composerRoot}>
           <NativeBlurBackdrop intensity={60} overlayColor="rgba(2,32,54,0.42)" />
           <Pressable onPress={() => !busy && setComposerOpen(false)} style={styles.composerBackdrop} />
-          <View style={[styles.composerCard, isVibesPro && styles.vibesProComposerCard, isBlueSky && styles.blueSkyComposerCard]}>
+          <NativeGlassSurface
+            enabled={isLiquidGlass}
+            style={[
+              styles.composerCard,
+              isVibesPro && styles.vibesProComposerCard,
+              isBlueSky && styles.blueSkyComposerCard,
+              isLiquidGlass && { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+            overlayColor="rgba(245,248,250,0.035)"
+          >
             <View style={styles.composerTitleRow}>
               <View>
-                <Text style={[styles.composerTitle, (isVibesPro || isBlueSky) && styles.vibesProText]}>
+                <Text style={[styles.composerTitle, (isVibesPro || isBlueSky) && styles.vibesProText, { color: colors.text }]}>
                   Create a story
                 </Text>
-                <Text style={[styles.composerSubtitle, (isVibesPro || isBlueSky) && styles.vibesProMutedText]}>
+                <Text style={[styles.composerSubtitle, (isVibesPro || isBlueSky) && styles.vibesProMutedText, { color: colors.muted }]}>
                   Share text or a photo for a little while.
                 </Text>
               </View>
               <Pressable accessibilityLabel="Close story composer" disabled={busy} onPress={() => setComposerOpen(false)}>
-                <Text style={[styles.composerClose, (isVibesPro || isBlueSky) && styles.vibesProMutedText]}>×</Text>
+                <Text style={[styles.composerClose, (isVibesPro || isBlueSky) && styles.vibesProMutedText, { color: colors.muted }]}>×</Text>
               </Pressable>
             </View>
             {image ? (
@@ -553,12 +638,12 @@ export default function NativeStories({
                 setComposerError(null);
               }}
               placeholder="Write something to share…"
-              placeholderTextColor={isVibesPro || isBlueSky ? "#dbeafe" : "#64748b"}
-              style={[styles.storyInput, isVibesPro && styles.vibesProStoryInput, isBlueSky && styles.blueSkyStoryInput]}
+              placeholderTextColor={colors.muted}
+              style={[styles.storyInput, isVibesPro && styles.vibesProStoryInput, isBlueSky && styles.blueSkyStoryInput, { backgroundColor: colors.control, borderColor: colors.border, color: colors.text }]}
               value={text}
             />
             <View style={styles.durationRow}>
-              <Text style={[styles.durationLabel, isVibesPro && styles.vibesProMutedText]}>
+              <Text style={[styles.durationLabel, isVibesPro && styles.vibesProMutedText, { color: colors.muted }]}>
                 Visible for
               </Text>
               {STORY_DURATIONS.map((hours) => (
@@ -569,16 +654,18 @@ export default function NativeStories({
                   style={[
                     styles.durationChoice,
                     isVibesPro && styles.vibesProDurationChoice,
+                    { backgroundColor: colors.raised, borderColor: colors.border },
                     duration === hours &&
-                      (isVibesPro ? styles.vibesProDurationSelected : styles.durationSelected),
+                      { backgroundColor: colors.control, borderColor: colors.accent },
                   ]}
                 >
                   <Text
                     style={[
                       styles.durationText,
                       isVibesPro && styles.vibesProMutedText,
+                      { color: colors.muted },
                       duration === hours &&
-                        (isVibesPro ? styles.vibesProDurationTextSelected : styles.durationTextSelected),
+                        { color: colors.text },
                     ]}
                   >
                     {hours}h
@@ -592,9 +679,9 @@ export default function NativeStories({
                 accessibilityRole="button"
                 disabled={busy}
                 onPress={() => void choosePhoto()}
-                style={[styles.photoButton, isVibesPro && styles.vibesProPhotoButton]}
+                style={[styles.photoButton, isVibesPro && styles.vibesProPhotoButton, { backgroundColor: colors.raised, borderColor: colors.border }]}
               >
-                <Text style={[styles.photoButtonText, isVibesPro && styles.vibesProText]}>
+                <Text style={[styles.photoButtonText, isVibesPro && styles.vibesProText, { color: colors.text }]}>
                   Add photo
                 </Text>
               </Pressable>
@@ -605,13 +692,14 @@ export default function NativeStories({
                 style={[
                   styles.publishButton,
                   isVibesPro && styles.vibesProPublishButton,
+                  { backgroundColor: colors.accent },
                   (busy || (!text.trim() && !image)) && styles.disabled,
                 ]}
               >
-                {busy ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.publishText}>Share Story</Text>}
+                {busy ? <ActivityIndicator color={colors.accentText} /> : <Text style={[styles.publishText, { color: colors.accentText }]}>Share Story</Text>}
               </Pressable>
             </View>
-          </View>
+          </NativeGlassSurface>
         </SafeAreaView>
       </Modal>
       <NativeConfirmDialog
@@ -630,7 +718,9 @@ export default function NativeStories({
 
 const styles = StyleSheet.create({
   section: { paddingTop: 10, paddingBottom: 2 },
+  compactSection: { paddingTop: 8, paddingBottom: 0 },
   storyStrip: { gap: 10, paddingHorizontal: 12, paddingBottom: 14 },
+  compactStoryStrip: { paddingBottom: 8 },
   addStory: {
     width: 104,
     height: 152,
@@ -654,6 +744,17 @@ const styles = StyleSheet.create({
     shadowColor: "#D4AF37",
     shadowOpacity: 0.2,
   },
+  liquidGlassStoryTile: {
+    borderWidth: 1,
+    borderColor: "rgba(235,240,242,0.42)",
+    borderRadius: 21,
+    backgroundColor: "rgba(30,33,35,0.22)",
+    shadowColor: "transparent",
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 0,
+  },
   blueSkyAddStory: { borderColor: "#3478bd", backgroundColor: "#0b2d5b" },
   blueSkyText: { color: "#ffffff" },
   blueSkyStoryTile: { borderColor: "#54b8ff", backgroundColor: "#104078" },
@@ -664,6 +765,7 @@ const styles = StyleSheet.create({
   vibesProAddLabel: { color: "#ffffff" },
   skeleton: { width: 104, height: 152, borderRadius: 21, backgroundColor: "rgba(255,255,255,0.55)" },
   vibesProSkeleton: { borderRadius: 20, backgroundColor: "#181818" },
+  liquidGlassSkeleton: { backgroundColor: "rgba(230,235,237,0.12)" },
   storyCard: {
     width: 104,
     height: 152,
@@ -685,7 +787,20 @@ const styles = StyleSheet.create({
   storyImage: { ...StyleSheet.absoluteFill, width: "100%", height: "100%" },
   storyTextPreview: { ...StyleSheet.absoluteFill, alignItems: "center", justifyContent: "center", padding: 10 },
   storyPreviewText: { color: "#ffffff", fontSize: 12, fontWeight: "700", lineHeight: 16 },
-  storyShade: { ...StyleSheet.absoluteFill },
+  liquidGlassStoryPreview: { color: "#ffffff", textShadowColor: "rgba(0,0,0,0.2)", textShadowRadius: 8 },
+  storyCountBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    minWidth: 28,
+    height: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    backgroundColor: "rgba(14,165,233,0.9)",
+  },
+  storyCountText: { color: "#ffffff", fontSize: 11, fontWeight: "900" },
   storyAvatar: {
     position: "absolute",
     top: 8,
@@ -711,8 +826,23 @@ const styles = StyleSheet.create({
   },
   storyAvatarInitial: { color: "#ffffff", fontSize: 13, fontWeight: "900" },
   storyCaption: { position: "absolute", left: 8, right: 8, bottom: 8 },
-  storyAuthor: { color: "#ffffff", fontSize: 11, fontWeight: "800" },
-  storyExpiry: { marginTop: 2, color: "rgba(255,255,255,0.82)", fontSize: 9 },
+  liquidGlassStoryCaptionText: { textShadowColor: "rgba(0,0,0,0.8)", textShadowRadius: 5, textShadowOffset: { width: 0, height: 1 } },
+  storyAuthor: {
+    color: "#ffffff",
+    fontSize: 11,
+    fontWeight: "800",
+    textShadowColor: "rgba(0,0,0,0.8)",
+    textShadowRadius: 5,
+    textShadowOffset: { width: 0, height: 1 },
+  },
+  storyExpiry: {
+    marginTop: 2,
+    color: "rgba(255,255,255,0.82)",
+    fontSize: 9,
+    textShadowColor: "rgba(0,0,0,0.8)",
+    textShadowRadius: 5,
+    textShadowOffset: { width: 0, height: 1 },
+  },
   errorRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, paddingHorizontal: 15 },
   errorText: { flex: 1, color: "#be123c", fontSize: 12, lineHeight: 18 },
   retryText: { color: "#0284c7", fontSize: 13, fontWeight: "800" },
@@ -734,6 +864,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
+  liquidGlassViewerHeader: { borderRadius: 24 },
   viewerAuthor: { flexDirection: "row", alignItems: "center", gap: 9 },
   viewerAvatar: { width: 36, height: 36, borderWidth: 1, borderColor: "#ffffff", borderRadius: 18 },
   viewerAvatarFallback: { width: 36, height: 36, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#ffffff", borderRadius: 18, backgroundColor: "#0284c7" },
@@ -741,6 +872,8 @@ const styles = StyleSheet.create({
   viewerExpiry: { marginTop: 2, color: "rgba(255,255,255,0.75)", fontSize: 11 },
   viewerActions: { flexDirection: "row", gap: 8 },
   viewerIconButton: { width: 38, height: 38, alignItems: "center", justifyContent: "center", borderRadius: 19, backgroundColor: "rgba(15,23,42,0.38)" },
+  liquidGlassViewerButton: { backgroundColor: "rgba(255,255,255,0.9)" },
+  liquidGlassViewerButtonText: { color: "#202325" },
   viewerIcon: { color: "#ffffff", fontSize: 24, fontWeight: "700", lineHeight: 27 },
   viewerImage: { width: "100%", height: "100%", backgroundColor: "#020617" },
   viewerTextBackground: { flex: 1, alignItems: "center", justifyContent: "center", padding: 28 },

@@ -2,11 +2,11 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Accelerometer } from "expo-sensors";
 import { StatusBar } from "expo-status-bar";
-import { Animated, Pressable, StyleSheet, Switch, Text, View, useWindowDimensions } from "react-native";
+import { Animated, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft, ArrowRight, Coffee, Heart, Pause, Play, RotateCcw, X, Zap } from "lucide-react-native";
+import { Coffee, Heart, Pause, Play, RotateCcw, X, Zap } from "lucide-react-native";
 import { LinearGradient as NativeLinearGradient } from "expo-linear-gradient";
-import Svg, { Path } from "react-native-svg";
+import Svg, { Circle, Ellipse, Path, Rect } from "react-native-svg";
 import { useNativeTheme, NATIVE_THEME_COLORS } from "../contexts/NativeThemeProvider";
 import NativeGameHelp from "./NativeGameHelp";
 import {
@@ -14,9 +14,10 @@ import {
   activateRallyThrusters,
   advanceRally,
   createRallyState,
+  getRallySteeringLane,
   getRallyScore,
   getRallyTickInterval,
-  moveRallyCar,
+  steerRallyCar,
   RALLY_LANES,
   RALLY_PLAYER_ROW,
   type RallyState,
@@ -24,64 +25,64 @@ import {
 
 const BEST_SCORE_KEY = "metoyou-tesla-roadster-race-best-score";
 const ROADSTER_CARS = [
-  { name: "Roadster Red", color: "#f04452", glass: "#d8fbff" },
-  { name: "Roadster Blue", color: "#36b9e8", glass: "#e2fbff" },
-  { name: "Roadster Volt", color: "#a5e844", glass: "#f2ffe1" },
+  { name: "Roadster Red", color: "#d93a40", glass: "#b7d9de" },
+  { name: "Roadster Blue", color: "#2578a7", glass: "#b9dce2" },
+  { name: "Roadster Volt", color: "#77a52c", glass: "#cde0bd" },
 ] as const;
 const SCENERY = [
-  { y: 0.04, side: "left", icon: "🌲" }, { y: 0.1, side: "right", icon: "🏠" },
-  { y: 0.18, side: "left", icon: "🚶" }, { y: 0.24, side: "right", icon: "🌳" },
-  { y: 0.33, side: "left", icon: "🏡" }, { y: 0.4, side: "right", icon: "🚶" },
-  { y: 0.49, side: "left", icon: "🌳" }, { y: 0.56, side: "right", icon: "🏠" },
-  { y: 0.65, side: "left", icon: "🚶" }, { y: 0.73, side: "right", icon: "🌲" },
-  { y: 0.82, side: "left", icon: "🏡" }, { y: 0.91, side: "right", icon: "🚶" },
+  { y: 0.04, side: "left", size: 0.72 }, { y: 0.12, side: "right", size: 0.9 },
+  { y: 0.2, side: "left", size: 1.05 }, { y: 0.29, side: "right", size: 0.68 },
+  { y: 0.38, side: "left", size: 0.84 }, { y: 0.48, side: "right", size: 1.08 },
+  { y: 0.58, side: "left", size: 0.76 }, { y: 0.68, side: "right", size: 0.94 },
+  { y: 0.78, side: "left", size: 1.1 }, { y: 0.89, side: "right", size: 0.8 },
 ] as const;
 
 type RacePhase = "menu" | "countdown" | "playing" | "paused";
 
-function getRoadWidthAt(y: number, height: number, roadWidth: number) {
-  return roadWidth * (0.78 + 0.22 * Math.max(0, Math.min(1, y / height)));
+function getLaneCenter(lane: number, width: number) {
+  const roadWidth = width * 0.82;
+  return width / 2 - roadWidth / 2 + roadWidth * (lane + 0.5) / RALLY_LANES;
 }
 
-function getRoadCenterAt(y: number, height: number, width: number) {
-  const progress = y / height;
-  return width / 2 + Math.sin(progress * Math.PI * 2.2 + 0.2) * width * 0.115 + Math.sin(progress * Math.PI * 4.8) * width * 0.025;
-}
-
-function getRoadPath(width: number, height: number, roadWidth: number) {
-  const samples = 32;
-  const left: string[] = [];
-  const right: string[] = [];
-  for (let index = 0; index <= samples; index += 1) {
-    const y = (height * index) / samples;
-    const center = getRoadCenterAt(y, height, width);
-    const halfRoad = getRoadWidthAt(y, height, roadWidth) / 2;
-    left.push(`${index === 0 ? "M" : "L"}${(center - halfRoad).toFixed(1)},${y.toFixed(1)}`);
-    right.push(`${(center + halfRoad).toFixed(1)},${y.toFixed(1)}`);
-  }
-  return `${left.join(" ")} ${right.reverse().map((point) => `L${point}`).join(" ")} Z`;
-}
-
-function getLaneCenter(lane: number, y: number, width: number, height: number, roadWidth: number) {
-  const roadWidthAtY = getRoadWidthAt(y, height, roadWidth);
-  return getRoadCenterAt(y, height, width) - roadWidthAtY / 2 + roadWidthAtY * (lane + 0.5) / RALLY_LANES;
-}
-
-function Roadster({ color, glass, flying, nitro }: { color: string; glass: string; flying: boolean; nitro: boolean }) {
+function Roadster({ color, glass, flying, nitro, traffic = false }: { color: string; glass: string; flying: boolean; nitro: boolean; traffic?: boolean }) {
   return (
-    <View style={[styles.roadster, { backgroundColor: color }, flying && styles.flyingCar, nitro && styles.nitroCar]}>
-      <View style={[styles.carWindshield, { backgroundColor: glass }]} />
-      <View style={[styles.carRoof, { backgroundColor: color }]} />
-      <View style={[styles.carHood, { backgroundColor: color }]} />
-      <View style={styles.carFrontLightLeft} />
-      <View style={styles.carFrontLightRight} />
-      <View style={styles.carWheelLeftFront} />
-      <View style={styles.carWheelRightFront} />
-      <View style={styles.carWheelLeftRear} />
-      <View style={styles.carWheelRightRear} />
-      {flying ? <View style={styles.thrusterFlame}><Text style={styles.flameEmoji}>🔥</Text></View> : null}
-      {nitro ? <View style={styles.nitroStreak} /> : null}
+    <View style={[styles.roadster, flying && styles.flyingCar, nitro && styles.nitroCar, traffic && styles.trafficCar]}>
+      <Svg width="100%" height="100%" viewBox="0 0 64 112">
+        <Ellipse cx="32" cy="58" rx="27" ry="48" fill="#101315" opacity="0.5" />
+        {nitro ? <Path d="M25 108 L32 124 L39 108" fill="#55d5ff" opacity="0.9" /> : null}
+        {flying ? <Path d="M16 88 L11 108 L23 96 M48 88 L53 108 L41 96" fill="#ffb02e" /> : null}
+        <Rect x="4" y="23" width="9" height="27" rx="4" fill="#17191c" />
+        <Rect x="51" y="23" width="9" height="27" rx="4" fill="#17191c" />
+        <Rect x="4" y="65" width="9" height="27" rx="4" fill="#17191c" />
+        <Rect x="51" y="65" width="9" height="27" rx="4" fill="#17191c" />
+        <Path d="M16 13 Q18 6 27 5 L37 5 Q46 6 48 13 L56 35 L58 82 Q57 99 48 104 L16 104 Q7 99 6 82 L8 35 Z" fill={color} stroke="#172026" strokeWidth="2" />
+        <Path d="M20 17 Q22 12 28 11 L36 11 Q42 12 44 17 L48 34 L16 34 Z" fill={glass} stroke="#34464c" strokeWidth="2" />
+        <Circle cx="18" cy="12" r="2.2" fill="#fff5c8" />
+        <Circle cx="46" cy="12" r="2.2" fill="#fff5c8" />
+        <Path d="M17 38 Q32 33 47 38 L44 64 Q32 68 20 64 Z" fill="#172329" stroke="#718088" strokeWidth="1.5" />
+        <Path d="M20 40 L32 37 L32 63 L21 61 Z" fill="#a9c5cb" opacity="0.32" />
+        <Path d="M13 17 Q16 10 21 9 L17 31 L11 33 Z" fill="#ffffff" opacity="0.18" />
+        <Path d="M10 78 Q32 84 54 78 L53 91 Q50 102 43 103 L21 103 Q13 101 11 91 Z" fill="#991f29" opacity="0.72" />
+        <Rect x="10" y="88" width="10" height="5" rx="2" fill="#ff4c42" />
+        <Rect x="44" y="88" width="10" height="5" rx="2" fill="#ff4c42" />
+        <Path d="M21 100 L43 100" stroke="#25292c" strokeWidth="2" />
+        <Path d="M31 39 L31 62" stroke="#d7e5e8" strokeWidth="1" opacity="0.3" />
+      </Svg>
     </View>
+  );
+}
+
+function RoadTree({ size }: { size: number }) {
+  return (
+    <Svg width={52 * size} height={66 * size} viewBox="0 0 52 66">
+      <Ellipse cx="27" cy="59" rx="19" ry="5" fill="#132616" opacity="0.35" />
+      <Path d="M23 58 L23 35 L29 35 L30 58 Z" fill="#68452a" />
+      <Ellipse cx="26" cy="38" rx="15" ry="17" fill="#1e552e" />
+      <Ellipse cx="19" cy="27" rx="13" ry="15" fill="#347a3d" />
+      <Ellipse cx="32" cy="25" rx="13" ry="16" fill="#438c47" />
+      <Ellipse cx="25" cy="17" rx="11" ry="14" fill="#579f52" />
+      <Ellipse cx="22" cy="13" rx="4" ry="6" fill="#8bc66b" opacity="0.42" />
+    </Svg>
   );
 }
 
@@ -94,27 +95,49 @@ export default function NativeTeslaRoadsterRace({ onExit }: { onExit: () => void
   const bottomInset = Math.max(insets.bottom, 8);
   const trackHeight = Math.max(280, window.height - topInset - bottomInset - 184);
   const trackWidth = window.width;
-  const roadWidth = trackWidth * 0.74;
+  const roadWidth = trackWidth * 0.82;
   const rowHeight = trackHeight / (RALLY_PLAYER_ROW + 1);
   const sceneScroll = rowHeight * 0.75;
   const progress = useRef(new Animated.Value(0)).current;
-  const tiltGate = useRef(false);
+  const progressFraction = useRef(0);
+  const carOffset = useRef(new Animated.Value(0)).current;
+  const steeringLaneRef = useRef(1);
+  const calibrationSamples = useRef(0);
+  const calibrationTotal = useRef(0);
+  const neutralX = useRef<number | null>(null);
+  const filteredTilt = useRef(0);
   const [game, setGame] = useState<RallyState>(() => createRallyState());
+  const gameRef = useRef(game);
   const [phase, setPhase] = useState<RacePhase>("menu");
   const [countdown, setCountdown] = useState<number | null>(null);
   const [carIndex, setCarIndex] = useState(0);
-  const [tiltEnabled, setTiltEnabled] = useState(true);
   const [tiltAvailable, setTiltAvailable] = useState(false);
   const [bestScore, setBestScore] = useState(0);
   const score = getRallyScore(game);
   const scenery = useMemo(() => SCENERY, []);
-  const roadPath = useMemo(() => getRoadPath(trackWidth, trackHeight, roadWidth), [roadWidth, trackHeight, trackWidth]);
+  const roadPath = useMemo(
+    () => `M${(trackWidth - roadWidth) / 2},0 L${(trackWidth + roadWidth) / 2},0 L${(trackWidth + roadWidth) / 2},${trackHeight} L${(trackWidth - roadWidth) / 2},${trackHeight} Z`,
+    [roadWidth, trackHeight, trackWidth],
+  );
   const animatedDistance = progress.interpolate({ inputRange: [0, 1], outputRange: [0, sceneScroll] });
   const animatedObstacleY = progress.interpolate({ inputRange: [0, 1], outputRange: [0, rowHeight] });
   const nitroActive = game.nitroTicks > 0;
   const flying = game.flightTicks > 0;
   const car = ROADSTER_CARS[carIndex];
   const playerY = rowHeight * RALLY_PLAYER_ROW;
+  gameRef.current = game;
+  const updateGame = (update: (current: RallyState) => RallyState) => {
+    const next = update(gameRef.current);
+    gameRef.current = next;
+    setGame(next);
+  };
+
+  useEffect(() => {
+    const listener = progress.addListener(({ value }) => {
+      progressFraction.current = value;
+    });
+    return () => progress.removeListener(listener);
+  }, [progress]);
 
   useEffect(() => {
     let active = true;
@@ -148,53 +171,81 @@ export default function NativeTeslaRoadsterRace({ onExit }: { onExit: () => void
   }, [countdown, phase]);
 
   useEffect(() => {
-    if (phase !== "playing" || game.isGameOver) return;
-    const duration = getRallyTickInterval(game.distance, game.nitroTicks > 0);
-    progress.stopAnimation();
-    progress.setValue(0);
-    const animation = Animated.timing(progress, { toValue: 1, duration, useNativeDriver: true });
-    animation.start();
-    const tick = setTimeout(() => setGame((current) => advanceRally(current)), duration);
-    return () => {
-      clearTimeout(tick);
-      animation.stop();
+    if (phase !== "playing" || game.isGameOver || !tiltAvailable) return;
+    let active = true;
+    let animation: Animated.CompositeAnimation | null = null;
+    const advanceFrame = () => {
+      if (!active) return;
+      const current = gameRef.current;
+      if (current.isGameOver) return;
+      const duration = getRallyTickInterval(current.distance, current.nitroTicks > 0);
+      const startProgress = progressFraction.current;
+      animation = Animated.timing(progress, {
+        toValue: 1,
+        duration: Math.max(1, duration * (1 - startProgress)),
+        useNativeDriver: true,
+        isInteraction: false,
+      });
+      animation.start(({ finished }) => {
+        if (!finished || !active) return;
+        progressFraction.current = 0;
+        progress.setValue(0);
+        const next = advanceRally(steerRallyCar(gameRef.current, steeringLaneRef.current));
+        gameRef.current = next;
+        setGame(next);
+        if (!next.isGameOver) advanceFrame();
+      });
     };
-  }, [game.distance, game.isGameOver, game.nitroTicks, game.tick, phase, progress]);
+    advanceFrame();
+    return () => {
+      active = false;
+      animation?.stop();
+      progress.stopAnimation((value) => {
+        progressFraction.current = value;
+      });
+    };
+  }, [phase, progress, tiltAvailable]);
 
   useEffect(() => {
-    if (phase !== "playing" || !tiltEnabled || !tiltAvailable) return;
-    Accelerometer.setUpdateInterval(80);
+    if ((phase !== "playing" && phase !== "countdown") || !tiltAvailable || game.isGameOver) return;
+    Accelerometer.setUpdateInterval(50);
     const subscription = Accelerometer.addListener(({ x }) => {
-      if (Math.abs(x) < 0.14) {
-        tiltGate.current = false;
+      if (neutralX.current === null) {
+        calibrationTotal.current += x;
+        calibrationSamples.current += 1;
+        if (calibrationSamples.current >= 12) {
+          neutralX.current = calibrationTotal.current / calibrationSamples.current;
+        }
         return;
       }
-      if (tiltGate.current || Math.abs(x) < 0.28) return;
-      tiltGate.current = true;
-      setGame((current) => moveRallyCar(current, x > 0 ? 1 : -1));
+      filteredTilt.current += (x - neutralX.current - filteredTilt.current) * 0.28;
+      const tilt = filteredTilt.current;
+      if (phase !== "playing") return;
+      const targetLane = getRallySteeringLane(tilt);
+      steeringLaneRef.current = targetLane;
+      carOffset.setValue((targetLane - 1) * (roadWidth / RALLY_LANES));
     });
     return () => subscription.remove();
-  }, [phase, tiltAvailable, tiltEnabled]);
+  }, [carOffset, game.isGameOver, phase, roadWidth, tiltAvailable]);
 
   const startRun = () => {
-    setGame(createRallyState());
+    const initialGame = createRallyState();
+    gameRef.current = initialGame;
+    setGame(initialGame);
     setCountdown(3);
     setPhase("countdown");
-    tiltGate.current = false;
+    progress.setValue(0);
+    progressFraction.current = 0;
+    steeringLaneRef.current = 1;
+    carOffset.setValue(0);
+    calibrationSamples.current = 0;
+    calibrationTotal.current = 0;
+    neutralX.current = null;
+    filteredTilt.current = 0;
   };
 
-  const activateNitro = () => setGame((current) => activateRallyNitro(current));
-  const activateThrusters = () => setGame((current) => activateRallyThrusters(current));
-  const laneButton = (label: string, direction: -1 | 1) => (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      onPress={() => setGame((current) => moveRallyCar(current, direction))}
-      style={({ pressed }) => [styles.controlButton, { backgroundColor: colors.surface, borderColor: colors.border }, pressed && styles.controlPressed]}
-    >
-      {direction === -1 ? <ArrowLeft color={colors.text} size={24} /> : <ArrowRight color={colors.text} size={24} />}
-    </Pressable>
-  );
+  const activateNitro = () => updateGame(activateRallyNitro);
+  const activateThrusters = () => updateGame(activateRallyThrusters);
   const abilityButton = (label: string, Icon: typeof Play, fuel: number, minimumFuel: number, active: boolean, onPress: () => void) => (
     <Pressable
       accessibilityRole="button"
@@ -253,25 +304,25 @@ export default function NativeTeslaRoadsterRace({ onExit }: { onExit: () => void
               </Pressable>
             ))}
           </View>
-          <View style={[styles.toggleRow, { borderColor: colors.border }]}>
-            <View style={styles.toggleText}>
-              <Text style={[styles.toggleTitle, { color: colors.text }]}>Tilt steering</Text>
-              <Text style={[styles.toggleHint, { color: colors.muted }]}>{tiltAvailable ? "Tilt to change lanes" : "Motion sensor unavailable; use steering buttons"}</Text>
-            </View>
-            <Switch value={tiltEnabled && tiltAvailable} onValueChange={setTiltEnabled} disabled={!tiltAvailable} trackColor={{ false: colors.control, true: colors.accent }} />
+          <View style={[styles.tiltInstructions, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+            <Text style={[styles.tiltTitle, { color: colors.text }]}>Tilt to steer</Text>
+            <Text style={[styles.toggleHint, { color: colors.muted }]}>
+              {tiltAvailable ? "Hold your phone level at the start, then tilt left or right to steer." : "This device has no motion sensor, so tilt steering is unavailable."}
+            </Text>
           </View>
           <NativeGameHelp
             gameTitle="Tesla Roadster Race"
-            introduction="Steer a forward-facing Roadster along a winding scenic road while dodging traffic and grabbing coffee."
+            introduction="Tilt your phone to steer a Roadster down a straight road, avoid traffic, and grab coffee."
             steps={[
-              "Choose your Roadster and turn on tilt steering, or use the on-screen arrows.",
+              "Hold the phone level during the countdown to calibrate steering.",
+              "Tilt left or right to smoothly move between lanes. There are no touch steering controls.",
               "Tap Nitro for a short speed burst. The meter refills while you drive.",
               "Tap Thrusters to fly over hazards for a moment. Thruster fuel also recharges.",
-              "Avoid roadworks, collect coffee, and travel as far as you can. The road gets faster over time.",
+              "Avoid other cars and roadworks, collect coffee, and travel as far as you can.",
             ]}
             colors={colors}
           />
-          <Pressable accessibilityRole="button" onPress={startRun} style={({ pressed }) => [styles.startButton, { backgroundColor: colors.accent }, pressed && styles.controlPressed]}>
+          <Pressable accessibilityRole="button" accessibilityState={{ disabled: !tiltAvailable }} disabled={!tiltAvailable} onPress={startRun} style={({ pressed }) => [styles.startButton, { backgroundColor: colors.accent }, !tiltAvailable && styles.dimmed, pressed && styles.controlPressed]}>
             <Play color="#07121b" size={19} fill="#07121b" />
             <Text style={styles.startButtonText}>Start race</Text>
           </Pressable>
@@ -304,50 +355,59 @@ export default function NativeTeslaRoadsterRace({ onExit }: { onExit: () => void
             <NativeLinearGradient colors={["#3f8050", "#225638", "#387048"]} style={StyleSheet.absoluteFill} />
             {scenery.map((item, index) => {
               const y = (item.y * trackHeight + game.tick * sceneScroll) % trackHeight;
-              const roadEdge = getRoadCenterAt(y, trackHeight, trackWidth) + (item.side === "left" ? -1 : 1) * getRoadWidthAt(y, trackHeight, roadWidth) / 2;
-              const left = item.side === "left" ? roadEdge - 35 : roadEdge + 5;
-              const nextY = y + sceneScroll;
-              const nextRoadEdge = getRoadCenterAt(nextY, trackHeight, trackWidth) + (item.side === "left" ? -1 : 1) * getRoadWidthAt(nextY, trackHeight, roadWidth) / 2;
-              const nextLeft = item.side === "left" ? nextRoadEdge - 35 : nextRoadEdge + 5;
-              const sceneryX = progress.interpolate({ inputRange: [0, 1], outputRange: [0, nextLeft - left] });
+              const roadLeft = (trackWidth - roadWidth) / 2;
+              const left = item.side === "left"
+                ? roadLeft - 52 * item.size + 8
+                : roadLeft + roadWidth - 8;
               return (
-                <Animated.Text
+                <Animated.View
                   key={`scenery-${index}`}
-                  style={[styles.scenery, { left, top: y, transform: [{ translateX: sceneryX }, { translateY: animatedDistance }] }]}
+                  pointerEvents="none"
+                  style={[styles.scenery, { left, top: y, transform: [{ translateY: animatedDistance }] }]}
                 >
-                  {item.icon}
-                </Animated.Text>
+                  <RoadTree size={item.size} />
+                </Animated.View>
               );
             })}
             <Svg pointerEvents="none" width={trackWidth} height={trackHeight} style={StyleSheet.absoluteFill}>
               <Path d={roadPath} fill="#3d494c" stroke="#c2c8a9" strokeWidth={4} />
-              {[1, 2].map((divider) => {
-                const points = Array.from({ length: 28 }, (_, index) => {
-                  const y = (trackHeight * index) / 27;
-                  const widthAtY = getRoadWidthAt(y, trackHeight, roadWidth);
-                  const center = getRoadCenterAt(y, trackHeight, trackWidth);
-                  return `${index === 0 ? "M" : "L"}${(center - widthAtY / 2 + widthAtY * divider / RALLY_LANES).toFixed(1)},${y.toFixed(1)}`;
-                }).join(" ");
-                return <Path key={divider} d={points} fill="none" stroke="rgba(246,247,231,0.62)" strokeWidth={2} strokeDasharray="15 19" strokeDashoffset={game.tick * 4} />;
-              })}
-            </Svg>
-            {game.obstacles.map((obstacle) => {
-              const y = rowHeight * obstacle.row;
-              const center = getLaneCenter(obstacle.lane, y, trackWidth, trackHeight, roadWidth);
-              const nextCenter = getLaneCenter(obstacle.lane, y + rowHeight, trackWidth, trackHeight, roadWidth);
-              const obstacleX = progress.interpolate({ inputRange: [0, 1], outputRange: [0, nextCenter - center] });
+          </Svg>
+          {[1, 2].flatMap((divider) => {
+            const x = (trackWidth - roadWidth) / 2 + (roadWidth * divider) / RALLY_LANES;
+            return Array.from({ length: Math.ceil(trackHeight / 42) + 1 }, (_, dash) => {
+              const y = (dash * 42 + game.tick * sceneScroll) % trackHeight - 22;
               return (
                 <Animated.View
-                  key={obstacle.id}
-                  style={[styles.roadItem, { left: center - 18, top: y - 18, transform: [{ translateX: obstacleX }, { translateY: animatedObstacleY }] }]}
-                >
-                  {obstacle.type === "coffee" ? <Coffee color="#f7b733" size={32} fill="#8b4e23" /> : <RoadCone />}
-                </Animated.View>
+                  key={`lane-${divider}-${dash}`}
+                  pointerEvents="none"
+                  style={[styles.laneDash, { left: x - 1, top: y, transform: [{ translateY: animatedDistance }] }]}
+                />
               );
-            })}
-            <View style={[styles.playerPosition, { left: getLaneCenter(game.lane, playerY, trackWidth, trackHeight, roadWidth) - 25, top: playerY - 38 }]}>
-              <Roadster color={car.color} glass={car.glass} flying={flying} nitro={nitroActive} />
-            </View>
+            });
+          })}
+          {game.obstacles.map((obstacle) => {
+            const y = rowHeight * obstacle.row;
+            const center = getLaneCenter(obstacle.lane, trackWidth);
+            return (
+                <Animated.View
+                  key={obstacle.id}
+                  style={[styles.roadItem, { left: center - 25, top: y - 36, transform: [{ translateY: animatedObstacleY }] }]}
+                >
+                  {obstacle.type === "coffee" ? <Coffee color="#f7b733" size={32} fill="#8b4e23" /> : obstacle.type === "car" ? (
+                    <Roadster
+                      color={["#d9b746", "#547caa", "#9d5a40", "#c5c6bf"][obstacle.id % 4]}
+                      glass="#a9c5cb"
+                      flying={false}
+                      nitro={false}
+                      traffic
+                    />
+                  ) : <RoadCone />}
+                </Animated.View>
+            );
+          })}
+          <Animated.View style={[styles.playerPosition, { left: trackWidth / 2 - 30, top: playerY - 48, transform: [{ translateX: carOffset }] }]}>
+            <Roadster color={car.color} glass={car.glass} flying={flying} nitro={nitroActive} />
+          </Animated.View>
             {phase === "paused" || game.isGameOver ? (
               <View style={styles.overlay}>
                 <Text style={styles.resultEmoji}>{game.isGameOver ? "💥" : "⏸️"}</Text>
@@ -365,10 +425,8 @@ export default function NativeTeslaRoadsterRace({ onExit }: { onExit: () => void
 
           {phase === "playing" && !game.isGameOver ? (
             <View style={[styles.controls, { paddingBottom: bottomInset }]}>
-              {laneButton("Steer left", -1)}
               {abilityButton("NITRO", Zap, game.nitroFuel, 40, nitroActive, activateNitro)}
               {abilityButton("FLY", Play, game.thrusterFuel, 50, flying, activateThrusters)}
-              {laneButton("Steer right", 1)}
             </View>
           ) : <View style={[styles.controlSpacer, { height: bottomInset + 60 }]} />}
         </>
@@ -403,9 +461,8 @@ const styles = StyleSheet.create({
   carChoice: { flex: 1, minWidth: 0, minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, borderWidth: 1, borderRadius: 11 },
   carSwatch: { width: 13, height: 20, borderRadius: 6 },
   carName: { fontSize: 9, fontWeight: "800" },
-  toggleRow: { width: "100%", minHeight: 46, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 10, borderWidth: 1, borderRadius: 11 },
-  toggleText: { flex: 1, gap: 2 },
-  toggleTitle: { fontSize: 12, fontWeight: "800" },
+  tiltInstructions: { width: "100%", gap: 4, paddingHorizontal: 11, paddingVertical: 9, borderWidth: 1, borderRadius: 11 },
+  tiltTitle: { fontSize: 12, fontWeight: "800" },
   toggleHint: { fontSize: 9 },
   startButton: { minHeight: 46, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 9, paddingHorizontal: 22, borderRadius: 13 },
   startButtonText: { color: "#07121b", fontSize: 14, fontWeight: "900" },
@@ -418,24 +475,14 @@ const styles = StyleSheet.create({
   statLabel: { fontSize: 8, fontWeight: "900", letterSpacing: 0.5 },
   statValue: { fontSize: 11, fontWeight: "900" },
   trackFrame: { position: "relative", overflow: "hidden", flex: 1, backgroundColor: "#315d3b" },
-  scenery: { position: "absolute", zIndex: 1, fontSize: 25 },
-  roadItem: { position: "absolute", zIndex: 3, width: 36, height: 36, alignItems: "center", justifyContent: "center" },
-  playerPosition: { position: "absolute", zIndex: 4, width: 50, height: 76, alignItems: "center", justifyContent: "center" },
-  roadster: { width: 35, height: 68, alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: "rgba(255,255,255,0.8)", borderRadius: 15, elevation: 8, shadowColor: "#000000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.55, shadowRadius: 6 },
+  scenery: { position: "absolute", zIndex: 1 },
+  laneDash: { position: "absolute", zIndex: 2, width: 2, height: 22, borderRadius: 1, backgroundColor: "rgba(246,247,231,0.68)" },
+  roadItem: { position: "absolute", zIndex: 3, width: 50, height: 72, alignItems: "center", justifyContent: "center" },
+  playerPosition: { position: "absolute", zIndex: 4, width: 60, height: 98, alignItems: "center", justifyContent: "center" },
+  roadster: { width: 54, height: 94, alignItems: "center", justifyContent: "center", elevation: 8, shadowColor: "#000000", shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.62, shadowRadius: 6 },
+  trafficCar: { width: 39, height: 70, transform: [{ rotate: "180deg" }] },
   flyingCar: { transform: [{ translateY: -18 }, { scale: 1.08 }], elevation: 15, shadowColor: "#fbbf24", shadowOpacity: 0.9 },
   nitroCar: { shadowColor: "#38bdf8", shadowOpacity: 1, shadowRadius: 14 },
-  carWindshield: { position: "absolute", top: 10, width: 21, height: 13, borderRadius: 6, borderWidth: 1, borderColor: "rgba(6,25,35,0.5)" },
-  carRoof: { position: "absolute", top: 24, width: 25, height: 20, borderRadius: 7, borderWidth: 1, borderColor: "rgba(255,255,255,0.24)" },
-  carHood: { position: "absolute", top: 3, width: 19, height: 8, borderRadius: 5 },
-  carFrontLightLeft: { position: "absolute", top: 3, left: 4, width: 6, height: 3, borderRadius: 2, backgroundColor: "#fff8bd" },
-  carFrontLightRight: { position: "absolute", top: 3, right: 4, width: 6, height: 3, borderRadius: 2, backgroundColor: "#fff8bd" },
-  carWheelLeftFront: { position: "absolute", left: -3, top: 13, width: 4, height: 13, borderRadius: 2, backgroundColor: "#101418" },
-  carWheelRightFront: { position: "absolute", right: -3, top: 13, width: 4, height: 13, borderRadius: 2, backgroundColor: "#101418" },
-  carWheelLeftRear: { position: "absolute", left: -3, bottom: 12, width: 4, height: 13, borderRadius: 2, backgroundColor: "#101418" },
-  carWheelRightRear: { position: "absolute", right: -3, bottom: 12, width: 4, height: 13, borderRadius: 2, backgroundColor: "#101418" },
-  thrusterFlame: { position: "absolute", bottom: -19, alignItems: "center" },
-  flameEmoji: { fontSize: 17 },
-  nitroStreak: { position: "absolute", top: -34, width: 5, height: 24, borderRadius: 3, backgroundColor: "#38bdf8", opacity: 0.85 },
   cone: { width: 25, height: 30, alignItems: "center", justifyContent: "flex-end" },
   coneTop: { position: "absolute", top: 0, width: 0, height: 0, borderLeftWidth: 6, borderRightWidth: 6, borderBottomWidth: 17, borderLeftColor: "transparent", borderRightColor: "transparent", borderBottomColor: "#f97316" },
   coneStripe: { position: "absolute", top: 12, width: 11, height: 3, backgroundColor: "#fff7ed" },

@@ -8,6 +8,8 @@ import {
   View,
 } from "react-native";
 import NativeBlurBackdrop from "./NativeBlurBackdrop";
+import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
+import NativeGlassSurface, { NATIVE_LIQUID_GLASS_POPUP_SURFACE, NATIVE_LIQUID_GLASS_PRESSED } from "./NativeGlassSurface";
 
 type Props = {
   visible: boolean;
@@ -32,6 +34,9 @@ export default function NativeConfirmDialog({
   onCancel,
   onConfirm,
 }: Props) {
+  const { theme } = useNativeTheme();
+  const colors = NATIVE_THEME_COLORS[theme];
+  const isLiquidGlass = theme === "liquidGlass";
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -73,12 +78,28 @@ export default function NativeConfirmDialog({
           onPress={onCancel}
           style={StyleSheet.absoluteFill}
         />
-        <View accessibilityViewIsModal style={[styles.card, vibesPro && styles.vibesProCard]}>
-          <View style={[styles.emojiBubble, destructive && styles.destructiveBubble, vibesPro && styles.vibesProBubble]}>
+        <NativeGlassSurface
+          enabled={isLiquidGlass}
+          style={[
+            styles.card,
+            vibesPro && theme === "dark" && styles.vibesProCard,
+            theme !== "dark" && { borderColor: colors.border, backgroundColor: colors.surface, shadowColor: colors.accent },
+            isLiquidGlass && NATIVE_LIQUID_GLASS_POPUP_SURFACE,
+          ]}
+        >
+          <View accessibilityViewIsModal style={styles.cardContent}>
+          <View
+            style={[
+              styles.emojiBubble,
+              destructive && !isLiquidGlass && styles.destructiveBubble,
+              vibesPro && theme === "dark" && styles.vibesProBubble,
+              theme !== "dark" && { backgroundColor: colors.control },
+            ]}
+          >
             <Text style={styles.emoji}>{emoji}</Text>
           </View>
-          <Text style={[styles.title, vibesPro && styles.vibesProTitle]}>{title}</Text>
-          <Text style={[styles.message, vibesPro && styles.vibesProMessage]}>{message}</Text>
+          <Text style={[styles.title, vibesPro && styles.vibesProTitle, { color: colors.text }]}>{title}</Text>
+          <Text style={[styles.message, vibesPro && styles.vibesProMessage, { color: colors.muted }]}>{message}</Text>
           {error ? <Text style={[styles.error, vibesPro && styles.vibesProError]}>{error}</Text> : null}
           <View style={styles.actions}>
             <Pressable
@@ -88,10 +109,11 @@ export default function NativeConfirmDialog({
               style={({ pressed }) => [
                 styles.cancelButton,
                 vibesPro && styles.vibesProCancelButton,
-                pressed && styles.pressed,
+                theme !== "dark" && { borderColor: colors.border, backgroundColor: colors.raised },
+                pressed && (isLiquidGlass ? NATIVE_LIQUID_GLASS_PRESSED : styles.pressed),
               ]}
             >
-              <Text style={[styles.cancelText, vibesPro && styles.vibesProCancelText]}>Cancel</Text>
+              <Text style={[styles.cancelText, vibesPro && styles.vibesProCancelText, { color: colors.text }]}>Cancel</Text>
             </Pressable>
             <Pressable
               accessibilityRole="button"
@@ -100,20 +122,22 @@ export default function NativeConfirmDialog({
               style={({ pressed }) => [
                 styles.confirmButton,
                 destructive && !vibesPro && styles.destructiveButton,
-                vibesPro && styles.vibesProConfirmButton,
-                pressed && styles.pressed,
+                vibesPro && theme === "dark" && styles.vibesProConfirmButton,
+                theme !== "dark" && { backgroundColor: destructive && !isLiquidGlass ? "#e11d48" : colors.accent },
+                pressed && (isLiquidGlass ? NATIVE_LIQUID_GLASS_PRESSED : styles.pressed),
               ]}
             >
               {busy ? (
                 <ActivityIndicator color="#ffffff" size="small" />
               ) : (
-                <Text style={[styles.confirmText, vibesPro && styles.vibesProConfirmText]}>
+                <Text style={[styles.confirmText, vibesPro && theme === "dark" && styles.vibesProConfirmText, { color: theme !== "dark" ? colors.accentText : vibesPro ? "#0B0B0B" : "#ffffff" }]}>
                   {confirmLabel}
                 </Text>
               )}
             </Pressable>
           </View>
         </View>
+        </NativeGlassSurface>
       </View>
     </Modal>
   );
@@ -124,10 +148,6 @@ const styles = StyleSheet.create({
   card: {
     width: "100%",
     maxWidth: 360,
-    alignItems: "center",
-    paddingHorizontal: 24,
-    paddingTop: 22,
-    paddingBottom: 20,
     borderWidth: 1,
     borderColor: "#bae6fd",
     borderRadius: 28,
@@ -138,6 +158,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 12 },
     elevation: 12,
   },
+  cardContent: { alignItems: "center", paddingHorizontal: 24, paddingTop: 22, paddingBottom: 20 },
   vibesProCard: {
     borderColor: "rgba(212,175,55,0.55)",
     backgroundColor: "#111111",

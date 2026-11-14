@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   advanceRally,
   createRallyState,
+  getRallySteeringLane,
   getRallyScore,
   getRallyTickInterval,
   moveRallyCar,
+  steerRallyCar,
   RALLY_LANES,
   RALLY_PLAYER_ROW,
   type RallyState,
@@ -16,6 +18,19 @@ describe("Ridiculous Rally rules", () => {
     expect(moveRallyCar(state, -1).lane).toBe(0);
     expect(moveRallyCar(state, 1).lane).toBe(2);
     expect(moveRallyCar({ ...state, lane: RALLY_LANES - 1 }, 1).lane).toBe(RALLY_LANES - 1);
+  });
+
+  it("steers smoothly between lanes and clamps to the road", () => {
+    const state = createRallyState();
+    expect(steerRallyCar(state, 1.4).lane).toBe(1.4);
+    expect(steerRallyCar(state, -1).lane).toBe(0);
+    expect(steerRallyCar(state, 3).lane).toBe(2);
+  });
+
+  it("steers left for a positive rightward tilt and right for a negative leftward tilt", () => {
+    expect(getRallySteeringLane(0)).toBe(1);
+    expect(getRallySteeringLane(0.3)).toBe(0);
+    expect(getRallySteeringLane(-0.3)).toBe(2);
   });
 
   it("takes one life for a cone in the player's lane", () => {
@@ -40,6 +55,18 @@ describe("Ridiculous Rally rules", () => {
     expect(result.lives).toBe(3);
     expect(result.snacks).toBe(1);
     expect(getRallyScore(result)).toBe(115);
+  });
+
+  it("spawns traffic cars and checks collisions against the nearest lane", () => {
+    let state: RallyState = { ...createRallyState(), lane: 1.4 };
+    for (let tick = 0; tick < 4; tick += 1) state = advanceRally(state, () => 0.5);
+    expect(state.obstacles[0]).toMatchObject({ type: "car", lane: 1, row: 0 });
+
+    state = {
+      ...state,
+      obstacles: [{ id: 8, lane: 1, row: RALLY_PLAYER_ROW - 1, type: "car" }],
+    };
+    expect(advanceRally(state, () => 0.5).lives).toBe(2);
   });
 
   it("ends the run after the third collision and increases speed over distance", () => {

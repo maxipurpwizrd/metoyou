@@ -19,6 +19,7 @@ import { clearNativeSupabaseLocalSession, nativeAuthStorageKey, nativeSupabase }
 import {
   clearNativePushRegistrationForUser,
   registerNativePushTokenForCurrentUser,
+  setNativePushRegistrationIdentity,
   subscribeToNativePushTokenRefresh,
 } from "../lib/pushRegistration";
 
@@ -61,6 +62,9 @@ export function NativeAuthProvider({ children }: { children: ReactNode }) {
 
   const updateState = useCallback((next: NativeAuthSnapshot) => {
     stateRef.current = next;
+    setNativePushRegistrationIdentity(
+      next.status === "authenticated" ? next.session.user.id : null,
+    );
     setNativeProtectedRequestsAllowed(
       next.status === "authenticated",
       next.status === "offlineDeferred",
@@ -209,6 +213,7 @@ export function NativeAuthProvider({ children }: { children: ReactNode }) {
     const userId = stateRef.current.cacheUserId;
     const hadUsableSession = stateRef.current.status === "authenticated" && stateRef.current.session !== null;
     explicitLogout.current = true;
+    setNativePushRegistrationIdentity(null);
     try {
       await clearNativePushRegistrationForUser(userId ?? "");
       const { error } = await nativeSupabase.auth.signOut({ scope: "global" });
@@ -226,14 +231,20 @@ export function NativeAuthProvider({ children }: { children: ReactNode }) {
         return { remoteRevocationConfirmed: false };
       }
       throw error;
+    } catch (cause) {
+      if (stateRef.current.status === "authenticated" && stateRef.current.session.user.id === userId) {
+        setNativePushRegistrationIdentity(userId);
+      }
+      throw cause;
     } finally {
       explicitLogout.current = false;
     }
   }, [finishLocalSignOut]);
 
+  const authenticatedUserId = state.status === "authenticated" ? state.session.user.id : null;
   useEffect(() => {
-    if (state.status !== "authenticated") return;
-    const userId = state.session.user.id;
+    if (!authenticatedUserId) return;
+    const userId = authenticatedUserId;
     void registerNativePushTokenForCurrentUser(userId, "session");
     const tokenSubscription = subscribeToNativePushTokenRefresh(userId);
     const appStateSubscription = AppState.addEventListener("change", (nextState) => {
@@ -243,7 +254,7 @@ export function NativeAuthProvider({ children }: { children: ReactNode }) {
       tokenSubscription.remove();
       appStateSubscription.remove();
     };
-  }, [state]);
+  }, [authenticatedUserId]);
 
   useEffect(() => {
     let active = true;

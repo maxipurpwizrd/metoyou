@@ -1,5 +1,5 @@
 import { StyleSheet, View } from "react-native";
-import { useNativeTheme } from "../contexts/NativeThemeProvider";
+import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
 import NativeSkeleton from "./NativeSkeleton";
 
 export function NativeFeedPostSkeleton({
@@ -9,12 +9,11 @@ export function NativeFeedPostSkeleton({
   compact?: boolean;
   showMedia?: boolean;
 }) {
-  const { theme, isVibesPro } = useNativeTheme();
-  const surface = theme === "bluesky" ? "#0b2d5b" : isVibesPro ? "#101010" : "rgba(255,255,255,0.72)";
-  const border = theme === "bluesky" ? "#3478bd" : isVibesPro ? "#765c22" : "rgba(148,163,184,0.22)";
+  const { theme } = useNativeTheme();
+  const colors = NATIVE_THEME_COLORS[theme];
 
   return (
-    <View style={[styles.post, compact && styles.compactPost, { backgroundColor: surface, borderColor: border }]}>
+    <View style={[styles.post, compact && styles.compactPost, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       <View style={styles.authorRow}>
         <NativeSkeleton style={styles.avatar} />
         <View style={styles.authorText}>
@@ -36,9 +35,8 @@ export function NativeFeedPostSkeleton({
 }
 
 export default function NativeFeedSkeleton() {
-  const { theme, isVibesPro } = useNativeTheme();
-  const surface = theme === "bluesky" ? "#0b2d5b" : isVibesPro ? "#101010" : "rgba(255,255,255,0.72)";
-  const border = theme === "bluesky" ? "#3478bd" : isVibesPro ? "#765c22" : "rgba(148,163,184,0.22)";
+  const { theme } = useNativeTheme();
+  const colors = NATIVE_THEME_COLORS[theme];
 
   return (
     <View style={styles.container}>
@@ -47,7 +45,7 @@ export default function NativeFeedSkeleton() {
           <NativeSkeleton key={index} style={styles.story} />
         ))}
       </View>
-      <View style={[styles.composer, { backgroundColor: surface, borderColor: border }]}>
+      <View style={[styles.composer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <NativeSkeleton style={styles.composerAvatar} />
         <View style={styles.composerContent}>
           <NativeSkeleton style={styles.composerLine} />

@@ -5,7 +5,7 @@ import { Mic, MicOff, PhoneOff, RefreshCw, Volume2, VolumeX, Video, VideoOff } f
 import { RTCView, type MediaStream } from "react-native-webrtc";
 import { SafeAreaView } from "react-native-safe-area-context";
 import type { CallSession, CallType } from "../../types/call";
-import { useNativeTheme } from "../contexts/NativeThemeProvider";
+import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
 
 export type NativeIncomingCall = {
   conversationId: string;
@@ -62,7 +62,7 @@ export default function NativeCallOverlay({
   onToggleSpeaker,
 }: Props) {
   const { theme } = useNativeTheme();
-  const isBlueSky = theme === "bluesky";
+  const colors = NATIVE_THEME_COLORS[theme];
   const [duration, setDuration] = useState(0);
   const visible = Boolean(pendingInvitationStatus || incomingCall || session);
   const isIncoming = Boolean(!pendingInvitationStatus && incomingCall && !session);
@@ -70,6 +70,8 @@ export default function NativeCallOverlay({
   const callerName = incomingCall?.senderName ?? activeSession?.remoteUsername ?? "MeToYou user";
   const callType = incomingCall?.callType ?? activeSession?.callType ?? "audio";
   const remoteVideoActive = Boolean(remoteStream?.getVideoTracks().some((track) => track.enabled));
+  const overlayTextColor = callType === "video" && remoteVideoActive ? "#ffffff" : colors.text;
+  const overlayMutedColor = callType === "video" && remoteVideoActive ? "rgba(255,255,255,0.78)" : colors.muted;
 
   useEffect(() => {
     if (activeSession?.status !== "connected") {
@@ -88,14 +90,14 @@ export default function NativeCallOverlay({
       statusBarTranslucent
       visible={visible}
     >
-      <View style={[styles.root, isBlueSky && styles.blueSkyRoot]}>
+      <View style={[styles.root, { backgroundColor: colors.background[0] }]}>
         {callType === "video" && remoteVideoActive && remoteStream ? (
           <RTCView objectFit="cover" streamURL={remoteStream.toURL()} style={StyleSheet.absoluteFill} />
         ) : null}
         <LinearGradient
           colors={callType === "video" && remoteVideoActive
             ? ["rgba(2,6,23,0.38)", "rgba(2,6,23,0.12)", "rgba(2,6,23,0.82)"]
-            : isBlueSky ? ["#061a3a", "#0b3b78", "#125baa"] : ["#020617", "#082f49", "#020617"]}
+            : colors.background}
           locations={[0, 0.5, 1]}
           style={StyleSheet.absoluteFill}
         />
@@ -103,26 +105,26 @@ export default function NativeCallOverlay({
           <View style={styles.content}>
             {pendingInvitationStatus ? (
               <View style={styles.pendingContent}>
-                {pendingInvitationStatus !== "unknown" ? <ActivityIndicator color="#67e8f9" size="large" /> : null}
-                <Text accessibilityRole="header" style={styles.pendingTitle}>
+                {pendingInvitationStatus !== "unknown" ? <ActivityIndicator color={colors.accent} size="large" /> : null}
+                <Text accessibilityRole="header" style={[styles.pendingTitle, { color: colors.text }]}>
                   {pendingInvitationStatus === "retrying"
                     ? "Retrying invitation…"
                     : pendingInvitationStatus === "creating"
                       ? "Creating invitation…"
                       : "Invitation status unknown"}
                 </Text>
-                {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
-                <Text style={styles.pendingNote}>Pending retry state is in memory only and will not survive an app restart.</Text>
+                {error ? <Text accessibilityRole="alert" style={[styles.error, { color: colors.text }]}>{error}</Text> : null}
+                <Text style={[styles.pendingNote, { color: colors.muted }]}>Pending retry state is in memory only and will not survive an app restart.</Text>
                 <View style={styles.pendingActions}>
                   {pendingInvitationStatus === "unknown" ? (
                     <Pressable
                       accessibilityLabel="Retry same invitation request"
                       accessibilityRole="button"
                       onPress={onRetryPendingInvitation}
-                      style={[styles.pendingAction, styles.pendingRetry]}
+                      style={[styles.pendingAction, { backgroundColor: colors.accent }]}
                     >
-                      <RefreshCw color="#ffffff" size={19} />
-                      <Text style={styles.pendingActionLabel}>Retry same request</Text>
+                      <RefreshCw color={colors.accentText} size={19} />
+                      <Text style={[styles.pendingActionLabel, { color: colors.accentText }]}>Retry same request</Text>
                     </Pressable>
                   ) : null}
                   <Pressable
@@ -151,8 +153,8 @@ export default function NativeCallOverlay({
                 ) : null}
                 {callType === "video" && remoteVideoActive ? (
                   <View style={styles.videoCallDetails}>
-                    <Text style={styles.callType}>{isIncoming ? "INCOMING VIDEO CALL" : callerName}</Text>
-                    <Text style={styles.status}>
+                    <Text style={[styles.callType, { color: overlayMutedColor }]}>{isIncoming ? "INCOMING VIDEO CALL" : callerName}</Text>
+                    <Text style={[styles.status, { color: overlayTextColor }]}>
                       {isIncoming
                         ? callerName
                         : activeSession?.status === "connected"
@@ -162,12 +164,12 @@ export default function NativeCallOverlay({
                   </View>
                 ) : (
                   <View style={styles.callerBlock}>
-                    <View style={[styles.avatar, activeSession?.status === "connected" && styles.connectedAvatar]}>
-                      <Text style={styles.avatarText}>{callerName.slice(0, 1).toUpperCase()}</Text>
+                    <View style={[styles.avatar, { backgroundColor: colors.surface, borderColor: colors.accent }, activeSession?.status === "connected" && styles.connectedAvatar]}>
+                      <Text style={[styles.avatarText, { color: colors.text }]}>{callerName.slice(0, 1).toUpperCase()}</Text>
                     </View>
-                    <Text style={styles.callType}>{isIncoming ? "INCOMING CALL" : callType === "video" ? "VIDEO CALL" : "AUDIO CALL"}</Text>
-                    <Text style={styles.name}>{callerName}</Text>
-                    <Text style={styles.status}>
+                      <Text style={[styles.callType, { color: overlayMutedColor }]}>{isIncoming ? "INCOMING CALL" : callType === "video" ? "VIDEO CALL" : "AUDIO CALL"}</Text>
+                      <Text style={[styles.name, { color: overlayTextColor }]}>{callerName}</Text>
+                      <Text style={[styles.status, { color: overlayMutedColor }]}>
                       {isIncoming
                         ? `${callType === "video" ? "Video" : "Audio"} call`
                         : activeSession?.status === "connected"
@@ -176,7 +178,7 @@ export default function NativeCallOverlay({
                     </Text>
                   </View>
                 )}
-                {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
+                {error ? <Text accessibilityRole="alert" style={[styles.error, { color: colors.text }]}>{error}</Text> : null}
                 {isIncoming ? (
                   <View style={styles.incomingActions}>
                     <Pressable accessibilityLabel="Decline call" onPress={onDecline} style={[styles.callButton, styles.declineButton]}>
@@ -190,23 +192,23 @@ export default function NativeCallOverlay({
                   </View>
                 ) : (
                   <View style={styles.activeActions}>
-                    <Pressable accessibilityLabel={isMuted ? "Unmute microphone" : "Mute microphone"} onPress={onToggleMute} style={[styles.controlButton, isBlueSky && styles.blueSkyControl, isMuted && styles.selectedControl]}>
-                      {isMuted ? <MicOff color="#ffffff" size={23} /> : <Mic color="#ffffff" size={23} />}
-                      <Text style={styles.buttonLabel}>{isMuted ? "Unmute" : "Mute"}</Text>
+                    <Pressable accessibilityLabel={isMuted ? "Unmute microphone" : "Mute microphone"} onPress={onToggleMute} style={[styles.controlButton, { backgroundColor: colors.control, borderColor: colors.border }, isMuted && styles.selectedControl]}>
+                      {isMuted ? <MicOff color={colors.text} size={23} /> : <Mic color={colors.text} size={23} />}
+                      <Text style={[styles.buttonLabel, { color: colors.text }]}>{isMuted ? "Unmute" : "Mute"}</Text>
                     </Pressable>
-                    <Pressable accessibilityLabel={isSpeakerOn ? "Use earpiece" : "Use speaker"} onPress={onToggleSpeaker} style={[styles.controlButton, isBlueSky && styles.blueSkyControl, isSpeakerOn && styles.selectedControl]}>
-                      {isSpeakerOn ? <Volume2 color="#ffffff" size={23} /> : <VolumeX color="#ffffff" size={23} />}
-                      <Text style={styles.buttonLabel}>{isSpeakerOn ? "Speaker" : "Earpiece"}</Text>
+                    <Pressable accessibilityLabel={isSpeakerOn ? "Use earpiece" : "Use speaker"} onPress={onToggleSpeaker} style={[styles.controlButton, { backgroundColor: colors.control, borderColor: colors.border }, isSpeakerOn && styles.selectedControl]}>
+                      {isSpeakerOn ? <Volume2 color={colors.text} size={23} /> : <VolumeX color={colors.text} size={23} />}
+                      <Text style={[styles.buttonLabel, { color: colors.text }]}>{isSpeakerOn ? "Speaker" : "Earpiece"}</Text>
                     </Pressable>
                     {callType === "video" ? (
-                      <Pressable accessibilityLabel={isCameraOff ? "Turn camera on" : "Turn camera off"} onPress={onToggleCamera} style={[styles.controlButton, isBlueSky && styles.blueSkyControl, isCameraOff && styles.selectedControl]}>
-                        {isCameraOff ? <VideoOff color="#ffffff" size={23} /> : <Video color="#ffffff" size={23} />}
-                        <Text style={styles.buttonLabel}>{isCameraOff ? "Camera off" : "Camera"}</Text>
+                      <Pressable accessibilityLabel={isCameraOff ? "Turn camera on" : "Turn camera off"} onPress={onToggleCamera} style={[styles.controlButton, { backgroundColor: colors.control, borderColor: colors.border }, isCameraOff && styles.selectedControl]}>
+                        {isCameraOff ? <VideoOff color={colors.text} size={23} /> : <Video color={colors.text} size={23} />}
+                        <Text style={[styles.buttonLabel, { color: colors.text }]}>{isCameraOff ? "Camera off" : "Camera"}</Text>
                       </Pressable>
                     ) : null}
                     <Pressable accessibilityLabel="End call" onPress={onEnd} style={[styles.controlButton, styles.declineButton]}>
                       <PhoneOff color="#ffffff" size={23} />
-                      <Text style={styles.buttonLabel}>End</Text>
+                      <Text style={[styles.buttonLabel, { color: colors.text }]}>End</Text>
                     </Pressable>
                   </View>
                 )}
@@ -245,7 +247,7 @@ const styles = StyleSheet.create({
   incomingActions: { width: "100%", flexDirection: "row", justifyContent: "center", gap: 40, paddingBottom: 14 },
   activeActions: { width: "100%", flexDirection: "row", justifyContent: "center", flexWrap: "wrap", gap: 18 },
   callButton: { minWidth: 104, alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 20, paddingVertical: 14, borderRadius: 22 },
-  controlButton: { width: 72, minHeight: 78, alignItems: "center", justifyContent: "center", gap: 7, borderRadius: 22, backgroundColor: "rgba(255,255,255,0.13)" },
+  controlButton: { width: 72, minHeight: 78, alignItems: "center", justifyContent: "center", gap: 7, borderWidth: 1, borderRadius: 22 },
   blueSkyControl: { backgroundColor: "rgba(84,184,255,0.24)" },
   acceptButton: { backgroundColor: "#059669" },
   declineButton: { backgroundColor: "#e11d48" },

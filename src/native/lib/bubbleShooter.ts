@@ -34,6 +34,18 @@ function drawColor(level: number, random: () => number): BubbleColor {
   return BUBBLE_COLORS[index];
 }
 
+function getBoardColors(board: BubbleBoard): BubbleColor[] {
+  const present = new Set(board.flat().filter((bubble): bubble is BubbleColor => bubble !== null));
+  return BUBBLE_COLORS.filter((color) => present.has(color));
+}
+
+function drawBoardColor(board: BubbleBoard, level: number, random: () => number): BubbleColor {
+  const colors = getBoardColors(board);
+  if (colors.length === 0) return drawColor(level, random);
+  const index = Math.min(colors.length - 1, Math.max(0, Math.floor(random() * colors.length)));
+  return colors[index];
+}
+
 function emptyBoard(): BubbleBoard {
   return Array.from({ length: BUBBLE_ROWS }, () => Array<BubbleColor | null>(BUBBLE_COLUMNS).fill(null));
 }
@@ -70,8 +82,8 @@ export function createBubbleShooterState(level = 1, random: () => number = Math.
   }
   return {
     board,
-    currentColor: drawColor(normalizedLevel, random),
-    nextColor: drawColor(normalizedLevel, random),
+    currentColor: drawBoardColor(board, normalizedLevel, random),
+    nextColor: drawBoardColor(board, normalizedLevel, random),
     score: 0,
     shots: 0,
     level: normalizedLevel,
@@ -229,12 +241,16 @@ export function shootBubble(state: BubbleShooterState, angle: number, width: num
   const unsupported = removeUnsupportedBubbles(board);
   const isWon = board.every((boardRow) => boardRow.every((bubble) => bubble === null));
   const isGameOver = !isWon && board[BUBBLE_ROWS - 1].some((bubble) => bubble !== null);
+  const boardColors = getBoardColors(board);
+  const currentColor = boardColors.includes(state.nextColor)
+    ? state.nextColor
+    : drawBoardColor(board, state.level, random);
 
   return {
     ...state,
     board,
-    currentColor: state.nextColor,
-    nextColor: drawColor(state.level, random),
+    currentColor,
+    nextColor: drawBoardColor(board, state.level, random),
     score: state.score + matched * 10 + unsupported * 20,
     shots: state.shots + 1,
     isWon,

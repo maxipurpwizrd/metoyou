@@ -41,6 +41,30 @@ describe("Bubble Shooter rules", () => {
     expect(finalColors.size).toBe(6);
   });
 
+  it("keeps the shooter colors available on every level", () => {
+    let draw = 0;
+    const variedRandom = () => {
+      const value = (draw % 17) / 17;
+      draw += 1;
+      return value;
+    };
+
+    for (let level = 1; level <= 10; level += 1) {
+      const state = createBubbleShooterState(level, variedRandom);
+      const boardColors = new Set(state.board.flat().filter(Boolean));
+      expect(boardColors.has(state.currentColor)).toBe(true);
+      expect(boardColors.has(state.nextColor)).toBe(true);
+
+      const afterShot = shootBubble(state, 0, 170, 240, 10, variedRandom);
+      const remainingColors = new Set(afterShot.board.flat().filter(Boolean));
+      expect(afterShot.shots).toBe(1);
+      if (!afterShot.isWon) {
+        expect(remainingColors.has(afterShot.currentColor)).toBe(true);
+        expect(remainingColors.has(afterShot.nextColor)).toBe(true);
+      }
+    }
+  });
+
   it("uses staggered hex neighbors", () => {
     expect(getBubbleNeighbors(0, 3)).toEqual([[0, 2], [0, 4], [1, 2], [1, 3]]);
     expect(getBubbleNeighbors(1, 3)).toEqual([[1, 2], [1, 4], [0, 3], [0, 4], [2, 3], [2, 4]]);
@@ -63,6 +87,24 @@ describe("Bubble Shooter rules", () => {
     expect(result.score).toBeGreaterThanOrEqual(30);
     expect(result.board.flat().every((bubble) => bubble === null)).toBe(true);
     expect(result.isWon).toBe(true);
+  });
+
+  it("does not queue a color after its last bubbles are cleared", () => {
+    const board = Array.from({ length: BUBBLE_ROWS }, () => Array<BubbleColor | null>(BUBBLE_COLUMNS).fill(null));
+    board[0][0] = "#38bdf8";
+    board[0][3] = "#fb7185";
+    board[0][4] = "#fb7185";
+    const state: BubbleShooterState = {
+      ...createBubbleShooterState(2, fixedRandom),
+      board,
+      currentColor: "#fb7185",
+      nextColor: "#fb7185",
+    };
+    const result = shootBubble(state, 0, 200, 300, 12, fixedRandom);
+
+    expect(result.board.flat().filter(Boolean)).toEqual(["#38bdf8"]);
+    expect(result.currentColor).toBe("#38bdf8");
+    expect(result.nextColor).toBe("#38bdf8");
   });
 
   it("keeps shots offline and rotates the current bubble", () => {

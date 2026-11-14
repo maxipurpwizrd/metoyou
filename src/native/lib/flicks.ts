@@ -35,15 +35,55 @@ export async function fetchNativeFlicksPage(before?: string): Promise<NativeFlic
 
 export async function hydrateNativeFlickLikes(flicks: NativeFlick[], userId: string) {
   if (flicks.length === 0) return flicks;
-  const { data, error } = await nativeSupabase
-    .from("post_likes")
-    .select("post_id")
-    .eq("user_id", userId)
-    .in("post_id", flicks.map((flick) => flick.id));
-  if (error) throw error;
 
-  const likedIds = new Set((data ?? []).map((like) => like.post_id));
-  return flicks.map((flick) => ({ ...flick, liked: likedIds.has(flick.id) }));
+  const postIds = [...new Set(flicks.map((flick) => flick.id))];
+
+  const [likedResult, likeCountsResult, commentCountsResult] = await Promise.all([
+    nativeSupabase
+      .from("post_likes")
+      .select("post_id")
+      .eq("user_id", userId)
+      .in("post_id", postIds),
+    Promise.all(
+      postIds.map(async (postId) => {
+        const { count, error } = await nativeSupabase
+          .from("post_likes")
+          .select("id", { count: "exact", head: true })
+          .eq("post_id", postId);
+        if (error) {
+          console.warn("Could not refresh the Flick like count.", error);
+          return { postId, count: null as number | null };
+        }
+        return { postId, count: count ?? 0 };
+      }),
+    ),
+    Promise.all(
+      postIds.map(async (postId) => {
+        const { count, error } = await nativeSupabase
+          .from("comments")
+          .select("id", { count: "exact", head: true })
+          .eq("post_id", postId);
+        if (error) {
+          console.warn("Could not refresh the Flick comment count.", error);
+          return { postId, count: null as number | null };
+        }
+        return { postId, count: count ?? 0 };
+      }),
+    ),
+  ]);
+
+  if (likedResult.error) throw likedResult.error;
+
+  const likedIds = new Set((likedResult.data ?? []).map((like) => like.post_id));
+  const likeCounts = new Map((likeCountsResult as Array<{ postId: string; count: number | null }>).map((entry) => [entry.postId, entry.count ?? 0]));
+  const commentCounts = new Map((commentCountsResult as Array<{ postId: string; count: number | null }>).map((entry) => [entry.postId, entry.count ?? 0]));
+
+  return flicks.map((flick) => ({
+    ...flick,
+    liked: likedIds.has(flick.id),
+    likes_count: likeCounts.get(flick.id) ?? flick.likes_count,
+    comments_count: commentCounts.get(flick.id) ?? flick.comments_count,
+  }));
 }
 
 export async function fetchNativeFlickById(postId: string): Promise<NativeFlick | null> {

@@ -24,6 +24,7 @@ export default function NativeBlockedUsersScreen() {
   const { session } = useNativeAuth();
   const { theme } = useNativeTheme();
   const isBlueSky = theme === "bluesky";
+  const colors = NATIVE_THEME_COLORS[theme];
   const [users, setUsers] = useState<BlockedUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -72,17 +73,17 @@ export default function NativeBlockedUsersScreen() {
   return (
     <LinearGradient colors={NATIVE_THEME_COLORS[theme].background} style={styles.root}>
       <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
-        <View style={[styles.header, isBlueSky && styles.blueSkyHeader]}>
+        <View style={[styles.header, isBlueSky && styles.blueSkyHeader, { borderBottomColor: colors.border, backgroundColor: colors.surface }]}>
           <Pressable
             accessibilityLabel="Go back"
             onPress={() => router.replace("/(app)/settings")}
-            style={[styles.backButton, isBlueSky && styles.blueSkyControl]}
+            style={[styles.backButton, isBlueSky && styles.blueSkyControl, { borderColor: colors.border, backgroundColor: colors.control }]}
           >
-            <Text style={[styles.backText, isBlueSky && styles.blueSkyText]}>‹</Text>
+            <Text style={[styles.backText, isBlueSky && styles.blueSkyText, { color: colors.text }]}>‹</Text>
           </Pressable>
           <View style={styles.headerCopy}>
-            <Text style={[styles.overline, isBlueSky && styles.blueSkyMuted]}>PRIVACY</Text>
-            <Text style={[styles.title, isBlueSky && styles.blueSkyText]}>Blocked users</Text>
+            <Text style={[styles.overline, isBlueSky && styles.blueSkyMuted, { color: colors.muted }]}>PRIVACY</Text>
+            <Text style={[styles.title, isBlueSky && styles.blueSkyText, { color: colors.text }]}>Blocked users</Text>
           </View>
           <View style={styles.spacer} />
         </View>
@@ -90,46 +91,46 @@ export default function NativeBlockedUsersScreen() {
           <NativePeopleRowsSkeleton blocked count={5} />
         ) : error && users.length === 0 ? (
           <View style={styles.center}>
-            <Text style={[styles.errorText, isBlueSky && styles.blueSkyText]}>{error}</Text>
-            <Pressable onPress={() => void loadUsers()} style={styles.retryButton}>
+            <Text style={[styles.errorText, isBlueSky && styles.blueSkyText, { color: colors.text }]}>{error}</Text>
+            <Pressable onPress={() => void loadUsers()} style={[styles.retryButton, { backgroundColor: colors.accent }]}>
               <Text style={styles.retryText}>Try again</Text>
             </Pressable>
           </View>
         ) : users.length === 0 ? (
           <View style={styles.center}>
             <Text style={styles.emptyIcon}>⊘</Text>
-            <Text style={[styles.emptyTitle, isBlueSky && styles.blueSkyText]}>No blocked users</Text>
-            <Text style={[styles.emptyText, isBlueSky && styles.blueSkyMuted]}>Accounts you block will appear here.</Text>
+            <Text style={[styles.emptyTitle, isBlueSky && styles.blueSkyText, { color: colors.text }]}>No blocked users</Text>
+            <Text style={[styles.emptyText, isBlueSky && styles.blueSkyMuted, { color: colors.muted }]}>Accounts you block will appear here.</Text>
           </View>
         ) : (
           <ScrollView contentContainerStyle={styles.content}>
             {error ? (
               <Pressable accessibilityRole="button" onPress={() => void loadUsers()}>
-                <Text style={[styles.errorText, isBlueSky && styles.blueSkyText]}>{error} · Tap to retry</Text>
+                <Text style={[styles.errorText, isBlueSky && styles.blueSkyText, { color: colors.text }]}>{error} · Tap to retry</Text>
               </Pressable>
             ) : null}
             {users.map((user) => (
-              <View key={user.id} style={[styles.userRow, isBlueSky && styles.blueSkyCard]}>
+              <View key={user.id} style={[styles.userRow, isBlueSky && styles.blueSkyCard, { borderColor: colors.border, backgroundColor: colors.surface }]}>
                 {user.profile_pic ? (
                   <Image source={{ uri: user.profile_pic }} style={styles.avatar} />
                 ) : (
-                  <View style={styles.avatarFallback}>
-                    <Text style={[styles.avatarText, isBlueSky && styles.blueSkyText]}>{user.username.slice(0, 1).toUpperCase()}</Text>
+                  <View style={[styles.avatarFallback, { backgroundColor: colors.control }]}>
+                    <Text style={[styles.avatarText, isBlueSky && styles.blueSkyText, { color: colors.text }]}>{user.username.slice(0, 1).toUpperCase()}</Text>
                   </View>
                 )}
                 <View style={styles.userDetails}>
-                  <Text numberOfLines={1} style={[styles.username, isBlueSky && styles.blueSkyText]}>{user.username}</Text>
-                  <Text style={[styles.blockedHint, isBlueSky && styles.blueSkyMuted]}>Blocked account</Text>
+                  <Text numberOfLines={1} style={[styles.username, isBlueSky && styles.blueSkyText, { color: colors.text }]}>{user.username}</Text>
+                  <Text style={[styles.blockedHint, isBlueSky && styles.blueSkyMuted, { color: colors.muted }]}>Blocked account</Text>
                 </View>
                 <Pressable
                   accessibilityRole="button"
                   disabled={busyUserId !== null}
                   onPress={() => void unblock(user.id)}
-                  style={[styles.unblockButton, busyUserId !== null && styles.disabled]}
+                  style={[styles.unblockButton, { borderColor: colors.border, backgroundColor: colors.control }, busyUserId !== null && styles.disabled]}
                 >
                   {busyUserId === user.id
-                    ? <ActivityIndicator color="#0369a1" size="small" />
-                    : <Text style={styles.unblockText}>Unblock</Text>}
+                    ? <ActivityIndicator color={colors.accent} size="small" />
+                    : <Text style={[styles.unblockText, { color: colors.text }]}>Unblock</Text>}
                 </Pressable>
               </View>
             ))}

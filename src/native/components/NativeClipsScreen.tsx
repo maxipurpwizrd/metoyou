@@ -40,6 +40,7 @@ import NativeBlurBackdrop, { NativeBlurTargetContext, type NativeBlurTargetRef }
 import NativeClipCard from "./NativeClipCard";
 import NativeCommentsSheet from "./NativeCommentsSheet";
 import NativeConfirmDialog from "./NativeConfirmDialog";
+import NativeSurfaceShareButton from "./NativeSurfaceShareButton";
 import { NativeVerticalMediaSkeleton } from "./NativeScreenSkeletons";
 import NativeSurfaceDock, { NATIVE_SURFACE_DOCK_HEIGHT, useNativeSurfaceDockVisibility } from "./NativeSurfaceDock";
 
@@ -59,7 +60,8 @@ export default function NativeClipsScreen() {
   const { session } = useNativeAuth();
   const { entitlement, refresh: refreshEntitlement } = useNativeEntitlement();
   const music = useNativeMusic();
-  const { theme, setTheme } = useNativeTheme();
+  const { theme } = useNativeTheme();
+  const colors = NATIVE_THEME_COLORS[theme];
   const darkTheme = theme === "dark";
   const userId = session?.user.id;
   const params = useLocalSearchParams<{ postId?: string | string[]; showComments?: string | string[] }>();
@@ -94,6 +96,7 @@ export default function NativeClipsScreen() {
   const [reportBusy, setReportBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [blockedAuthorIds, setBlockedAuthorIds] = useState<Set<string>>(() => new Set());
+  const [shareFlowOpen, setShareFlowOpen] = useState(false);
   const { visible: dockVisible, onScroll: handleDockScroll } = useNativeSurfaceDockVisibility();
 
   const loadFirstPage = useCallback(async (refresh = false) => {
@@ -321,8 +324,8 @@ export default function NativeClipsScreen() {
         <BlurTargetView ref={blurTargetRef} style={styles.safeArea}>
         {entitlement.status === "loading" || entitlement.status === "unknown" ? (
           <View style={styles.center}>
-            <ActivityIndicator color="#0284c7" size="large" />
-            <Text style={styles.statusText}>Checking your VibesPro access…</Text>
+            <ActivityIndicator color={colors.accent} size="large" />
+            <Text style={[styles.statusText, { color: colors.muted }]}>Checking your VibesPro access…</Text>
           </View>
         ) : entitlement.status === "error" ? (
           <View style={styles.center}>
@@ -360,16 +363,16 @@ export default function NativeClipsScreen() {
               pagingEnabled
               refreshControl={requestedPostId ? undefined : (
                 <RefreshControl
-                  colors={["#0284c7"]}
+                  colors={[colors.accent]}
                   onRefresh={() => void loadFirstPage(true)}
                   refreshing={refreshing}
-                  tintColor="#0284c7"
+                  tintColor={colors.accent}
                 />
               )}
               ref={listRef}
               renderItem={({ item }) => (
                 <NativeClipCard
-                  active={isFocused && activeClipId === item.id}
+                  active={isFocused && !shareFlowOpen && activeClipId === item.id}
                   clip={item}
                   height={pageHeight}
                   onActions={() => {
@@ -437,11 +440,13 @@ export default function NativeClipsScreen() {
               </Pressable>
               <View style={styles.heading}>
                 <Text style={styles.kicker}>VIBESPRO</Text>
-                <Text style={[styles.title, darkTheme && styles.darkTitle]}>Clips</Text>
+                <Text style={[styles.title, darkTheme && styles.darkTitle, { color: colors.text }]}>Clips</Text>
               </View>
-              <Pressable accessibilityLabel="Toggle app theme" onPress={() => void setTheme(darkTheme ? "bluesky" : "dark")} style={styles.headerButton}>
-                <Text style={styles.headerButtonText}>{darkTheme ? "☀" : "☾"}</Text>
-              </Pressable>
+              <NativeSurfaceShareButton
+                onOpenChange={setShareFlowOpen}
+                onPublished={() => void loadFirstPage(true)}
+                surface="clips"
+              />
             </View>
 
             {loadingMore ? (

@@ -16,6 +16,7 @@ import * as ImagePicker from "expo-image-picker";
 import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import { LinearGradient } from "expo-linear-gradient";
 import NativeBlurBackdrop from "./NativeBlurBackdrop";
+import NativeGlassSurface, { NATIVE_LIQUID_GLASS_PRESSED } from "./NativeGlassSurface";
 import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
 
 export type NativeSelectedImage = {
@@ -35,7 +36,9 @@ export default function NativeCreatePost({
   onPublish: (text: string, image?: NativeSelectedImage) => Promise<void>;
 }) {
   const { theme } = useNativeTheme();
+  const colors = NATIVE_THEME_COLORS[theme];
   const isBlueSky = theme === "bluesky";
+  const isLiquidGlass = theme === "liquidGlass";
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [image, setImage] = useState<NativeSelectedImage | null>(null);
@@ -125,21 +128,25 @@ export default function NativeCreatePost({
           setError(null);
           setOpen(true);
         }}
-        style={({ pressed }) => [pressed && styles.pressed]}
+        style={({ pressed }) => [
+          pressed && (isLiquidGlass ? NATIVE_LIQUID_GLASS_PRESSED : styles.pressed),
+        ]}
       >
-        <LinearGradient
-          colors={isBlueSky ? NATIVE_THEME_COLORS.bluesky.background : isVibesPro ? ["#181818", "#101010"] : ["#ffffff", "#effaff"]}
-          end={{ x: 1, y: 1 }}
-          start={{ x: 0, y: 0 }}
-          style={[styles.collapsed, isVibesPro && styles.vibesProCollapsed, isBlueSky && styles.blueSkyCollapsed]}
+        <NativeGlassSurface
+          enabled={isLiquidGlass}
+          blurEnabled={Platform.OS !== "android"}
+          gradientColors={isLiquidGlass
+            ? ["rgba(235,240,242,0.22)", "rgba(30,32,34,0.3)", "rgba(235,240,242,0.18)"]
+            : colors.background}
+          style={[styles.collapsed, isVibesPro && theme === "dark" && styles.vibesProCollapsed, isBlueSky && styles.blueSkyCollapsed, { borderColor: colors.border, backgroundColor: isLiquidGlass ? "transparent" : undefined }]}
         >
-          <View style={[styles.avatar, isVibesPro && styles.vibesProAvatar, isBlueSky && styles.blueSkyAvatar]}>
-            <Text style={styles.avatarText}>{authorName.slice(0, 1).toUpperCase()}</Text>
+          <View style={[styles.avatar, isVibesPro && styles.vibesProAvatar, isBlueSky && styles.blueSkyAvatar, { backgroundColor: colors.control, borderColor: colors.border }]}>
+            <Text style={[styles.avatarText, { color: colors.text }]}>{authorName.slice(0, 1).toUpperCase()}</Text>
           </View>
-          <Text style={[styles.placeholder, isVibesPro && styles.vibesProPlaceholder, isBlueSky && styles.blueSkyPlaceholder]}>
+          <Text style={[styles.placeholder, isVibesPro && styles.vibesProPlaceholder, isBlueSky && styles.blueSkyPlaceholder, { color: colors.muted }]}>
             Drop your vibe 💬
           </Text>
-        </LinearGradient>
+        </NativeGlassSurface>
       </Pressable>
 
       <Modal
@@ -161,14 +168,16 @@ export default function NativeCreatePost({
             onPress={() => setOpen(false)}
             style={styles.backdrop}
           />
-          <LinearGradient
-            colors={isBlueSky ? NATIVE_THEME_COLORS.bluesky.background : isVibesPro ? ["#181818", "#101010"] : ["#f0f9ff", "#ffffff"]}
-            end={{ x: 1, y: 1 }}
-            start={{ x: 0, y: 0 }}
-            style={[styles.composer, isVibesPro && styles.vibesProComposer, isBlueSky && styles.blueSkyComposer]}
+          <NativeGlassSurface
+            enabled={isLiquidGlass}
+            blurEnabled={Platform.OS !== "android"}
+            gradientColors={isLiquidGlass
+              ? ["rgba(235,240,242,0.28)", "rgba(30,32,34,0.4)", "rgba(235,240,242,0.24)"]
+              : colors.background}
+            style={[styles.composer, isVibesPro && theme === "dark" && styles.vibesProComposer, isBlueSky && styles.blueSkyComposer, { borderColor: colors.border, backgroundColor: isLiquidGlass ? "transparent" : undefined }]}
           >
             <View style={styles.titleRow}>
-              <Text style={[styles.title, (isVibesPro || isBlueSky) && styles.vibesProText]}>Create Post</Text>
+              <Text style={[styles.title, (isVibesPro || isBlueSky) && styles.vibesProText, { color: colors.text }]}>Create Post</Text>
               <Pressable
                 accessibilityLabel="Close composer"
                 accessibilityRole="button"
@@ -185,8 +194,8 @@ export default function NativeCreatePost({
                 <Text style={styles.avatarText}>{authorName.slice(0, 1).toUpperCase()}</Text>
               </View>
               <View>
-                <Text style={[styles.authorName, (isVibesPro || isBlueSky) && styles.vibesProText]}>{authorName}</Text>
-                <Text style={[styles.authorSubtext, (isVibesPro || isBlueSky) && styles.vibesProMutedText]}>
+                <Text style={[styles.authorName, (isVibesPro || isBlueSky) && styles.vibesProText, isLiquidGlass && { color: colors.text }]}>{authorName}</Text>
+                <Text style={[styles.authorSubtext, (isVibesPro || isBlueSky) && styles.vibesProMutedText, isLiquidGlass && { color: colors.muted }]}>
                   Posting to your feed
                 </Text>
               </View>
@@ -220,9 +229,14 @@ export default function NativeCreatePost({
                   setError(null);
                 }}
                 placeholder="Drop your vibe 💬"
-                placeholderTextColor={isVibesPro || isBlueSky ? "#dbeafe" : "#64748b"}
+                placeholderTextColor={isLiquidGlass ? colors.muted : isVibesPro || isBlueSky ? "#dbeafe" : "#64748b"}
                 textAlignVertical="top"
-                style={[styles.textInput, isVibesPro && styles.vibesProTextInput, isBlueSky && styles.blueSkyTextInput]}
+                style={[
+                  styles.textInput,
+                  isVibesPro && styles.vibesProTextInput,
+                  isBlueSky && styles.blueSkyTextInput,
+                  isLiquidGlass && { borderColor: colors.border, color: colors.text, backgroundColor: colors.control },
+                ]}
                 value={text}
               />
             </ScrollView>
@@ -243,7 +257,8 @@ export default function NativeCreatePost({
                   styles.mediaButton,
                   isVibesPro && styles.vibesProActionButton,
                   isBlueSky && styles.blueSkyActionButton,
-                  pressed && styles.pressed,
+                  isLiquidGlass && { backgroundColor: colors.control, borderColor: colors.border },
+                  pressed && (isLiquidGlass ? NATIVE_LIQUID_GLASS_PRESSED : styles.pressed),
                 ]}
               >
                 <Text style={styles.mediaIcon}>📸</Text>
@@ -257,10 +272,15 @@ export default function NativeCreatePost({
                     styles.cancelButton,
                     isVibesPro && styles.vibesProActionButton,
                     isBlueSky && styles.blueSkyActionButton,
-                    pressed && styles.pressed,
+                    isLiquidGlass && { backgroundColor: colors.control, borderColor: colors.border },
+                    pressed && (isLiquidGlass ? NATIVE_LIQUID_GLASS_PRESSED : styles.pressed),
                   ]}
                 >
-                  <Text style={[styles.cancelText, (isVibesPro || isBlueSky) && styles.vibesProMutedText]}>Cancel</Text>
+                  <Text style={[
+                    styles.cancelText,
+                    (isVibesPro || isBlueSky) && styles.vibesProMutedText,
+                    isLiquidGlass && { color: colors.text },
+                  ]}>Cancel</Text>
                 </Pressable>
                 <Pressable
                   accessibilityRole="button"
@@ -270,19 +290,20 @@ export default function NativeCreatePost({
                     styles.publishButton,
                     isVibesPro && styles.vibesProPublishButton,
                     isBlueSky && styles.blueSkyPublishButton,
-                    pressed && styles.pressed,
+                    isLiquidGlass && { backgroundColor: colors.accent },
+                    pressed && (isLiquidGlass ? NATIVE_LIQUID_GLASS_PRESSED : styles.pressed),
                     (busy || (!text.trim() && !image)) && styles.disabled,
                   ]}
                 >
                   {busy ? (
                     <ActivityIndicator color="#ffffff" />
                   ) : (
-                    <Text style={styles.publishText}>Post it 🔥</Text>
+                    <Text style={[styles.publishText, isLiquidGlass && { color: colors.accentText }]}>Post it 🔥</Text>
                   )}
                 </Pressable>
               </View>
             </View>
-          </LinearGradient>
+          </NativeGlassSurface>
         </KeyboardAvoidingView>
       </Modal>
     </>
@@ -295,8 +316,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     marginHorizontal: 12,
-    marginTop: 14,
-    marginBottom: 18,
+    marginTop: 0,
+    marginBottom: 8,
     padding: 16,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.6)",

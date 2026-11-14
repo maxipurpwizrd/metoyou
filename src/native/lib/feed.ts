@@ -8,7 +8,7 @@ export type NativeFeedCursor = {
   id: string;
 };
 
-async function hydrateNativePostLikeCounts(posts: PostRecord[]) {
+export async function hydrateNativePostLikeCounts(posts: PostRecord[]) {
   return Promise.all(posts.map(async (post) => {
     const { count, error } = await nativeSupabase
       .from("post_likes")

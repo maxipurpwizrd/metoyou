@@ -49,13 +49,16 @@ import {
   updateNativePostText,
 } from "../lib/posts";
 import NativeCreatePost, { type NativeSelectedImage } from "./NativeCreatePost";
-import NativeFeedHeader from "./NativeFeedHeader";
-import NativePostCard from "./NativePostCard";
+import NativeFeedHeader, { type NativeFeedStyle } from "./NativeFeedHeader";
+import NativePostCard, { type NativePostcardTheme } from "./NativePostCard";
 import NativeFeedSkeleton, { NativeFeedPostSkeleton } from "./NativeFeedSkeleton";
 import NativeSurfaceDock, { useNativeSurfaceDockVisibility } from "./NativeSurfaceDock";
 import NativeStories from "./NativeStories";
 
 const MINIMUM_PAGINATION_SKELETON_MS = 250;
+const VIBES_PRO_FEED_STYLE_KEY_PREFIX = "metoyou-native-vibespro-feed-style:";
+const VIBES_PRO_PHOTO_MODE_KEY_PREFIX = "metoyou-native-vibespro-photo-mode:";
+const VIBES_PRO_POSTCARD_THEME_KEY_PREFIX = "metoyou-native-vibespro-postcard-theme:";
 
 export default function NativeFeedScreen() {
   const blurTargetRef = useRef<NativeBlurTargetRef>(null);
@@ -66,8 +69,33 @@ export default function NativeFeedScreen() {
   const { session, cacheUserId, status } = useNativeAuth();
   const { theme, isVibesPro } = useNativeTheme();
   const isBlueSky = theme === "bluesky";
+  const themeColors = NATIVE_THEME_COLORS[theme];
   const userId = session?.user.id;
   const cacheOwnerId = cacheUserId;
+  const [vibesProFeedStylePreference, setVibesProFeedStylePreference] = useState<{
+    ownerId: string;
+    style: NativeFeedStyle;
+  } | null>(null);
+  const vibesProFeedStyle =
+    vibesProFeedStylePreference?.ownerId === cacheOwnerId
+      ? vibesProFeedStylePreference.style
+      : "default";
+  const [vibesProPhotoPreference, setVibesProPhotoPreference] = useState<{
+    ownerId: string;
+    enabled: boolean;
+  } | null>(null);
+  const vibesProPhotoMode =
+    Boolean(cacheOwnerId) &&
+    vibesProPhotoPreference?.ownerId === cacheOwnerId &&
+    vibesProPhotoPreference.enabled;
+  const [vibesProPostcardThemePreference, setVibesProPostcardThemePreference] = useState<{
+    ownerId: string;
+    theme: NativePostcardTheme | null;
+  } | null>(null);
+  const vibesProPostcardTheme =
+    vibesProPostcardThemePreference?.ownerId === cacheOwnerId
+      ? vibesProPostcardThemePreference.theme
+      : null;
   const username =
     typeof session?.user.user_metadata.username === "string"
       ? session.user.user_metadata.username
@@ -87,6 +115,112 @@ export default function NativeFeedScreen() {
   const loadingMoreRef = useRef(false);
   const listRef = useRef<FlatList<PostRecord>>(null);
   const queryClient = useQueryClient();
+  useEffect(() => {
+    let active = true;
+    if (!cacheOwnerId || !isVibesPro) return () => {
+      active = false;
+    };
+
+    void AsyncStorage.getItem(`${VIBES_PRO_FEED_STYLE_KEY_PREFIX}${cacheOwnerId}`)
+      .then((value) => {
+        if (active) {
+          setVibesProFeedStylePreference({
+            ownerId: cacheOwnerId,
+            style: value === "classic" ? "classic" : "default",
+          });
+        }
+      })
+      .catch((cause: unknown) => {
+        if (active) {
+          Alert.alert(
+            "Could not load Feed style",
+            cause instanceof Error ? cause.message : "The saved style could not be restored.",
+          );
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [cacheOwnerId, isVibesPro]);
+  useEffect(() => {
+    let active = true;
+    if (!cacheOwnerId || !isVibesPro) return () => {
+      active = false;
+    };
+
+    void AsyncStorage.getItem(`${VIBES_PRO_PHOTO_MODE_KEY_PREFIX}${cacheOwnerId}`)
+      .then((value) => {
+        if (active) {
+          setVibesProPhotoPreference({ ownerId: cacheOwnerId, enabled: value === "photo" });
+        }
+      })
+      .catch((cause: unknown) => {
+        if (active) {
+          Alert.alert(
+            "Could not load Feed style",
+            cause instanceof Error ? cause.message : "The saved style could not be restored.",
+          );
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [cacheOwnerId, isVibesPro]);
+  useEffect(() => {
+    let active = true;
+    if (!cacheOwnerId || !isVibesPro) return () => {
+      active = false;
+    };
+
+    void AsyncStorage.getItem(`${VIBES_PRO_POSTCARD_THEME_KEY_PREFIX}${cacheOwnerId}`)
+      .then((value) => {
+        const theme: NativePostcardTheme | null =
+          value === "bluesky" ||
+          value === "white" ||
+          value === "black" ||
+          value === "pink" ||
+          value === "purple" ||
+          value === "red" ||
+          value === "rainbow"
+            ? value
+            : null;
+        if (active) setVibesProPostcardThemePreference({ ownerId: cacheOwnerId, theme });
+      })
+      .catch((cause: unknown) => {
+        if (active) {
+          Alert.alert(
+            "Could not load Postcard theme",
+            cause instanceof Error ? cause.message : "The saved theme could not be restored.",
+          );
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [cacheOwnerId, isVibesPro]);
+  const saveVibesProFeedStyle = useCallback(async (style: NativeFeedStyle) => {
+    if (!cacheOwnerId) throw new Error("Sign in before changing the Feed style.");
+    await AsyncStorage.setItem(`${VIBES_PRO_FEED_STYLE_KEY_PREFIX}${cacheOwnerId}`, style);
+    setVibesProFeedStylePreference({ ownerId: cacheOwnerId, style });
+  }, [cacheOwnerId]);
+  const saveVibesProPhotoMode = useCallback(async (enabled: boolean) => {
+    if (!cacheOwnerId) throw new Error("Sign in before changing the Feed style.");
+    await AsyncStorage.setItem(
+      `${VIBES_PRO_PHOTO_MODE_KEY_PREFIX}${cacheOwnerId}`,
+      enabled ? "photo" : "default",
+    );
+    setVibesProPhotoPreference({ ownerId: cacheOwnerId, enabled });
+  }, [cacheOwnerId]);
+  const saveVibesProPostcardTheme = useCallback(async (theme: NativePostcardTheme | null) => {
+    if (!cacheOwnerId) throw new Error("Sign in before changing the Postcard theme.");
+    const key = `${VIBES_PRO_POSTCARD_THEME_KEY_PREFIX}${cacheOwnerId}`;
+    if (theme === null) await AsyncStorage.removeItem(key);
+    else await AsyncStorage.setItem(key, theme);
+    setVibesProPostcardThemePreference({ ownerId: cacheOwnerId, theme });
+  }, [cacheOwnerId]);
   const feedQueryKey = nativeFeedQueryKey(cacheOwnerId ?? "");
   const feedQuery = useInfiniteQuery({
     queryKey: feedQueryKey,
@@ -356,6 +490,10 @@ export default function NativeFeedScreen() {
         return result;
       }}
       initialCommentsOpen={requestedPostId === item.id && requestedShowComments}
+      onOpen={() => setFocusedPostId(item.id)}
+      classicMode={isVibesPro && vibesProFeedStyle === "classic"}
+      photoMode={isVibesPro && vibesProPhotoMode}
+      postcardTheme={isVibesPro ? vibesProPostcardTheme : null}
       post={item}
     />
   );
@@ -367,7 +505,7 @@ export default function NativeFeedScreen() {
     if (requestedPostId && initialLoading) {
       return (
         <View style={styles.emptyState}>
-          <ActivityIndicator color={isVibesPro ? "#7C5CFF" : "#0284c7"} size="large" />
+          <ActivityIndicator color={themeColors.accent} size="large" />
           <Text style={[styles.stateTitle, isVibesPro && styles.vibesProStateTitle, isBlueSky && styles.blueSkyText]}>
             Loading post
           </Text>
@@ -386,11 +524,12 @@ export default function NativeFeedScreen() {
             onPress={() => void (requestedPostId ? focusedPostQuery.refetch() : loadFirstPage())}
             style={({ pressed }) => [
               styles.retryButton,
-              (isVibesPro || isBlueSky) && styles.vibesProRetryButton,
+              (isVibesPro || isBlueSky) && theme !== "liquidGlass" && styles.vibesProRetryButton,
+              theme === "liquidGlass" && { backgroundColor: themeColors.accent },
               pressed && styles.pressed,
             ]}
           >
-            <Text style={styles.retryText}>Try again</Text>
+            <Text style={[styles.retryText, theme === "liquidGlass" && { color: themeColors.accentText }]}>Try again</Text>
           </Pressable>
         </View>
       );
@@ -409,7 +548,7 @@ export default function NativeFeedScreen() {
 
   return (
     <LinearGradient
-      colors={isBlueSky ? NATIVE_THEME_COLORS.bluesky.background : isVibesPro ? NATIVE_THEME_COLORS.dark.background : ["#d9f3ff", "#eefaff", "#ffffff"]}
+      colors={themeColors.background}
       end={{ x: 1, y: 1 }}
       start={{ x: 0, y: 0 }}
       style={styles.safeArea}
@@ -417,11 +556,27 @@ export default function NativeFeedScreen() {
       <SafeAreaView edges={["top"]} style={styles.safeArea}>
         <NativeBlurTargetContext.Provider value={blurTargetRef}>
           <BlurTargetView ref={blurTargetRef} style={styles.safeArea}>
-            <NativeFeedHeader isVibesPro={isVibesPro} onFeedPress={shareFeed} />
+            <NativeFeedHeader
+              feedStyle={vibesProFeedStyle}
+              isVibesPro={isVibesPro}
+              onFeedPress={shareFeed}
+              onFeedStyleChange={saveVibesProFeedStyle}
+              onPhotoModeChange={saveVibesProPhotoMode}
+              onPostcardThemeChange={saveVibesProPostcardTheme}
+              postcardTheme={vibesProPostcardTheme}
+              photoMode={vibesProPhotoMode}
+            />
+        <View style={styles.feedListContainer}>
         <FlatList
         contentContainerStyle={
           visiblePosts.length
-            ? [styles.listContent, isVibesPro && styles.vibesProListContent, isBlueSky && styles.blueSkyListContent, { paddingBottom: 90 + insets.bottom }]
+            ? [
+                styles.listContent,
+                {
+                  backgroundColor: theme === "liquidGlass" ? "transparent" : themeColors.background[0],
+                  paddingBottom: 90 + insets.bottom,
+                },
+              ]
             : showFeedSkeleton
               ? styles.skeletonListContent
               : styles.emptyListContent
@@ -434,10 +589,10 @@ export default function NativeFeedScreen() {
         scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
-            colors={["#0284c7"]}
+            colors={[themeColors.accent]}
             onRefresh={() => void loadFirstPage(true)}
             refreshing={refreshing}
-            tintColor="#0284c7"
+            tintColor={themeColors.accent}
           />
         }
         ref={listRef}
@@ -446,12 +601,6 @@ export default function NativeFeedScreen() {
             ? undefined
             : (
               <View>
-                {feedQuery.isRefetching ? (
-                  <View style={styles.refreshIndicator}>
-                    <ActivityIndicator color={isVibesPro ? "#7C5CFF" : "#0284c7"} size="small" />
-                    <Text style={[styles.refreshIndicatorText, isBlueSky && styles.blueSkyMuted]}>Refreshing</Text>
-                  </View>
-                ) : null}
                 {feedQuery.isError && feedQuery.data && !feedQuery.isFetchNextPageError ? (
                   <View style={styles.refreshError}>
                     <Text style={styles.paginationErrorText}>Couldn’t refresh the Feed. Your saved posts are still available.</Text>
@@ -460,7 +609,7 @@ export default function NativeFeedScreen() {
                     </Pressable>
                   </View>
                 ) : null}
-                <NativeStories isVibesPro={isVibesPro} />
+                <NativeStories compactSpacing isVibesPro={isVibesPro} />
                 <NativeCreatePost authorName={username} isVibesPro={isVibesPro} onPublish={publishPost} />
               </View>
             )
@@ -490,18 +639,40 @@ export default function NativeFeedScreen() {
             </View>
           ) : undefined
         }
-        renderItem={({ item }) => (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Open post by ${item.profiles?.username ?? "author"}`}
-            onPress={() => setFocusedPostId(item.id)}
-            style={styles.postPressable}
-          >
-            {renderPostCard(item)}
-          </Pressable>
-        )}
+        renderItem={({ item }) =>
+          isVibesPro && vibesProFeedStyle === "classic"
+            ? renderPostCard(item)
+            : (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Open post by ${item.profiles?.username ?? "author"}`}
+                onPress={() => setFocusedPostId(item.id)}
+                style={styles.postPressable}
+              >
+                {renderPostCard(item)}
+              </Pressable>
+            )
+        }
         showsVerticalScrollIndicator={false}
         />
+        {feedQuery.isRefetching ? (
+          <View
+            pointerEvents="none"
+            style={[
+              styles.refreshIndicator,
+              isVibesPro && theme === "dark" && styles.vibesProRefreshIndicator,
+              theme === "liquidGlass"
+                ? styles.liquidGlassRefreshIndicator
+                : theme !== "dark" && styles.blueSkyRefreshIndicator,
+            ]}
+          >
+            <ActivityIndicator color={themeColors.accent} size="small" />
+            <Text style={[styles.refreshIndicatorText, { color: themeColors.text }]}>
+              Refreshing
+            </Text>
+          </View>
+        ) : null}
+        </View>
             <NativeSurfaceDock
               bottomInset={insets.bottom}
               onFeedPress={shareFeed}
@@ -511,7 +682,10 @@ export default function NativeFeedScreen() {
           </BlurTargetView>
           {focusedPost ? (
             <View style={styles.focusOverlay}>
-              <NativeBlurBackdrop intensity={80} overlayColor="rgba(15,23,42,0.25)" />
+              <NativeBlurBackdrop
+                intensity={80}
+                overlayColor={theme === "liquidGlass" ? "rgba(18,20,22,0.12)" : "rgba(15,23,42,0.25)"}
+              />
               <Pressable
                 accessibilityLabel="Close focused post"
                 onPress={() => setFocusedPostId(null)}
@@ -534,6 +708,7 @@ export default function NativeFeedScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "transparent" },
+  feedListContainer: { flex: 1, position: "relative" },
   statusScreen: { flex: 1, justifyContent: "center", backgroundColor: "#effaff" },
   vibesProStatusScreen: { backgroundColor: "#0B0B0B" },
   blueSkyStatusScreen: { backgroundColor: "#0b2d5b" },
@@ -560,8 +735,6 @@ const styles = StyleSheet.create({
   },
   focusCardContent: { flexGrow: 1, justifyContent: "center", paddingVertical: 8 },
   listContent: { paddingTop: 0, paddingBottom: 20 },
-  vibesProListContent: { backgroundColor: "#0B0B0B" },
-  blueSkyListContent: { backgroundColor: "#0b2d5b" },
   emptyListContent: { flexGrow: 1, paddingHorizontal: 20, paddingBottom: 100 },
   skeletonListContent: { flexGrow: 1, paddingBottom: 90 },
   emptyState: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 50 },
@@ -582,8 +755,25 @@ const styles = StyleSheet.create({
   retryText: { color: "#ffffff", fontSize: 14, fontWeight: "800" },
   paginationError: { alignItems: "center", paddingVertical: 18, paddingHorizontal: 24 },
   paginationErrorText: { color: "#be123c", fontSize: 13, textAlign: "center" },
-  refreshIndicator: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 6, paddingHorizontal: 14, paddingTop: 6 },
+  refreshIndicator: {
+    position: "absolute",
+    top: 8,
+    right: 12,
+    zIndex: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.94)",
+  },
+  vibesProRefreshIndicator: { backgroundColor: "rgba(17,17,20,0.94)" },
+  blueSkyRefreshIndicator: { backgroundColor: "rgba(6,26,58,0.94)" },
+  liquidGlassRefreshIndicator: { backgroundColor: "rgba(48,51,53,0.68)", borderWidth: 1, borderColor: "rgba(235,240,242,0.28)" },
   refreshIndicatorText: { color: "#64748b", fontSize: 11, fontWeight: "600" },
+  vibesProRefreshIndicatorText: { color: "#d6d3d1" },
+  blueSkyRefreshIndicatorText: { color: "#bfdbfe" },
   refreshError: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, marginHorizontal: 12, marginTop: 8, padding: 10, borderRadius: 12, backgroundColor: "rgba(254,226,226,0.85)" },
   paginationSkeletons: { paddingTop: 8, paddingBottom: 12 },
   pressed: { opacity: 0.82 },

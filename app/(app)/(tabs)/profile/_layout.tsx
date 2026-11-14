@@ -5,5 +5,12 @@ export const unstable_settings = {
 };
 
 export default function ProfileStackLayout() {
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return (
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: "transparent" },
+      }}
+    />
+  );
 }

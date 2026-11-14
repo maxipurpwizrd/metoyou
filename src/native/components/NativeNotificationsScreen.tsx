@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   Image,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -14,7 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useNativeAuth } from "../contexts/NativeAuthProvider";
 import { useNativeMusic } from "../contexts/NativeMusicProvider";
-import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
+import { NATIVE_THEME_COLORS, NATIVE_TYPE_SCALE, useNativeTheme } from "../contexts/NativeThemeProvider";
 import {
   deleteAllNativeNotifications,
   deleteNativeNotification,
@@ -25,6 +26,7 @@ import {
   type NativeNotification,
 } from "../lib/notifications";
 import NativeConfirmDialog from "./NativeConfirmDialog";
+import NativeGlassSurface, { NATIVE_LIQUID_GLASS_PRESSED } from "./NativeGlassSurface";
 import { NativeNotificationRowsSkeleton } from "./NativeScreenSkeletons";
 
 type NotificationGroup = NativeNotification & {
@@ -105,6 +107,8 @@ export default function NativeNotificationsScreen() {
   const { session } = useNativeAuth();
   const { theme, isVibesPro } = useNativeTheme();
   const isBlueSky = theme === "bluesky";
+  const isLiquidGlass = theme === "liquidGlass";
+  const colors = NATIVE_THEME_COLORS[theme];
   const userId = session?.user.id;
   const [notifications, setNotifications] = useState<NativeNotification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -224,93 +228,105 @@ export default function NativeNotificationsScreen() {
 
   return (
     <LinearGradient
-      colors={isBlueSky ? NATIVE_THEME_COLORS.bluesky.background : isVibesPro ? NATIVE_THEME_COLORS.dark.background : ["#d9f3ff", "#eefaff", "#ffffff"]}
+      colors={colors.background}
       end={{ x: 1, y: 1 }}
       start={{ x: 0, y: 0 }}
       style={styles.root}
     >
       <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
-        <View style={[styles.header, isVibesPro && styles.vibesProHeader, isBlueSky && styles.blueSkyHeader]}>
+        <NativeGlassSurface enabled={isLiquidGlass} style={[styles.header, isVibesPro && styles.vibesProHeader, isBlueSky && styles.blueSkyHeader, { backgroundColor: isLiquidGlass ? "transparent" : colors.surface, borderBottomColor: colors.border }]}>
           <Pressable
             accessibilityLabel="Go back"
             onPress={() => router.canGoBack() ? router.back() : router.navigate("/(app)/(tabs)")}
-            style={[styles.headerButton, isVibesPro && styles.vibesProButton, isBlueSky && styles.blueSkyButton]}
+            style={[styles.headerButton, isVibesPro && styles.vibesProButton, isBlueSky && styles.blueSkyButton, { backgroundColor: colors.control, borderColor: colors.border }]}
           >
-            <Text style={[styles.backIcon, isVibesPro && styles.vibesProText, isBlueSky && styles.blueSkyText]}>‹</Text>
+            <Text style={[styles.backIcon, isVibesPro && styles.vibesProText, isBlueSky && styles.blueSkyText, { color: colors.text }]}>‹</Text>
           </Pressable>
           <View style={styles.heading}>
-            <Text style={[styles.eyebrow, isVibesPro && styles.vibesProGold, isBlueSky && styles.blueSkyAccentText]}>ACTIVITY</Text>
-            <Text style={[styles.title, isVibesPro && styles.vibesProText, isBlueSky && styles.blueSkyText]}>Notifications</Text>
+            <Text style={[styles.eyebrow, isVibesPro && styles.vibesProGold, isBlueSky && styles.blueSkyAccentText, { color: colors.accent }]}>ACTIVITY</Text>
+            <Text style={[styles.title, isVibesPro && styles.vibesProText, isBlueSky && styles.blueSkyText, { color: colors.text }]}>Notifications</Text>
           </View>
           <Pressable
             accessibilityLabel="Delete all notifications"
             disabled={notifications.length === 0}
             onPress={() => setConfirmation("all")}
-            style={[styles.headerButton, isVibesPro && styles.vibesProButton, isBlueSky && styles.blueSkyButton, notifications.length === 0 && styles.disabled]}
+            style={[styles.headerButton, isVibesPro && styles.vibesProButton, isBlueSky && styles.blueSkyButton, { backgroundColor: colors.control, borderColor: colors.border }, notifications.length === 0 && styles.disabled]}
           >
-            <Text style={[styles.deleteAllIcon, isVibesPro && styles.vibesProText, isBlueSky && styles.blueSkyText]}>⌫</Text>
+            <Text style={[styles.deleteAllIcon, isVibesPro && styles.vibesProText, isBlueSky && styles.blueSkyText, { color: colors.text }]}>⌫</Text>
           </Pressable>
-        </View>
+        </NativeGlassSurface>
         {loading && notifications.length === 0 ? (
           <NativeNotificationRowsSkeleton count={5} />
         ) : error && notifications.length === 0 ? (
           <View style={styles.center}>
-            <Text style={[styles.bodyText, isVibesPro && styles.vibesProBodyText]}>{error}</Text>
-            <Pressable onPress={() => void loadNotifications(true)} style={styles.retryButton}>
-              <Text style={styles.retryText}>Try again</Text>
+            <Text style={[styles.bodyText, isVibesPro && styles.vibesProBodyText, { color: colors.text }]}>{error}</Text>
+            <Pressable onPress={() => void loadNotifications(true)} style={[styles.retryButton, { backgroundColor: colors.accent }]}>
+              <Text style={[styles.retryText, { color: colors.accentText }]}>Try again</Text>
             </Pressable>
           </View>
         ) : notifications.length === 0 ? (
           <View style={styles.center}>
             <Text style={styles.emptyIcon}>🔔</Text>
-            <Text style={[styles.emptyTitle, isVibesPro && styles.vibesProText, isBlueSky && styles.blueSkyText]}>No notifications yet</Text>
+            <Text style={[styles.emptyTitle, isVibesPro && styles.vibesProText, isBlueSky && styles.blueSkyText, { color: colors.text }]}>No notifications yet</Text>
           </View>
         ) : (
           <ScrollView
             contentContainerStyle={styles.content}
             refreshControl={
               <RefreshControl
-                colors={[isBlueSky ? "#54b8ff" : isVibesPro ? "#D4AF37" : "#0284c7"]}
+                colors={[colors.accent]}
                 onRefresh={() => void loadNotifications(false, true)}
                 refreshing={refreshing}
-                tintColor={isBlueSky ? "#54b8ff" : isVibesPro ? "#D4AF37" : "#0284c7"}
+                tintColor={colors.accent}
               />
             }
             showsVerticalScrollIndicator={false}
           >
             {error ? <Text style={styles.inlineError}>{error}</Text> : null}
             {groupNotifications(notifications).map((item) => (
-              <View
+              <NativeGlassSurface
+                enabled={isLiquidGlass}
+                blurEnabled={Platform.OS !== "android"}
                 key={item.notificationIds.join("-")}
                 style={[
                   styles.notificationCard,
                   isVibesPro && styles.vibesProCard,
                   isBlueSky && styles.blueSkyCard,
-                  !item.read && (isBlueSky ? styles.blueSkyUnread : isVibesPro ? styles.vibesProUnread : styles.unread),
+                  { backgroundColor: isLiquidGlass ? "transparent" : colors.surface, borderColor: colors.border },
+                  !item.read && (isLiquidGlass
+                    ? { borderColor: colors.border, backgroundColor: colors.raised }
+                    : isBlueSky
+                      ? styles.blueSkyUnread
+                      : isVibesPro
+                        ? styles.vibesProUnread
+                        : styles.unread),
                 ]}
               >
                 <Pressable
                   accessibilityLabel={`${item.user}: ${item.message}`}
                   accessibilityRole="button"
                   onPress={() => void openNotification(item)}
-                  style={styles.notificationBody}
+                  style={({ pressed }) => [
+                    styles.notificationBody,
+                    pressed && isLiquidGlass && NATIVE_LIQUID_GLASS_PRESSED,
+                  ]}
                 >
                   {item.avatar ? (
                     <Image source={{ uri: item.avatar }} style={[styles.avatar, isVibesPro && styles.vibesProAvatar, isBlueSky && styles.blueSkyAvatar]} />
                   ) : (
                     <LinearGradient
-                      colors={isBlueSky ? ["#54b8ff", "#155192", "#0b2d5b"] : isVibesPro ? ["#D4AF37", "#F0C75E"] : ["#38bdf8", "#06b6d4", "#2563eb"]}
+                      colors={[colors.accent, colors.surface]}
                       style={[styles.avatar, isVibesPro && styles.vibesProAvatar, isBlueSky && styles.blueSkyAvatar]}
                     >
                       <Text style={styles.avatarInitial}>{item.user.slice(0, 1).toUpperCase()}</Text>
                     </LinearGradient>
                   )}
                   <View style={styles.notificationText}>
-                    <Text style={[styles.greeting, isVibesPro && styles.vibesProText, isBlueSky && styles.blueSkyText]}>
+                    <Text style={[styles.greeting, isVibesPro && styles.vibesProText, isBlueSky && styles.blueSkyText, { color: colors.text }]}>
                       Hey {session?.user.user_metadata.username ?? "there"}
                     </Text>
                     <View style={styles.actorLine}>
-                      <Text numberOfLines={1} style={[styles.actorName, isVibesPro && styles.vibesProGold, isBlueSky && styles.blueSkyAccentText]}>
+                      <Text numberOfLines={1} style={[styles.actorName, isVibesPro && styles.vibesProGold, isBlueSky && styles.blueSkyAccentText, { color: colors.accent }]}>
                         {item.user}
                       </Text>
                       {!item.read ? (
@@ -319,11 +335,11 @@ export default function NativeNotificationsScreen() {
                     </View>
                     <View style={styles.messageRow}>
                       <Text style={styles.emoji}>{notificationEmoji(item.type)}</Text>
-                      <Text style={[styles.bodyText, isVibesPro && styles.vibesProBodyText, isBlueSky && styles.blueSkyText]}>
+                      <Text style={[styles.bodyText, isVibesPro && styles.vibesProBodyText, isBlueSky && styles.blueSkyText, { color: colors.text }]}>
                         {item.message}
                       </Text>
                     </View>
-                    <Text style={[styles.time, isVibesPro && styles.vibesProMutedText, isBlueSky && styles.blueSkyMuted]}>
+                    <Text style={[styles.time, isVibesPro && styles.vibesProMutedText, isBlueSky && styles.blueSkyMuted, { color: colors.muted }]}>
                       {relativeTime(item.timestamp)}
                     </Text>
                   </View>
@@ -332,11 +348,17 @@ export default function NativeNotificationsScreen() {
                   accessibilityLabel={`Delete notification from ${item.user}`}
                   accessibilityRole="button"
                   onPress={() => setConfirmation(item)}
-                  style={[styles.deleteButton, isVibesPro && styles.vibesProButton, isBlueSky && styles.blueSkyButton]}
+                  style={({ pressed }) => [
+                    styles.deleteButton,
+                    isVibesPro && styles.vibesProButton,
+                    isBlueSky && styles.blueSkyButton,
+                    { backgroundColor: colors.control, borderColor: colors.border },
+                    pressed && isLiquidGlass && NATIVE_LIQUID_GLASS_PRESSED,
+                  ]}
                 >
-                  <Text style={[styles.deleteIcon, isVibesPro && styles.vibesProText, isBlueSky && styles.blueSkyText]}>×</Text>
+                  <Text style={[styles.deleteIcon, isVibesPro && styles.vibesProText, isBlueSky && styles.blueSkyText, { color: colors.text }]}>×</Text>
                 </Pressable>
-              </View>
+              </NativeGlassSurface>
             ))}
           </ScrollView>
         )}
@@ -398,9 +420,9 @@ const styles = StyleSheet.create({
   backIcon: { color: "#0369a1", fontSize: 35, lineHeight: 39 },
   deleteAllIcon: { color: "#0f172a", fontSize: 24, fontWeight: "800" },
   heading: { alignItems: "center" },
-  eyebrow: { color: "#0284c7", fontSize: 9, fontWeight: "900", letterSpacing: 2.4 },
+  eyebrow: { ...NATIVE_TYPE_SCALE.overline, color: "#0284c7" },
   vibesProGold: { color: "#D4AF37" },
-  title: { color: "#0c1d2d", fontSize: 20, fontWeight: "900" },
+  title: { ...NATIVE_TYPE_SCALE.screenTitle, color: "#0c1d2d" },
   vibesProText: { color: "#ffffff" },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10, padding: 24 },
   content: { gap: 12, padding: 15, paddingBottom: 34 },

@@ -24,7 +24,12 @@ export default function AuthenticatedLayout() {
     <NativePresenceProvider>
       <NativeCallProvider>
         <>
-          <Stack screenOptions={{ headerShown: false }} />
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: "transparent" },
+            }}
+          />
         </>
       </NativeCallProvider>
     </NativePresenceProvider>

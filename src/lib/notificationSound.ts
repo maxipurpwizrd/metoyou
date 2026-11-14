@@ -1,13 +1,37 @@
 import { getUserPrefs } from "./userPrefs";
+import { Platform } from "react-native";
+
+const MESSAGE_SOUND_URLS = ["/Messagestone.mp3", "/Messagetone.mp3"];
+const CALL_SOUND_URLS = ["/Ringtone.mp3"];
+
+export function getMessageSoundUrl() {
+  return MESSAGE_SOUND_URLS[0];
+}
+
+export function getCallSoundUrl() {
+  return CALL_SOUND_URLS[0];
+}
 
 let messageAudio: HTMLAudioElement | null = null;
+let callAudio: HTMLAudioElement | null = null;
 let lastPlayedAt = 0;
 let unlockInstalled = false;
 
+function hasBrowserAudio() {
+  return Platform.OS === "web" && typeof window !== "undefined" && typeof Audio === "function";
+}
+
 function getMessageAudio() {
-  messageAudio ??= new Audio("/Messagetone.mp3");
+  messageAudio ??= new Audio(getMessageSoundUrl());
   messageAudio.preload = "auto";
   return messageAudio;
+}
+
+function getCallAudio() {
+  callAudio ??= new Audio(getCallSoundUrl());
+  callAudio.preload = "auto";
+  callAudio.loop = true;
+  return callAudio;
 }
 
 function unlockMessageAudio() {
@@ -24,7 +48,14 @@ function unlockMessageAudio() {
   });
 }
 
-if (typeof window !== "undefined" && !unlockInstalled) {
+if (
+  Platform.OS === "web"
+  && typeof window !== "undefined"
+  && typeof window.addEventListener === "function"
+  && typeof window.removeEventListener === "function"
+  && typeof Audio === "function"
+  && !unlockInstalled
+) {
   unlockInstalled = true;
   const unlock = () => {
     unlockMessageAudio();
@@ -36,7 +67,7 @@ if (typeof window !== "undefined" && !unlockInstalled) {
 }
 
 export function playMessageNotificationSound() {
-  if (typeof window === "undefined" || getUserPrefs().messageSound === false) return;
+  if (!hasBrowserAudio() || getUserPrefs().messageSound === false) return;
 
   const now = Date.now();
   if (now - lastPlayedAt < 250) return;
@@ -52,4 +83,26 @@ export function playMessageNotificationSound() {
   } catch {
     // Keep notifications usable when audio is unavailable.
   }
+}
+
+export function playCallRingtone() {
+  if (!hasBrowserAudio() || getUserPrefs().callSound === false) return;
+
+  try {
+    const audio = getCallAudio();
+    audio.muted = false;
+    audio.loop = true;
+    audio.currentTime = 0;
+    void audio.play().catch(() => {
+      // Browsers may block sound until the user interacts with the page.
+    });
+  } catch {
+    // Keep calls usable when audio is unavailable.
+  }
+}
+
+export function stopCallRingtone() {
+  if (!hasBrowserAudio() || !callAudio) return;
+  callAudio.pause();
+  callAudio.currentTime = 0;
 }

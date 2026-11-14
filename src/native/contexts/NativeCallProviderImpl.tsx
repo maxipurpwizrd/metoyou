@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Alert } from "react-native";
+import { Alert, NativeModules, Platform } from "react-native";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import type { CallSession, CallType } from "../../types/call";
 import { useNativeAuth } from "./NativeAuthProvider";
@@ -26,6 +26,8 @@ import {
   type CreatedServerCallInvitation,
 } from "../lib/callInvitationClient";
 import { nativeSupabase } from "../lib/supabase";
+import { playCallRingtone, stopCallRingtone } from "../../lib/notificationSound";
+import { createIncomingRingtoneController, type IncomingRingtoneController } from "../lib/nativeIncomingRingtone";
 import {
   MediaStream,
   MediaStreamTrack,
@@ -96,6 +98,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export function NativeCallProviderImpl({ children }: { children: ReactNode }) {
   const { session } = useNativeAuth();
+  const nativeIncomingRingtoneRef = useRef<IncomingRingtoneController | null>(null);
+  if (!nativeIncomingRingtoneRef.current) {
+    nativeIncomingRingtoneRef.current = createIncomingRingtoneController(
+      Platform.OS,
+      InCallManager,
+      NativeModules.InCallManager,
+    );
+  }
   const userId = session?.user.id;
   const displayName = typeof session?.user.user_metadata?.username === "string"
     ? session.user.user_metadata.username
@@ -141,6 +151,12 @@ export function NativeCallProviderImpl({ children }: { children: ReactNode }) {
   }, []);
 
   const updateIncomingCall = useCallback((next: NativeIncomingCall | null) => {
+    nativeIncomingRingtoneRef.current?.sync(next?.invitationId ?? null);
+    if (next) {
+      playCallRingtone();
+    } else {
+      stopCallRingtone();
+    }
     incomingCallRef.current = next;
     setIncomingCall(next);
   }, []);
@@ -244,6 +260,8 @@ export function NativeCallProviderImpl({ children }: { children: ReactNode }) {
   }, []);
 
   const clearCall = useCallback(() => {
+    nativeIncomingRingtoneRef.current?.stop();
+    stopCallRingtone();
     stopMedia();
     if (pendingCallCreationRef.current) {
       pendingCallCreationRef.current.shouldSignal = false;
@@ -259,6 +277,8 @@ export function NativeCallProviderImpl({ children }: { children: ReactNode }) {
     updateSession(null);
     updateIncomingCall(null);
   }, [stopMedia, updateIncomingCall, updateSession]);
+
+  useEffect(() => () => nativeIncomingRingtoneRef.current?.stop(), []);
 
   const updateHistoryForEnd = useCallback((status: "completed" | "missed" | "failed" | "declined") => {
     const endedAt = new Date();
@@ -920,6 +940,7 @@ export function NativeCallProviderImpl({ children }: { children: ReactNode }) {
       setIsCameraOff(input.callType === "video" && !cameraStream);
       setIsSpeakerOn(false);
       try {
+        nativeIncomingRingtoneRef.current?.stop();
         InCallManager.start({ media: input.callType });
         InCallManager.setKeepScreenOn(true);
         InCallManager.setForceSpeakerphoneOn(false);
@@ -1023,6 +1044,7 @@ export function NativeCallProviderImpl({ children }: { children: ReactNode }) {
   const acceptCall = useCallback(async () => {
     const offer = incomingCallRef.current;
     if (!offer || !userId || acceptingInvitationRef.current) return;
+    nativeIncomingRingtoneRef.current?.stop();
     acceptingInvitationRef.current = true;
     setCallError(null);
     setIsMuted(false);
@@ -1078,6 +1100,7 @@ export function NativeCallProviderImpl({ children }: { children: ReactNode }) {
       await peerConnection.setLocalDescription(answer);
       const answerSdp = peerConnection.localDescription?.sdp ?? answer.sdp;
       if (!answerSdp) throw new Error("The call answer could not be created.");
+      nativeIncomingRingtoneRef.current?.stop();
       InCallManager.start({ media: offer.callType });
       InCallManager.setKeepScreenOn(true);
       InCallManager.setForceSpeakerphoneOn(false);
@@ -1164,6 +1187,7 @@ export function NativeCallProviderImpl({ children }: { children: ReactNode }) {
   const declineCall = useCallback(async () => {
     const offer = incomingCallRef.current;
     if (!offer || !userId) return;
+    nativeIncomingRingtoneRef.current?.stop();
     if (offer.invitationId) {
       try {
         await transitionServerCallInvitation(
@@ -1204,6 +1228,7 @@ export function NativeCallProviderImpl({ children }: { children: ReactNode }) {
   const endCall = useCallback(async () => {
     const activeSession = sessionRef.current;
     if (!activeSession || !userId) return;
+    nativeIncomingRingtoneRef.current?.stop();
     const pending = pendingCallCreationRef.current;
     if (pending) {
       pending.abandoned = true;

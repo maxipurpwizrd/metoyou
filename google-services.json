@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "97995779448",
+    "project_id": "metoyou-vibes",
+    "storage_bucket": "metoyou-vibes.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:97995779448:android:bb03dceb7d94eee6c5ac8d",
+        "android_client_info": {
+          "package_name": "com.wizrd.metoyou"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA6AAmPT_5Sy94XCpotx4AIOZbnKbpowlU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

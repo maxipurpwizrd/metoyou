@@ -16,7 +16,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Archive, Ban, Mail, Pin, Trash2, X } from "lucide-react-native";
 import NativeBlurBackdrop from "./NativeBlurBackdrop";
@@ -24,7 +24,7 @@ import type { MessageThread } from "../../types/message";
 import { formatDisplayDate } from "../../lib/time";
 import { useNativeAuth } from "../contexts/NativeAuthProvider";
 import { useNativeEntitlement } from "../contexts/NativeEntitlementProvider";
-import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
+import { NATIVE_THEME_COLORS, NATIVE_TYPE_SCALE, useNativeTheme } from "../contexts/NativeThemeProvider";
 import {
   clearNativeConversationActions,
   fetchNativeConversationActions,
@@ -39,6 +39,7 @@ import { NATIVE_OFFLINE_MESSAGE } from "../lib/networkStatus";
 import { nativeSupabase } from "../lib/supabase";
 import { NativeConversationRowsSkeleton } from "./NativeScreenSkeletons";
 import NativeStories from "./NativeStories";
+import NativeGlassSurface, { NATIVE_LIQUID_GLASS_PRESSED } from "./NativeGlassSurface";
 
 const BOTTOM_BAR_HIDE_DELAY_MS = 10_000;
 
@@ -68,10 +69,12 @@ function sortThreads(threads: MessageThread[]) {
 
 export default function NativeMessagesScreen({ folder = "messages" }: { folder?: "messages" | "spam" } = {}) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { session, cacheUserId, status } = useNativeAuth();
   const { entitlement, refresh: refreshEntitlement } = useNativeEntitlement();
   const { theme } = useNativeTheme();
   const isBlueSky = theme === "bluesky";
+  const isLiquidGlass = theme === "liquidGlass";
   const userId = session?.user.id;
   const cacheOwnerId = cacheUserId;
   const queryClient = useQueryClient();
@@ -133,7 +136,7 @@ export default function NativeMessagesScreen({ folder = "messages" }: { folder?:
   const selectedIsPinned = Boolean(selectedThread && pinnedIds.includes(selectedThread.conversationId));
   const selectedIsUnread = Boolean(selectedThread && unreadIds.includes(selectedThread.conversationId));
   const selectedIsArchived = Boolean(selectedThread && archivedIds.includes(selectedThread.conversationId));
-  const actionIconColor = isBlueSky ? "#ffffff" : isVibesPro ? "#451a03" : "#334155";
+  const actionIconColor = NATIVE_THEME_COLORS[theme].text;
 
   useFocusEffect(useCallback(() => {
     if (!userId) return;
@@ -389,39 +392,39 @@ export default function NativeMessagesScreen({ folder = "messages" }: { folder?:
     ]);
   };
 
-  const colors = NATIVE_THEME_COLORS[theme].background;
+  const colors = NATIVE_THEME_COLORS[theme];
 
   return (
-    <LinearGradient colors={colors} end={{ x: 1, y: 1 }} start={{ x: 0, y: 0 }} style={styles.root}>
+    <LinearGradient colors={colors.background} end={{ x: 1, y: 1 }} start={{ x: 0, y: 0 }} style={styles.root}>
       <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
-        <View style={[styles.header, isVibesPro && styles.vibesProHeader, isBlueSky && styles.blueSkyHeader]}>
+        <NativeGlassSurface enabled={isLiquidGlass} style={[styles.header, isVibesPro && styles.vibesProHeader, isBlueSky && styles.blueSkyHeader, { backgroundColor: isLiquidGlass ? "transparent" : colors.surface, borderBottomColor: colors.border }]}>
           <Pressable
             accessibilityLabel={showSpam ? "Back to messages" : "Back to feed"}
             accessibilityRole="button"
             onPress={() => showSpam ? router.replace("/messages") : router.navigate("/")}
-            style={[styles.backButton, isVibesPro && styles.vibesProBackButton]}
+            style={[styles.backButton, isVibesPro && styles.vibesProBackButton, { backgroundColor: colors.control, borderColor: colors.border }]}
           >
-            <Text style={[styles.backText, isVibesPro && styles.vibesProText]}>‹</Text>
+            <Text style={[styles.backText, isVibesPro && styles.vibesProText, { color: colors.text }]}>‹</Text>
           </Pressable>
-          <Text style={[styles.title, isVibesPro && styles.vibesProText]}>{showSpam ? "Spam" : "Messages"}</Text>
+          <Text style={[styles.title, isVibesPro && styles.vibesProText, { color: colors.text }]}>{showSpam ? "Spam" : "Messages"}</Text>
           <Pressable
             accessibilityLabel="Message settings"
             accessibilityRole="button"
             onPress={() => Alert.alert("Message settings", "Message settings are coming soon.")}
-            style={[styles.settingsButton, isVibesPro && styles.vibesProBackButton]}
+            style={[styles.settingsButton, isVibesPro && styles.vibesProBackButton, { backgroundColor: colors.control, borderColor: colors.border }]}
           >
-            <Text style={[styles.settingsText, isVibesPro && styles.vibesProText]}>⚙</Text>
+            <Text style={[styles.settingsText, isVibesPro && styles.vibesProText, { color: colors.text }]}>⚙</Text>
           </Pressable>
-        </View>
+        </NativeGlassSurface>
         <ScrollView
-          contentContainerStyle={[styles.content, styles.contentWithBottomBar]}
+          contentContainerStyle={[styles.content, styles.contentWithBottomBar, { paddingBottom: 112 + insets.bottom }]}
           onScroll={revealBottomBar}
           onTouchStart={revealBottomBar}
           refreshControl={
             <RefreshControl
               onRefresh={() => void loadThreads()}
               refreshing={refreshing}
-              tintColor="#ffffff"
+              tintColor={colors.accent}
             />
           }
           showsVerticalScrollIndicator={false}
@@ -429,8 +432,8 @@ export default function NativeMessagesScreen({ folder = "messages" }: { folder?:
         >
           {!showSpam && entitlement.status === "free" ? (
             <View style={styles.intro}>
-              <Text style={styles.brand}>MeToYou 💎✨</Text>
-              <Text style={styles.subtitle}>Your conversations, all in one place.</Text>
+              <Text style={[styles.brand, { color: colors.text }]}>MeToYou 💎✨</Text>
+              <Text style={[styles.subtitle, { color: colors.muted }]}>Your conversations, all in one place.</Text>
               <View style={styles.badges}>
                 <Text style={styles.badge}>MESSAGES</Text>
                 <Text style={styles.badgeAlt}>YOUR PEOPLE</Text>
@@ -439,8 +442,8 @@ export default function NativeMessagesScreen({ folder = "messages" }: { folder?:
           ) : !showSpam && entitlement.status === "vibesPro" ? (
             <>
               <NativeStories isVibesPro messagesList />
-              <View style={[styles.searchCard, styles.premiumCard]}>
-                <Text style={styles.searchPlaceholder}>Search messages</Text>
+              <View style={[styles.searchCard, styles.premiumCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <Text style={[styles.searchPlaceholder, { color: colors.muted }]}>Search messages</Text>
               </View>
             </>
           ) : !showSpam ? (
@@ -462,16 +465,16 @@ export default function NativeMessagesScreen({ folder = "messages" }: { folder?:
           ) : null}
 
           {showSpam ? (
-            <View style={[styles.spamNotice, isVibesPro && styles.premiumCard, isBlueSky && styles.blueSkyCard]}>
-              <Text style={[styles.spamNoticeTitle, isVibesPro && styles.vibesProText]}>Message requests</Text>
-              <Text style={[styles.spamNoticeText, isVibesPro && styles.premiumMuted]}>
+            <View style={[styles.spamNotice, isVibesPro && styles.premiumCard, isBlueSky && styles.blueSkyCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.spamNoticeTitle, isVibesPro && styles.vibesProText, { color: colors.text }]}>Message requests</Text>
+              <Text style={[styles.spamNoticeText, isVibesPro && styles.premiumMuted, { color: colors.muted }]}>
                 Messages from people you do not follow mutually stay here. Reply or follow them back to move the conversation to Messages.
               </Text>
             </View>
           ) : null}
 
           {error && !loading ? (
-            <View style={[styles.stateCard, isVibesPro && styles.premiumCard]}>
+            <View style={[styles.stateCard, isVibesPro && styles.premiumCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <Text accessibilityRole="alert" style={styles.error}>{error}</Text>
               <Pressable accessibilityRole="button" onPress={() => void loadThreads()} style={styles.retryButton}>
                 <Text style={styles.retryText}>Try again</Text>
@@ -481,8 +484,8 @@ export default function NativeMessagesScreen({ folder = "messages" }: { folder?:
           {loading ? (
             <NativeConversationRowsSkeleton count={5} />
           ) : error && visibleThreads.length === 0 ? null : visibleThreads.length === 0 ? (
-            <View style={[styles.stateCard, isVibesPro && styles.premiumCard]}>
-              <Text style={[styles.emptyText, isVibesPro && styles.vibesProText]}>{showSpam ? "No spam messages." : "No messages yet."}</Text>
+            <View style={[styles.stateCard, isVibesPro && styles.premiumCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.emptyText, isVibesPro && styles.vibesProText, { color: colors.text }]}>{showSpam ? "No spam messages." : "No messages yet."}</Text>
             </View>
           ) : (
             <View style={styles.threadList}>
@@ -493,24 +496,29 @@ export default function NativeMessagesScreen({ folder = "messages" }: { folder?:
                   key={thread.conversationId}
                   onPress={() => void openThread(thread)}
                   onLongPress={() => setSelectedThread(thread)}
-                  style={({ pressed }) => [styles.threadCard, isBlueSky && styles.blueSkyCard, pressed && styles.pressed]}
+                  style={({ pressed }) => [
+                    styles.threadCard,
+                    isBlueSky && styles.blueSkyCard,
+                    { backgroundColor: colors.surface, borderColor: colors.border },
+                    pressed && (isLiquidGlass ? NATIVE_LIQUID_GLASS_PRESSED : styles.pressed),
+                  ]}
                 >
-                  <View style={[styles.avatar, isVibesPro && styles.premiumAvatar]}>
-                    <Text style={styles.avatarText}>{thread.otherUsername.slice(0, 1).toUpperCase()}</Text>
+                  <View style={[styles.avatar, isVibesPro && styles.premiumAvatar, { backgroundColor: colors.control, borderColor: colors.border }]}>
+                    <Text style={[styles.avatarText, { color: colors.text }]}>{thread.otherUsername.slice(0, 1).toUpperCase()}</Text>
                   </View>
                   <View style={styles.threadCopy}>
-                      <Text numberOfLines={1} style={[styles.username, isVibesPro && styles.vibesProText]}>
+                      <Text numberOfLines={1} style={[styles.username, isVibesPro && styles.vibesProText, { color: colors.text }]}>
                         {pinnedIds.includes(thread.conversationId) ? "📌 " : ""}
                         {unreadIds.includes(thread.conversationId) ? "● " : ""}
                       {thread.otherUsername}
                     </Text>
                     {showSpam ? <Text style={styles.spamThreadLabel}>Message request</Text> : null}
-                    <Text numberOfLines={1} style={[styles.lastMessage, isVibesPro && styles.premiumMuted]}>
+                    <Text numberOfLines={1} style={[styles.lastMessage, isVibesPro && styles.premiumMuted, { color: colors.muted }]}>
                       {thread.lastText || "No messages"}
                     </Text>
                   </View>
                   {thread.lastTime ? (
-                    <Text style={[styles.timestamp, isVibesPro && styles.premiumFaint]}>
+                    <Text style={[styles.timestamp, isVibesPro && styles.premiumFaint, { color: colors.muted }]}>
                       {formatDisplayDate(thread.lastTime)}
                     </Text>
                   ) : null}
@@ -523,25 +531,34 @@ export default function NativeMessagesScreen({ folder = "messages" }: { folder?:
           pointerEvents={bottomBarVisible ? "auto" : "none"}
           style={[
             styles.bottomBarPosition,
+            { bottom: Math.max(insets.bottom, 8) },
             { opacity: bottomBarOpacity, transform: [{ translateY: bottomBarOffset }] },
           ]}
         >
-          <View style={[styles.bottomBar, isVibesPro && styles.vibesProBottomBar]}>
+          <NativeGlassSurface enabled={isLiquidGlass} style={[styles.bottomBar, isVibesPro && styles.vibesProBottomBar, { backgroundColor: isLiquidGlass ? "transparent" : colors.surface, borderColor: colors.border }]}>
             <Pressable
               accessibilityLabel={showSpam ? "Back to messages" : "Open spam messages"}
               accessibilityRole="button"
               onPress={() => showSpam ? router.replace("/messages") : router.push("/messages/spam")}
               onPressIn={revealBottomBar}
-              style={({ pressed }) => [styles.bottomBarAction, styles.bottomBarLeft, pressed && styles.pressed]}
+              style={({ pressed }) => [
+                styles.bottomBarAction,
+                styles.bottomBarLeft,
+                pressed && (isLiquidGlass ? NATIVE_LIQUID_GLASS_PRESSED : styles.pressed),
+              ]}
             >
-              <Text style={[styles.navigationText, isVibesPro && styles.vibesProText]}>{showSpam ? "Messages" : "Spam"}</Text>
+              <Text style={[styles.navigationText, isVibesPro && styles.vibesProText, { color: colors.text }]}>{showSpam ? "Messages" : "Spam"}</Text>
             </Pressable>
             <Pressable
               accessibilityLabel="Call history"
               accessibilityRole="button"
               onPress={() => router.push("/(app)/calls")}
               onPressIn={revealBottomBar}
-              style={({ pressed }) => [styles.callAction, isVibesPro && styles.vibesProCallAction, pressed && styles.pressed]}
+              style={({ pressed }) => [
+                styles.callAction,
+                isVibesPro && styles.vibesProCallAction,
+                pressed && (isLiquidGlass ? NATIVE_LIQUID_GLASS_PRESSED : styles.pressed),
+              ]}
             >
               <Text style={[styles.callPhoneGlyph, isVibesPro && styles.vibesProText]}>☎</Text>
               <Animated.Text
@@ -578,44 +595,48 @@ export default function NativeMessagesScreen({ folder = "messages" }: { folder?:
               accessibilityRole="button"
               onPress={() => router.push("/messages/archived")}
               onPressIn={revealBottomBar}
-              style={({ pressed }) => [styles.bottomBarAction, styles.bottomBarRight, pressed && styles.pressed]}
+              style={({ pressed }) => [
+                styles.bottomBarAction,
+                styles.bottomBarRight,
+                pressed && (isLiquidGlass ? NATIVE_LIQUID_GLASS_PRESSED : styles.pressed),
+              ]}
             >
-              <Text style={[styles.navigationText, isVibesPro && styles.vibesProText]}>Archived</Text>
+              <Text style={[styles.navigationText, isVibesPro && styles.vibesProText, { color: colors.text }]}>Archived</Text>
             </Pressable>
-          </View>
+          </NativeGlassSurface>
         </Animated.View>
       </SafeAreaView>
       <Modal animationType="fade" onRequestClose={() => setSelectedThread(null)} transparent visible={Boolean(selectedThread)}>
         <NativeBlurBackdrop intensity={18} overlayColor="rgba(0,0,0,0.35)" />
         <Pressable accessibilityRole="button" onPress={() => setSelectedThread(null)} style={styles.actionBackdrop}>
-          <Pressable onPress={(event) => event.stopPropagation()} style={[styles.actionMenuCard, isVibesPro && styles.premiumActionMenu, isBlueSky && styles.blueSkyActionMenu]}>
+          <Pressable onPress={(event) => event.stopPropagation()} style={[styles.actionMenuCard, isVibesPro && styles.premiumActionMenu, isBlueSky && styles.blueSkyActionMenu, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={styles.actionTitleRow}>
               <View style={styles.actionHeadingCopy}>
-                <Text style={[styles.actionTitle, isBlueSky && styles.blueSkyActionText]}>Conversation actions</Text>
-                <Text style={[styles.actionSubtitle, isBlueSky && styles.blueSkyActionSubtitle]}>@{selectedThread?.otherUsername}</Text>
+                <Text style={[styles.actionTitle, isBlueSky && styles.blueSkyActionText, { color: colors.text }]}>Conversation actions</Text>
+                <Text style={[styles.actionSubtitle, isBlueSky && styles.blueSkyActionSubtitle, { color: colors.muted }]}>@{selectedThread?.otherUsername}</Text>
               </View>
               <Pressable accessibilityLabel="Close conversation actions" accessibilityRole="button" disabled={actionBusy} onPress={() => setSelectedThread(null)} style={styles.actionClose}>
-                <X color={isBlueSky ? "#ffffff" : "#0c4a6e"} size={20} />
+                <X color={colors.text} size={20} />
               </Pressable>
             </View>
             <View style={styles.actionGrid}>
-              <Pressable accessibilityRole="button" disabled={actionBusy} onPress={() => void updateConversationAction("pinnedIds", !selectedIsPinned)} style={({ pressed }) => [styles.actionButton, isVibesPro && styles.premiumActionButton, isBlueSky && styles.blueSkyActionButton, pressed && styles.actionPressed]}>
+              <Pressable accessibilityRole="button" disabled={actionBusy} onPress={() => void updateConversationAction("pinnedIds", !selectedIsPinned)} style={({ pressed }) => [styles.actionButton, isVibesPro && styles.premiumActionButton, isBlueSky && styles.blueSkyActionButton, { backgroundColor: colors.raised, borderColor: colors.border }, pressed && (isLiquidGlass ? NATIVE_LIQUID_GLASS_PRESSED : styles.actionPressed)]}>
                 <Pin color={actionIconColor} size={22} />
                 <Text style={[styles.actionButtonText, isVibesPro && styles.premiumActionText, isBlueSky && styles.blueSkyActionText]}>{selectedIsPinned ? "Unpin" : "Pin"}</Text>
               </Pressable>
-              <Pressable accessibilityRole="button" disabled={actionBusy} onPress={() => void updateConversationAction("unreadIds", !selectedIsUnread)} style={({ pressed }) => [styles.actionButton, isVibesPro && styles.premiumActionButton, isBlueSky && styles.blueSkyActionButton, pressed && styles.actionPressed]}>
+              <Pressable accessibilityRole="button" disabled={actionBusy} onPress={() => void updateConversationAction("unreadIds", !selectedIsUnread)} style={({ pressed }) => [styles.actionButton, isVibesPro && styles.premiumActionButton, isBlueSky && styles.blueSkyActionButton, { backgroundColor: colors.raised, borderColor: colors.border }, pressed && (isLiquidGlass ? NATIVE_LIQUID_GLASS_PRESSED : styles.actionPressed)]}>
                 <Mail color={actionIconColor} size={22} />
                 <Text style={[styles.actionButtonText, isVibesPro && styles.premiumActionText, isBlueSky && styles.blueSkyActionText]}>{selectedIsUnread ? "Mark read" : "Mark as unread"}</Text>
               </Pressable>
-              <Pressable accessibilityRole="button" disabled={actionBusy} onPress={confirmDeleteThread} style={({ pressed }) => [styles.actionButton, styles.dangerActionButton, pressed && styles.actionPressed]}>
+              <Pressable accessibilityRole="button" disabled={actionBusy} onPress={confirmDeleteThread} style={({ pressed }) => [styles.actionButton, styles.dangerActionButton, pressed && (isLiquidGlass ? NATIVE_LIQUID_GLASS_PRESSED : styles.actionPressed)]}>
                 <Trash2 color="#be123c" size={22} />
                 <Text style={[styles.actionButtonText, styles.dangerText]}>Delete</Text>
               </Pressable>
-              <Pressable accessibilityRole="button" disabled={actionBusy} onPress={() => void updateConversationAction("archivedIds", !selectedIsArchived)} style={({ pressed }) => [styles.actionButton, isVibesPro && styles.premiumActionButton, isBlueSky && styles.blueSkyActionButton, pressed && styles.actionPressed]}>
+              <Pressable accessibilityRole="button" disabled={actionBusy} onPress={() => void updateConversationAction("archivedIds", !selectedIsArchived)} style={({ pressed }) => [styles.actionButton, isVibesPro && styles.premiumActionButton, isBlueSky && styles.blueSkyActionButton, { backgroundColor: colors.raised, borderColor: colors.border }, pressed && (isLiquidGlass ? NATIVE_LIQUID_GLASS_PRESSED : styles.actionPressed)]}>
                 <Archive color={actionIconColor} size={22} />
                 <Text style={[styles.actionButtonText, isVibesPro && styles.premiumActionText, isBlueSky && styles.blueSkyActionText]}>{selectedIsArchived ? "Unarchive" : "Archive"}</Text>
               </Pressable>
-              <Pressable accessibilityRole="button" disabled={actionBusy} onPress={confirmBlockThread} style={({ pressed }) => [styles.actionButton, styles.dangerActionButton, pressed && styles.actionPressed]}>
+              <Pressable accessibilityRole="button" disabled={actionBusy} onPress={confirmBlockThread} style={({ pressed }) => [styles.actionButton, styles.dangerActionButton, pressed && (isLiquidGlass ? NATIVE_LIQUID_GLASS_PRESSED : styles.actionPressed)]}>
                 <Ban color="#be123c" size={22} />
                 <Text style={[styles.actionButtonText, styles.dangerText]}>Block</Text>
               </Pressable>
@@ -645,7 +666,7 @@ const styles = StyleSheet.create({
   backButton: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#353b46", borderRadius: 15, backgroundColor: "#151a22" },
   vibesProBackButton: { backgroundColor: "#151a22" },
   backText: { color: "#ffffff", fontSize: 34, lineHeight: 38 },
-  title: { color: "#ffffff", fontSize: 19, fontWeight: "900" },
+  title: { ...NATIVE_TYPE_SCALE.screenTitle, color: "#ffffff" },
   settingsButton: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#353b46", borderRadius: 15, backgroundColor: "#151a22" },
   settingsText: { color: "#ffffff", fontSize: 22 },
   content: { width: "100%", maxWidth: 640, alignSelf: "center", padding: 14, paddingBottom: 32, gap: 14 },

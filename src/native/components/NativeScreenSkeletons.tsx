@@ -1,12 +1,11 @@
 import { StyleSheet, View } from "react-native";
-import { useNativeTheme } from "../contexts/NativeThemeProvider";
+import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
 import NativeSkeleton from "./NativeSkeleton";
 
 function useSkeletonSurface() {
-  const { theme, isVibesPro } = useNativeTheme();
-  if (theme === "bluesky") return { backgroundColor: "#0b2d5b", borderColor: "#3478bd" };
-  if (isVibesPro) return { backgroundColor: "#101010", borderColor: "#765c22" };
-  return { backgroundColor: "rgba(255,255,255,0.72)", borderColor: "rgba(148,163,184,0.22)" };
+  const { theme } = useNativeTheme();
+  const colors = NATIVE_THEME_COLORS[theme];
+  return { backgroundColor: colors.surface, borderColor: colors.border };
 }
 
 export function NativeConversationRowsSkeleton({ count = 5 }: { count?: number }) {

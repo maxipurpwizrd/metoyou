@@ -21,14 +21,13 @@ import { BlurTargetView } from "expo-blur";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
-  CloudSun,
   Disc3,
   Download,
   Flag,
   ListMusic,
   ListOrdered,
   MessageCircle,
-  MoonStar,
+  Music2,
   Pause,
   Play,
   Repeat1,
@@ -41,6 +40,7 @@ import {
 import { useNativeAuth } from "../contexts/NativeAuthProvider";
 import { useNativeEntitlement } from "../contexts/NativeEntitlementProvider";
 import { useNativeMusic } from "../contexts/NativeMusicProvider";
+import { useNativeConnectivity } from "../contexts/NativeQueryProvider";
 import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
 import {
   fetchNativeTrackById,
@@ -54,6 +54,7 @@ import NativeBlurBackdrop, { NativeBlurTargetContext, type NativeBlurTargetRef }
 import NativeCommentsSheet from "./NativeCommentsSheet";
 import NativeConfirmDialog from "./NativeConfirmDialog";
 import { NativeTrackPlayerSkeleton, NativeTrackRowsSkeleton } from "./NativeScreenSkeletons";
+import NativeThemeSelector from "./NativeThemeSelector";
 import NativeSurfaceDock from "./NativeSurfaceDock";
 
 const REPORT_REASONS = [
@@ -93,7 +94,9 @@ export default function NativeTracksScreen() {
   const { session } = useNativeAuth();
   const { entitlement, refresh: refreshEntitlement } = useNativeEntitlement();
   const music = useNativeMusic();
-  const { theme, setTheme } = useNativeTheme();
+  const { isOffline } = useNativeConnectivity();
+  const { theme } = useNativeTheme();
+  const colors = NATIVE_THEME_COLORS[theme];
   const isBlueSky = theme === "bluesky";
   const userId = session?.user.id;
   const params = useLocalSearchParams<{ postId?: string | string[]; showComments?: string | string[]; openDeviceFiles?: string | string[] }>();
@@ -119,7 +122,7 @@ export default function NativeTracksScreen() {
   const accessLoading = entitlement.status === "loading" || entitlement.status === "unknown";
   const [playlistOpen, setPlaylistOpen] = useState(false);
   const [playlistTab, setPlaylistTab] = useState<PlaylistTab>("device");
-  const [trackSource, setTrackSource] = useState<PlaylistTab>("vibespro");
+  const [trackSource, setTrackSource] = useState<PlaylistTab>(isOffline ? "device" : "vibespro");
   const [deviceTracks, setDeviceTracks] = useState<DeviceTrack[]>([]);
   const [deviceIndex, setDeviceIndex] = useState(0);
   const [deviceLoading, setDeviceLoading] = useState(false);
@@ -207,23 +210,29 @@ export default function NativeTracksScreen() {
       });
       if (result.canceled) return [];
 
-      const pickedTracks: DeviceTrack[] = result.assets
+      const pickedAt = Date.now();
+      const pickedTracks: DeviceTrack[] = await Promise.all(result.assets
         .filter((asset) => /\.mp3$/i.test(asset.name))
-        .map((asset) => ({
-          id: `device:${asset.uri}`,
-          author_id: "device",
-          username: "On this device",
-          profile_pic: null,
-          text: asset.name.replace(/\.[^.]+$/, ""),
-          image_url: null,
-          image_original_url: null,
-          video_url: null,
-          audio_url: asset.uri,
-          duration_ms: null,
-          created_at: new Date().toISOString(),
-          likes_count: 0,
-          comments_count: 0,
-          liked: false,
+        .map(async (asset, index) => {
+          const safeName = asset.name.replace(/[^a-z0-9._-]/gi, "-").slice(0, 100) || `track-${index}.mp3`;
+          const persistentFile = new File(Paths.document, `metoyou-${pickedAt}-${index}-${safeName}`);
+          await new File(asset.uri).copy(persistentFile);
+          return {
+            id: `device:${persistentFile.uri}`,
+            author_id: "device",
+            username: "On this device",
+            profile_pic: null,
+            text: asset.name.replace(/\.[^.]+$/, ""),
+            image_url: null,
+            image_original_url: null,
+            video_url: null,
+            audio_url: persistentFile.uri,
+            duration_ms: null,
+            created_at: new Date().toISOString(),
+            likes_count: 0,
+            comments_count: 0,
+            liked: false,
+          };
         }));
       setDeviceTracks((current) => {
         if (!append) return pickedTracks;
@@ -252,7 +261,7 @@ export default function NativeTracksScreen() {
         const assetInfo = track?.assetId
           ? await MediaLibrary.getAssetInfoAsync(track.assetId, { shouldDownloadFromNetwork: false })
           : null;
-        const playableUri = assetInfo?.localUri ?? assetInfo?.uri ?? track?.audio_url;
+        const playableUri = assetInfo?.uri ?? assetInfo?.localUri ?? track?.audio_url;
         if (!playableUri) throw new Error("This MP3 file is not available for playback.");
         setDeviceError(null);
         setDeviceTracks((current) =>
@@ -273,6 +282,12 @@ export default function NativeTracksScreen() {
     setPlaylistTab(initialTab);
     setPlaylistOpen(true);
     if (initialTab === "device") void loadDeviceTracks();
+  };
+
+  const openDeviceFiles = () => {
+    setPlaylistTab("device");
+    setPlaylistOpen(true);
+    void loadDeviceTracks();
   };
 
   useEffect(() => {
@@ -302,12 +317,23 @@ export default function NativeTracksScreen() {
   }, [hasVibesPro, requestedPostId, userId]);
 
   useEffect(() => {
-    if (hasVibesPro && !requestedPostId) void loadFirstPage();
+    if (hasVibesPro && !requestedPostId && !isOffline) void loadFirstPage();
     else if (!requestedPostId) {
       setTracks([]);
       setInitialLoading(false);
     }
-  }, [hasVibesPro, loadFirstPage, requestedPostId]);
+  }, [hasVibesPro, isOffline, loadFirstPage, requestedPostId]);
+
+  useEffect(() => {
+    if (!music.isRestored || requestedPostId) return;
+    if (music.currentTrack?.id.startsWith("device:")) {
+      setTrackSource("device");
+      setDeviceTracks(music.queue as DeviceTrack[]);
+      setDeviceIndex(music.currentIndex);
+    } else if (isOffline) {
+      setTrackSource("device");
+    }
+  }, [isOffline, music.currentIndex, music.currentTrack?.id, music.isRestored, music.queue, requestedPostId]);
 
   useEffect(() => {
     if (!requestedPostId) {
@@ -349,9 +375,9 @@ export default function NativeTracksScreen() {
   }, [currentIndex, deviceIndex, deviceTracks, music.setTrack, trackSource, tracks]);
 
   useEffect(() => {
-    if (status.playbackState === "error") setAudioError("This Track could not be played.");
+    if (status.error) setAudioError("This Track could not be played.");
     else if (status.isLoaded) setAudioError(null);
-  }, [currentTrack?.id, status.isLoaded, status.playbackState]);
+  }, [currentTrack?.id, status.error, status.isLoaded]);
 
   useEffect(() => {
     if (!autoplayNext.current || !currentTrack || !status.isLoaded) return;
@@ -600,17 +626,10 @@ export default function NativeTracksScreen() {
                 <Text style={styles.backText}>‹</Text>
               </Pressable>
               <View style={styles.heading}>
-                <Text style={[styles.kicker, isDark && styles.darkKicker, isBlueSky && styles.blueSkyText]}>VIBESPRO</Text>
-                <Text style={[styles.title, isDark && styles.darkTitle, isBlueSky && styles.blueSkyText]}>Tracks</Text>
+                <Text style={[styles.kicker, isDark && styles.darkKicker, isBlueSky && styles.blueSkyText, { color: colors.muted }]}>VIBESPRO</Text>
+                <Text style={[styles.title, isDark && styles.darkTitle, isBlueSky && styles.blueSkyText, { color: colors.text }]}>Tracks</Text>
               </View>
-              <View style={styles.themeButtons}>
-                <Pressable accessibilityLabel="Blue Sky theme" onPress={() => setTheme("bluesky")} style={[styles.themeButton, theme === "bluesky" && styles.activeBlue]}>
-                  <CloudSun color={theme === "bluesky" ? "#ffffff" : "#0369a1"} size={19} />
-                </Pressable>
-                <Pressable accessibilityLabel="Dark Gold theme" onPress={() => setTheme("dark")} style={[styles.themeButton, theme === "dark" && styles.activeGold]}>
-                  <MoonStar color={theme === "dark" ? "#0f172a" : "#a16207"} size={19} />
-                </Pressable>
-              </View>
+              <NativeThemeSelector />
             </View>
 
             {busy ? (
@@ -619,7 +638,15 @@ export default function NativeTracksScreen() {
                   <ActivityIndicator color="#0284c7" size="large" />
                   <Text style={styles.statusText}>Checking your VibesPro access…</Text>
                 </View>
-              ) : <NativeTrackPlayerSkeleton />
+              ) : (
+                <View style={styles.loadingPlayer}>
+                  <NativeTrackPlayerSkeleton />
+                  <Pressable accessibilityRole="button" onPress={openDeviceFiles} style={[styles.retryButton, styles.deviceFilesButton]}>
+                    <Music2 color="#ffffff" size={18} />
+                    <Text style={styles.retryText}>Device Files</Text>
+                  </Pressable>
+                </View>
+              )
             ) : entitlement.status === "error" ? (
               <View style={styles.center}>
                 <Text style={styles.errorTitle}>Couldn’t check access</Text>
@@ -1222,12 +1249,14 @@ const styles = StyleSheet.create({
   themeButton: { width: 36, height: 36, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.6)", borderRadius: 13, backgroundColor: "rgba(255,255,255,0.85)" },
   activeBlue: { borderColor: "#0284c7", backgroundColor: "#0ea5e9" },
   activeGold: { borderColor: "#fcd34d", backgroundColor: "#fbbf24" },
+  loadingPlayer: { flex: 1, alignItems: "center", justifyContent: "center", width: "100%" },
   center: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 28, paddingBottom: 76 },
   statusText: { marginTop: 10, color: "#64748b", fontSize: 14, lineHeight: 21, textAlign: "center" },
   errorTitle: { color: "#9f1239", fontSize: 18, fontWeight: "900", textAlign: "center" },
   emptyTitle: { marginTop: 13, color: "#0c4a6e", fontSize: 20, fontWeight: "900", textAlign: "center" },
   lockEmoji: { fontSize: 42 },
   retryButton: { marginTop: 16, paddingHorizontal: 20, paddingVertical: 11, borderRadius: 14, backgroundColor: "#0284c7" },
+  deviceFilesButton: { flexDirection: "row", alignItems: "center", gap: 8 },
   retryText: { color: "#ffffff", fontSize: 13, fontWeight: "800" },
   backToFeed: { marginTop: 10, padding: 10 },
   backToFeedText: { color: "#0369a1", fontSize: 13, fontWeight: "800" },

@@ -28,9 +28,11 @@ import { getRelativeTime } from "../../lib/time";
 import { nativeSupabase } from "../lib/supabase";
 import { nativeCommentLikesCacheKey } from "../lib/nativeAccountStorage";
 import { useNativeAuth } from "../contexts/NativeAuthProvider";
+import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
 import { uploadNativeCommentAudio } from "../lib/posts";
 import NativeBlurBackdrop from "./NativeBlurBackdrop";
 import NativeConfirmDialog from "./NativeConfirmDialog";
+import NativeGlassSurface, { NATIVE_LIQUID_GLASS_POPUP_SURFACE, NATIVE_LIQUID_GLASS_PRESSED } from "./NativeGlassSurface";
 
 type NativeComment = {
   id: string;
@@ -47,15 +49,17 @@ type CommentLikeState = Record<string, CommentLike>;
 function NativeVoiceComment({ uri }: { uri: string }) {
   const player = useAudioPlayer(uri);
   const status = useAudioPlayerStatus(player);
+  const { theme } = useNativeTheme();
+  const colors = NATIVE_THEME_COLORS[theme];
   return (
     <Pressable
       accessibilityLabel={status.playing ? "Pause voice comment" : "Play voice comment"}
       accessibilityRole="button"
       onPress={() => (status.playing ? player.pause() : player.play())}
-      style={styles.voicePlayer}
+      style={[styles.voicePlayer, { backgroundColor: colors.control }]}
     >
-      <Text style={styles.voiceIcon}>{status.playing ? "Ⅱ" : "▶"}</Text>
-      <Text style={styles.voiceLabel}>Voice comment</Text>
+      <Text style={[styles.voiceIcon, { color: colors.accent }]}>{status.playing ? "Ⅱ" : "▶"}</Text>
+      <Text style={[styles.voiceLabel, { color: colors.text }]}>Voice comment</Text>
     </Pressable>
   );
 }
@@ -72,6 +76,9 @@ export default function NativeCommentsSheet({
   onCountChange: (count: number) => void;
 }) {
   const { cacheUserId } = useNativeAuth();
+  const { theme } = useNativeTheme();
+  const colors = NATIVE_THEME_COLORS[theme];
+  const isLiquidGlass = theme === "liquidGlass";
   const insets = useSafeAreaInsets();
   const [comments, setComments] = useState<NativeComment[]>([]);
   const [text, setText] = useState("");
@@ -331,25 +338,28 @@ export default function NativeCommentsSheet({
     <>
     <Modal animationType="slide" onRequestClose={onClose} transparent visible={visible}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.modalRoot}
       >
         <NativeBlurBackdrop intensity={18} overlayColor="rgba(2,32,54,0.42)" />
         <Pressable accessibilityRole="button" onPress={onClose} style={styles.backdrop} />
-        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+        <NativeGlassSurface
+          enabled={isLiquidGlass}
+          style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16), backgroundColor: colors.surface, borderColor: colors.border }, isLiquidGlass && NATIVE_LIQUID_GLASS_POPUP_SURFACE]}
+        >
           <View style={styles.header}>
             <View>
-              <Text style={styles.title}>Comments</Text>
-              <Text style={styles.subtitle}>{comments.length} in this conversation</Text>
+              <Text style={[styles.title, { color: colors.text }]}>Comments</Text>
+              <Text style={[styles.subtitle, { color: colors.muted }]}>{comments.length} in this conversation</Text>
             </View>
             <Pressable accessibilityRole="button" onPress={onClose} style={styles.closeButton}>
-              <Text style={styles.closeText}>×</Text>
+              <Text style={[styles.closeText, { color: colors.muted }]}>×</Text>
             </Pressable>
           </View>
 
           {loading ? (
             <View style={styles.center}>
-              <ActivityIndicator color="#0284c7" />
+              <ActivityIndicator color={colors.accent} />
             </View>
           ) : error && comments.length === 0 ? (
             <View style={styles.center}>
@@ -367,18 +377,18 @@ export default function NativeCommentsSheet({
                 const itemLike = likeState[item.id] ?? { liked: false, likes: 0 };
                 const isCommentOwner = item.author_id === userId;
                 return (
-                  <View style={styles.comment}>
-                    <View style={styles.commentAvatar}>
-                      <Text style={styles.commentInitial}>
+                  <View style={[styles.comment, { borderColor: colors.border, backgroundColor: colors.raised }]}>
+                    <View style={[styles.commentAvatar, { backgroundColor: colors.control }]}>
+                      <Text style={[styles.commentInitial, { color: colors.text }]}>
                         {(item.profiles?.username || item.author_id).slice(0, 1).toUpperCase()}
                       </Text>
                     </View>
                     <View style={styles.commentBody}>
                       <View style={styles.commentMeta}>
-                        <Text numberOfLines={1} style={styles.username}>
+                        <Text numberOfLines={1} style={[styles.username, { color: colors.text }]}>
                           {item.profiles?.username || item.author_id}
                         </Text>
-                        <Text style={styles.time}>{getRelativeTime(item.created_at)}</Text>
+                        <Text style={[styles.time, { color: colors.muted }]}>{getRelativeTime(item.created_at)}</Text>
                         {isCommentOwner ? (
                           <View style={styles.commentActions}>
                             <Pressable
@@ -403,7 +413,7 @@ export default function NativeCommentsSheet({
                             editable={!sending}
                             multiline
                             onChangeText={setEditingText}
-                            style={styles.editInput}
+                            style={[styles.editInput, { borderColor: colors.border, backgroundColor: colors.control, color: colors.text }]}
                             value={editingText}
                           />
                           <View style={styles.editButtons}>
@@ -421,7 +431,7 @@ export default function NativeCommentsSheet({
                           showsVerticalScrollIndicator
                           style={styles.commentTextScroll}
                         >
-                          <Text style={styles.commentText}>{item.text}</Text>
+                          <Text style={[styles.commentText, { color: colors.text }]}>{item.text}</Text>
                         </ScrollView>
                       ) : null}
                       {item.voice_url ? <NativeVoiceComment uri={item.voice_url} /> : null}
@@ -478,7 +488,7 @@ export default function NativeCommentsSheet({
               placeholder="Write a comment…"
               placeholderTextColor="#94a3b8"
               returnKeyType="send"
-              style={styles.input}
+              style={[styles.input, { borderColor: colors.border, backgroundColor: colors.raised, color: colors.text }]}
               value={text}
             />
             <Pressable
@@ -487,14 +497,14 @@ export default function NativeCommentsSheet({
               onPress={() => void addComment()}
               style={({ pressed }) => [
                 styles.sendButton,
-                pressed && styles.pressed,
+                pressed && (isLiquidGlass ? NATIVE_LIQUID_GLASS_PRESSED : styles.pressed),
                 (sending || recording || (!text.trim() && !voiceBase64)) && styles.disabled,
               ]}
             >
               {sending ? <ActivityIndicator color="#ffffff" size="small" /> : <Text style={styles.sendText}>Send</Text>}
             </Pressable>
           </View>
-        </View>
+        </NativeGlassSurface>
       </KeyboardAvoidingView>
     </Modal>
     <NativeConfirmDialog
@@ -514,7 +524,7 @@ export default function NativeCommentsSheet({
 const styles = StyleSheet.create({
   modalRoot: { flex: 1, justifyContent: "flex-end" },
   backdrop: { ...StyleSheet.absoluteFill },
-  sheet: { height: "82%", paddingTop: 15, paddingHorizontal: 18, paddingBottom: 16, borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: "#f8fdff" },
+  sheet: { height: "82%", paddingTop: 15, paddingHorizontal: 18, paddingBottom: 16, borderTopWidth: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: "#f8fdff" },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 13 },
   title: { color: "#082f49", fontSize: 19, fontWeight: "900" },
   subtitle: { marginTop: 3, color: "#64748b", fontSize: 12 },

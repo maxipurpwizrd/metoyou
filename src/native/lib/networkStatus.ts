@@ -20,7 +20,7 @@ const authRejectionListeners = new Set<AuthRejectionListener>();
 
 function getStatus(): NativeNetworkStatus {
   return {
-    isOffline: connectivityOffline || hasRequestFailure,
+    isOffline: connectivityOffline,
     isConnectivityOffline: connectivityOffline,
     hasRequestFailure,
     isKnown: connectivityKnown,
@@ -102,7 +102,6 @@ export function reportNativeNetworkRequestFailure(cause: unknown) {
 export function reportNativeNetworkRequestSuccess() {
   const shouldPublish = !connectivityKnown || hasRequestFailure;
   connectivityKnown = true;
-  connectivityOffline = false;
   hasRequestFailure = false;
   if (shouldPublish) publishStatus();
 }

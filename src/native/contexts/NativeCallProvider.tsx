@@ -1,16 +1,16 @@
-import Constants from "expo-constants";
 import type { ReactNode } from "react";
 import { NativeCallContext } from "./NativeCallContext";
+import { getNativeCallUnavailableReason, getNativeRuntimeDiagnostics } from "../lib/nativeRuntimeDiagnostics";
 
 const unavailableCallContext = {
   isStartingCall: false,
   startCall: async () => {
-    throw new Error("Calls require the MeToYou development build.");
+    throw new Error(getNativeCallUnavailableReason());
   },
 };
 
 export function NativeCallProvider({ children }: { children: ReactNode }) {
-  if (Constants.expoGoConfig !== null) {
+  if (!getNativeRuntimeDiagnostics().nativeCallSupported) {
     return (
       <NativeCallContext.Provider value={unavailableCallContext}>
         {children}

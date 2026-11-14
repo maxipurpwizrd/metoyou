@@ -1,5 +1,6 @@
 export interface UserPrefs {
   messageSound?: boolean;
+  callSound?: boolean;
   notifications?: boolean;
 }
 

@@ -17,7 +17,6 @@ import {
   View,
 } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
-import Constants from "expo-constants";
 import {
   AudioModule,
   RecordingPresets,
@@ -65,8 +64,10 @@ import {
   nativeMessageThreadsQueryKey,
 } from "../lib/queryKeys";
 import NativeBlurBackdrop from "./NativeBlurBackdrop";
+import NativeGlassSurface, { NATIVE_LIQUID_GLASS_PRESSED } from "./NativeGlassSurface";
 import { NativeChatSkeleton } from "./NativeScreenSkeletons";
 import { getPresenceLabel } from "../../lib/presenceStatus";
+import { getNativeCallUnavailableReason, getNativeRuntimeDiagnostics } from "../lib/nativeRuntimeDiagnostics";
 
 const EMOJIS = ["😀", "😂", "❤️", "🔥", "👍", "🎉", "😍", "🤔", "😎", "🙏", "😢", "👏"];
 const QUICK_REACTIONS = ["❤️", "😂", "🔥", "😭", "👍"];
@@ -225,6 +226,7 @@ export default function NativeChatScreen() {
   const { theme } = useNativeTheme();
   const insets = useSafeAreaInsets();
   const isBlueSky = theme === "bluesky";
+  const isLiquidGlass = theme === "liquidGlass";
   const { startCall, isStartingCall } = useNativeCalls();
   const userId = session?.user.id;
   const queryClient = useQueryClient();
@@ -774,11 +776,8 @@ export default function NativeChatScreen() {
 
   const startNativeCall = (callType: "audio" | "video") => {
     if (!conversationId || !recipientId || !recipient) return;
-    if (Constants.expoGoConfig !== null) {
-      Alert.alert(
-        "Development build required",
-        "Audio and video calls need the MeToYou development build. Expo Go does not include the native WebRTC module.",
-      );
+    if (!getNativeRuntimeDiagnostics().nativeCallSupported) {
+      Alert.alert("Calls unavailable", getNativeCallUnavailableReason());
       return;
     }
     void startCall({
@@ -866,32 +865,32 @@ export default function NativeChatScreen() {
     setSelectedMessageId(null);
   };
 
-  const colors = NATIVE_THEME_COLORS[theme].background;
-  const primaryText = styles.premiumText;
-  const mutedText = styles.premiumMuted;
+  const colors = NATIVE_THEME_COLORS[theme];
+  const primaryText = { color: colors.text };
+  const mutedText = { color: colors.muted };
   const selectedMessage = messages.find((message) => message.id === selectedMessageId) ?? null;
 
   return (
-    <LinearGradient colors={colors} end={{ x: 1, y: 1 }} start={{ x: 0, y: 0 }} style={styles.root}>
+    <LinearGradient colors={colors.background} end={{ x: 1, y: 1 }} start={{ x: 0, y: 0 }} style={styles.root}>
       <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={styles.keyboard}
         >
-          <View style={[styles.header, isVibesPro && styles.premiumHeader, isBlueSky && styles.blueSkyHeader]}>
+          <NativeGlassSurface enabled={isLiquidGlass} style={[styles.header, isVibesPro && styles.premiumHeader, isBlueSky && styles.blueSkyHeader, { backgroundColor: isLiquidGlass ? "transparent" : colors.surface, borderBottomColor: colors.border }]}>
             <Pressable
               accessibilityLabel="Back to messages"
               accessibilityRole="button"
               onPress={() => router.canGoBack() ? router.back() : router.replace("/messages")}
-              style={styles.backButton}
+              style={[styles.backButton, { backgroundColor: colors.control, borderColor: colors.border }]}
             >
               <Text style={[styles.backText, primaryText]}>‹</Text>
             </Pressable>
             {recipient?.profile_pic ? (
               <Image source={{ uri: recipient.profile_pic }} style={styles.avatar} />
             ) : (
-              <View style={[styles.avatar, styles.avatarFallback, isVibesPro && styles.premiumAvatar]}>
-                <Text style={styles.avatarInitial}>{recipient?.username?.slice(0, 1).toUpperCase() ?? "?"}</Text>
+              <View style={[styles.avatar, styles.avatarFallback, isVibesPro && styles.premiumAvatar, { backgroundColor: colors.control, borderColor: colors.border }]}>
+                <Text style={[styles.avatarInitial, { color: colors.text }]}>{recipient?.username?.slice(0, 1).toUpperCase() ?? "?"}</Text>
               </View>
             )}
             <View style={styles.headerCopy}>
@@ -903,16 +902,16 @@ export default function NativeChatScreen() {
                 })}
               </Text>
             </View>
-            <Pressable accessibilityLabel="Start audio call" accessibilityRole="button" disabled={loading || !conversationId || isStartingCall} onPress={() => startNativeCall("audio")} style={[styles.headerAction, isVibesPro && styles.premiumAction, (loading || !conversationId || isStartingCall) && styles.disabledButton]}>
+            <Pressable accessibilityLabel="Start audio call" accessibilityRole="button" disabled={loading || !conversationId || isStartingCall} onPress={() => startNativeCall("audio")} style={[styles.headerAction, isVibesPro && styles.premiumAction, { backgroundColor: colors.control, borderColor: colors.border }, (loading || !conversationId || isStartingCall) && styles.disabledButton]}>
               <Text style={styles.actionEmoji}>📞</Text>
             </Pressable>
-            <Pressable accessibilityLabel="Start video call" accessibilityRole="button" disabled={loading || !conversationId || isStartingCall} onPress={() => startNativeCall("video")} style={[styles.headerAction, isVibesPro && styles.premiumAction, (loading || !conversationId || isStartingCall) && styles.disabledButton]}>
+            <Pressable accessibilityLabel="Start video call" accessibilityRole="button" disabled={loading || !conversationId || isStartingCall} onPress={() => startNativeCall("video")} style={[styles.headerAction, isVibesPro && styles.premiumAction, { backgroundColor: colors.control, borderColor: colors.border }, (loading || !conversationId || isStartingCall) && styles.disabledButton]}>
               <Text style={styles.actionEmoji}>🎥</Text>
             </Pressable>
-          </View>
+          </NativeGlassSurface>
 
           {error && !initialLoadError ? (
-            <View accessibilityRole="alert" style={styles.errorBanner}>
+            <View accessibilityRole="alert" style={[styles.errorBanner, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <Text style={styles.errorText}>{error}</Text>
               <Pressable accessibilityLabel="Dismiss error" onPress={() => setError(null)}>
                 <Text style={styles.errorDismiss}>×</Text>
@@ -921,11 +920,11 @@ export default function NativeChatScreen() {
           ) : null}
 
           {isPendingMessageRequest && recipient ? (
-            <View accessibilityRole="alert" style={[styles.messageRequestNotice, isVibesPro && styles.premiumMessageRequestNotice, isBlueSky && styles.blueSkyMessageRequestNotice]}>
-              <Text style={[styles.messageRequestTitle, isVibesPro && styles.premiumRequestText]}>
+            <View accessibilityRole="alert" style={[styles.messageRequestNotice, isVibesPro && styles.premiumMessageRequestNotice, isBlueSky && styles.blueSkyMessageRequestNotice, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.messageRequestTitle, isVibesPro && styles.premiumRequestText, { color: colors.text }]}>
                 {hasIncomingMessages ? "Message request" : "Not mutual followers"}
               </Text>
-              <Text style={[styles.messageRequestText, isVibesPro && styles.premiumRequestText]}>
+              <Text style={[styles.messageRequestText, isVibesPro && styles.premiumRequestText, { color: colors.muted }]}>
                 {hasIncomingMessages
                   ? `Messages from @${recipient.username} are in Spam. Reply or follow them back to move this conversation to Messages.`
                   : `You are not mutual followers. Messages you send will go to @${recipient.username}'s Spam until they reply or follow you back.`}
@@ -981,6 +980,7 @@ export default function NativeChatScreen() {
                         mine ? styles.mineBubble : styles.theirBubble,
                         isBlueSky && (mine ? styles.blueSkyMineBubble : styles.blueSkyTheirBubble),
                         isVibesPro && (mine ? styles.premiumMineBubble : styles.premiumTheirBubble),
+                        { backgroundColor: mine ? colors.accent : colors.surface, borderColor: colors.border },
                       ]}
                     >
                       {item.metadata?.forwarded === true ? (
@@ -992,7 +992,7 @@ export default function NativeChatScreen() {
                         </View>
                       ) : null}
                       {item.text ? (
-                        <Text style={[styles.messageText, mine && styles.mineMessageText, isVibesPro && !mine && styles.premiumText]}>
+                        <Text style={[styles.messageText, mine && styles.mineMessageText, isVibesPro && !mine && styles.premiumText, { color: mine ? colors.accentText : colors.text }]}>
                           {item.text}
                         </Text>
                       ) : null}
@@ -1061,9 +1061,9 @@ export default function NativeChatScreen() {
             />
           )}
 
-          <View style={[styles.composer, isVibesPro && styles.premiumComposer, isBlueSky && styles.blueSkyComposer]}>
+          <NativeGlassSurface enabled={isLiquidGlass} style={[styles.composer, isVibesPro && styles.premiumComposer, isBlueSky && styles.blueSkyComposer, { backgroundColor: isLiquidGlass ? "transparent" : colors.surface, borderColor: colors.border }]}>
             {(replyTo || editTarget) && !isRecording ? (
-              <View style={[styles.replyBar, isVibesPro && styles.premiumReplyBar]}>
+              <View style={[styles.replyBar, isVibesPro && styles.premiumReplyBar, { backgroundColor: colors.raised, borderColor: colors.border }]}>
                 <View style={styles.replyBarCopy}>
                   <Text style={[styles.replyBarTitle, isVibesPro && styles.premiumText]}>{editTarget ? "Editing message" : "Replying"}</Text>
                   <Text numberOfLines={1} style={[styles.replyBarMessage, mutedText]}>{(editTarget ?? replyTo)?.text || "Message"}</Text>
@@ -1078,7 +1078,7 @@ export default function NativeChatScreen() {
               </View>
             ) : null}
             {isRecording ? (
-              <View style={[styles.recordingControls, isVibesPro && styles.premiumRecordingControls]}>
+              <View style={[styles.recordingControls, isVibesPro && styles.premiumRecordingControls, { backgroundColor: colors.raised, borderColor: colors.border }]}>
                 <Pressable
                   accessibilityLabel="Cancel voice note"
                   accessibilityRole="button"
@@ -1124,7 +1124,7 @@ export default function NativeChatScreen() {
               />
             ) : null}
             {attachment ? (
-              <View style={[styles.pendingMedia, isVibesPro && styles.premiumPendingMedia]}>
+              <View style={[styles.pendingMedia, isVibesPro && styles.premiumPendingMedia, { backgroundColor: colors.raised, borderColor: colors.border }]}>
                 {attachment.kind === "image" ? (
                   <Image source={{ uri: attachment.uri }} resizeMode="cover" style={styles.pendingImage} />
                 ) : null}
@@ -1140,7 +1140,7 @@ export default function NativeChatScreen() {
               </View>
             ) : null}
             {emojiPickerVisible && !isRecording ? (
-              <View style={[styles.emojiPanel, isVibesPro && styles.premiumEmojiPanel]}>
+              <View style={[styles.emojiPanel, isVibesPro && styles.premiumEmojiPanel, { backgroundColor: colors.raised, borderColor: colors.border }]}>
                 {EMOJIS.map((emoji) => (
                   <Pressable key={emoji} onPress={() => setInput((value) => `${value}${emoji}`)} style={styles.emojiButton}>
                     <Text style={styles.emoji}>{emoji}</Text>
@@ -1171,9 +1171,9 @@ export default function NativeChatScreen() {
                     onFocus={() => setInputFocused(true)}
                     onSubmitEditing={() => void (editTarget ? submitEdit() : send())}
                     placeholder="Type a message…"
-                    placeholderTextColor="rgba(255,255,255,0.5)"
+                    placeholderTextColor={colors.muted}
                     returnKeyType="send"
-                    style={[styles.input, isVibesPro && styles.premiumInput]}
+                    style={[styles.input, isVibesPro && styles.premiumInput, { backgroundColor: colors.control, borderColor: colors.border, color: colors.text }]}
                     value={input}
                   />
                   {!inputFocused ? (
@@ -1192,7 +1192,7 @@ export default function NativeChatScreen() {
                   </Pressable>
               </View>
             ) : null}
-          </View>
+          </NativeGlassSurface>
         </KeyboardAvoidingView>
       </SafeAreaView>
       <Modal
@@ -1209,7 +1209,7 @@ export default function NativeChatScreen() {
             onPress={closeMessageActions}
             style={StyleSheet.absoluteFill}
           />
-          <View style={[styles.messageActionSheet, { paddingBottom: Math.max(insets.bottom, 24) }, isVibesPro && styles.premiumPickerSheet]}>
+          <View style={[styles.messageActionSheet, isVibesPro && styles.premiumPickerSheet, { paddingBottom: Math.max(insets.bottom, 24), backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={[styles.pickerHandle, isVibesPro && styles.premiumPickerHandle]} />
             {forwardPickerVisible ? (
               <>
@@ -1225,8 +1225,8 @@ export default function NativeChatScreen() {
                     <Text style={[styles.pickerCloseText, isVibesPro && styles.premiumText]}>‹</Text>
                   </Pressable>
                   <View style={styles.pickerHeadingCopy}>
-                    <Text style={[styles.pickerTitle, isVibesPro && styles.premiumText]}>Forward to</Text>
-                    <Text style={[styles.pickerSubtitle, isVibesPro && styles.premiumMuted]}>Choose a MeToYou chat</Text>
+                    <Text style={[styles.pickerTitle, isVibesPro && styles.premiumText, primaryText]}>Forward to</Text>
+                    <Text style={[styles.pickerSubtitle, isVibesPro && styles.premiumMuted, mutedText]}>Choose a MeToYou chat</Text>
                   </View>
                   <Pressable
                     accessibilityLabel="Close message options"
@@ -1249,7 +1249,8 @@ export default function NativeChatScreen() {
                         style={({ pressed }) => [
                           styles.forwardThread,
                           isVibesPro && styles.premiumPickerOption,
-                          pressed && styles.pickerOptionPressed,
+                          { backgroundColor: colors.raised, borderColor: colors.border },
+                          pressed && (isLiquidGlass ? NATIVE_LIQUID_GLASS_PRESSED : styles.pickerOptionPressed),
                         ]}
                       >
                         <View style={[styles.forwardAvatar, isVibesPro && styles.premiumPickerHeadingIcon]}>
@@ -1257,7 +1258,7 @@ export default function NativeChatScreen() {
                             {thread.otherUsername.slice(0, 1).toUpperCase()}
                           </Text>
                         </View>
-                        <Text style={[styles.forwardThreadName, isVibesPro && styles.premiumText]}>{thread.otherUsername}</Text>
+                        <Text style={[styles.forwardThreadName, isVibesPro && styles.premiumText, primaryText]}>{thread.otherUsername}</Text>
                         {forwardingToId === thread.otherId
                           ? <ActivityIndicator color="#ffffff" size="small" />
                           : <Text style={[styles.pickerChevron, isVibesPro && styles.premiumMuted]}>›</Text>}
@@ -1277,8 +1278,8 @@ export default function NativeChatScreen() {
                     <Text style={styles.pickerHeadingEmoji}>✨</Text>
                   </View>
                   <View style={styles.pickerHeadingCopy}>
-                    <Text style={[styles.pickerTitle, isVibesPro && styles.premiumText]}>Message options</Text>
-                    <Text numberOfLines={2} style={[styles.pickerSubtitle, isVibesPro && styles.premiumMuted]}>
+                    <Text style={[styles.pickerTitle, isVibesPro && styles.premiumText, primaryText]}>Message options</Text>
+                    <Text numberOfLines={2} style={[styles.pickerSubtitle, isVibesPro && styles.premiumMuted, mutedText]}>
                       {selectedMessage?.text || (selectedMessage?.image_url ? "Photo" : selectedMessage?.video_url ? "Video" : selectedMessage?.audio_url ? "Voice note" : "Attachment")}
                     </Text>
                   </View>
@@ -1290,7 +1291,7 @@ export default function NativeChatScreen() {
                     <Text style={[styles.pickerCloseText, isVibesPro && styles.premiumText]}>×</Text>
                   </Pressable>
                 </View>
-                <View style={[styles.messageReactionRow, isVibesPro && styles.premiumMessageReactionRow]}>
+                <View style={[styles.messageReactionRow, isVibesPro && styles.premiumMessageReactionRow, { backgroundColor: colors.raised }]}>
                   {QUICK_REACTIONS.map((emoji) => (
                     <Pressable
                       accessibilityLabel={`React with ${emoji}`}
@@ -1310,17 +1311,17 @@ export default function NativeChatScreen() {
                     setEditTarget(null);
                     closeMessageActions();
                   }}
-                  style={[styles.messageActionRow, isVibesPro && styles.premiumPickerOption]}
+                  style={[styles.messageActionRow, isVibesPro && styles.premiumPickerOption, { backgroundColor: colors.raised, borderColor: colors.border }]}
                 >
                   <Text style={styles.messageActionEmoji}>↩️</Text>
-                  <Text style={[styles.messageActionLabel, isVibesPro && styles.premiumText]}>Reply</Text>
+                  <Text style={[styles.messageActionLabel, isVibesPro && styles.premiumText, primaryText]}>Reply</Text>
                 </Pressable>
                 <Pressable
                   onPress={() => void showForwardRecipients()}
-                  style={[styles.messageActionRow, isVibesPro && styles.premiumPickerOption]}
+                  style={[styles.messageActionRow, isVibesPro && styles.premiumPickerOption, { backgroundColor: colors.raised, borderColor: colors.border }]}
                 >
                   <Text style={styles.messageActionEmoji}>↗️</Text>
-                  <Text style={[styles.messageActionLabel, isVibesPro && styles.premiumText]}>Forward</Text>
+                  <Text style={[styles.messageActionLabel, isVibesPro && styles.premiumText, primaryText]}>Forward</Text>
                 </Pressable>
                 {selectedMessage && selectedMessage.sender_id === userId && selectedMessage.text ? (
                   <Pressable
@@ -1328,10 +1329,10 @@ export default function NativeChatScreen() {
                       startEdit(selectedMessage);
                       closeMessageActions();
                     }}
-                    style={[styles.messageActionRow, isVibesPro && styles.premiumPickerOption]}
+                    style={[styles.messageActionRow, isVibesPro && styles.premiumPickerOption, { backgroundColor: colors.raised, borderColor: colors.border }]}
                   >
                     <Text style={styles.messageActionEmoji}>✏️</Text>
-                    <Text style={[styles.messageActionLabel, isVibesPro && styles.premiumText]}>Edit</Text>
+                    <Text style={[styles.messageActionLabel, isVibesPro && styles.premiumText, primaryText]}>Edit</Text>
                   </Pressable>
                 ) : null}
                 {selectedMessage && selectedMessage.sender_id === userId ? (
@@ -1369,15 +1370,15 @@ export default function NativeChatScreen() {
             onPress={() => setAttachmentPickerVisible(false)}
             style={StyleSheet.absoluteFill}
           />
-          <View style={[styles.pickerSheet, { paddingBottom: Math.max(insets.bottom, 24) }, isVibesPro && styles.premiumPickerSheet]}>
+          <View style={[styles.pickerSheet, isVibesPro && styles.premiumPickerSheet, { paddingBottom: Math.max(insets.bottom, 24), backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={[styles.pickerHandle, isVibesPro && styles.premiumPickerHandle]} />
             <View style={styles.pickerHeadingRow}>
               <View style={[styles.pickerHeadingIcon, isVibesPro && styles.premiumPickerHeadingIcon]}>
                 <Text style={styles.pickerHeadingEmoji}>✨</Text>
               </View>
               <View style={styles.pickerHeadingCopy}>
-                <Text style={[styles.pickerTitle, isVibesPro && styles.premiumText]}>Add a little something</Text>
-                <Text style={[styles.pickerSubtitle, isVibesPro && styles.premiumMuted]}>Choose what you want to share</Text>
+                <Text style={[styles.pickerTitle, isVibesPro && styles.premiumText, primaryText]}>Add a little something</Text>
+                <Text style={[styles.pickerSubtitle, isVibesPro && styles.premiumMuted, mutedText]}>Choose what you want to share</Text>
               </View>
               <Pressable
                 accessibilityLabel="Close attachment options"
@@ -1397,7 +1398,7 @@ export default function NativeChatScreen() {
               style={({ pressed }) => [
                 styles.pickerOption,
                 isVibesPro && styles.premiumPickerOption,
-                pressed && styles.pickerOptionPressed,
+                pressed && (isLiquidGlass ? NATIVE_LIQUID_GLASS_PRESSED : styles.pickerOptionPressed),
               ]}
             >
               <View style={[styles.pickerOptionIcon, styles.photoOptionIcon]}>
@@ -1419,7 +1420,7 @@ export default function NativeChatScreen() {
               style={({ pressed }) => [
                 styles.pickerOption,
                 isVibesPro && styles.premiumPickerOption,
-                pressed && styles.pickerOptionPressed,
+                pressed && (isLiquidGlass ? NATIVE_LIQUID_GLASS_PRESSED : styles.pickerOptionPressed),
               ]}
             >
               <View style={[styles.pickerOptionIcon, styles.fileOptionIcon]}>

@@ -25,7 +25,8 @@ import { useNativeAuth } from "../contexts/NativeAuthProvider";
 import { useNativeEntitlement } from "../contexts/NativeEntitlementProvider";
 import { DEFAULT_LANGUAGE, normalizeLanguage, type AppLanguage } from "../../lib/i18n";
 import type { NativeProfile } from "../lib/profile";
-import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
+import { NATIVE_THEME_COLORS, NATIVE_THEME_OPTIONS, NATIVE_TYPE_SCALE, useNativeTheme } from "../contexts/NativeThemeProvider";
+import NativeGlassSurface, { NATIVE_LIQUID_GLASS_PRESSED } from "./NativeGlassSurface";
 import NativeBlurBackdrop from "./NativeBlurBackdrop";
 import { NativeSettingsSkeleton } from "./NativeScreenSkeletons";
 import {
@@ -81,6 +82,8 @@ export default function NativeSettingsScreen() {
   const { entitlement, refresh: refreshEntitlement } = useNativeEntitlement();
   const { theme, setTheme, isVibesPro: accountCanUseBlueSky } = useNativeTheme();
   const isBlueSky = theme === "bluesky";
+  const colors = NATIVE_THEME_COLORS[theme];
+  const isLiquidGlass = theme === "liquidGlass";
   const userId = session?.user.id;
   const [profile, setProfile] = useState<ProfileSettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -351,9 +354,9 @@ export default function NativeSettingsScreen() {
   };
 
   const section = (title: string, subtitle: string, children: ReactNode) => (
-    <View style={[styles.section, isBlueSky && styles.blueSkySection]}>
-      <Text style={styles.sectionSubtitle}>{subtitle}</Text>
-      <Text style={styles.sectionTitle}>{title}</Text>
+    <View style={[styles.section, isBlueSky && styles.blueSkySection, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+      <Text style={[styles.sectionSubtitle, { color: colors.muted }]}>{subtitle}</Text>
+      <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>
       <View style={styles.sectionContent}>{children}</View>
     </View>
   );
@@ -367,16 +370,21 @@ export default function NativeSettingsScreen() {
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
-      style={({ pressed }) => [styles.row, isBlueSky && styles.blueSkyOption, pressed && styles.pressed]}
+      style={({ pressed }) => [
+        styles.row,
+        isBlueSky && styles.blueSkyOption,
+        { borderColor: colors.border, backgroundColor: colors.raised },
+        pressed && (isLiquidGlass ? NATIVE_LIQUID_GLASS_PRESSED : styles.pressed),
+      ]}
     >
-      <View style={[styles.rowIcon, isBlueSky && styles.blueSkyControl]}>
-        <Text style={styles.rowIconText}>{icon}</Text>
+      <View style={[styles.rowIcon, isBlueSky && styles.blueSkyControl, { backgroundColor: colors.control, borderColor: colors.border }]}>
+        <Text style={[styles.rowIconText, { color: colors.text }]}>{icon}</Text>
       </View>
       <View style={styles.rowText}>
-        <Text style={styles.rowTitle}>{title}</Text>
-        <Text numberOfLines={2} style={styles.rowDetail}>{detail}</Text>
+        <Text style={[styles.rowTitle, { color: colors.text }]}>{title}</Text>
+        <Text numberOfLines={2} style={[styles.rowDetail, { color: colors.muted }]}>{detail}</Text>
       </View>
-      <Text style={styles.rowArrow}>›</Text>
+      <Text style={[styles.rowArrow, { color: colors.muted }]}>›</Text>
     </Pressable>
   );
 
@@ -384,20 +392,20 @@ export default function NativeSettingsScreen() {
     return (
       <LinearGradient colors={NATIVE_THEME_COLORS[theme].background} style={styles.root}>
         <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
-          <View style={[styles.header, isBlueSky && styles.blueSkyHeader]}>
+          <NativeGlassSurface enabled={isLiquidGlass} style={[styles.header, isBlueSky && styles.blueSkyHeader, { borderBottomColor: colors.border, backgroundColor: isLiquidGlass ? "transparent" : colors.surface }]}>
             <Pressable
               accessibilityLabel="Go back"
               onPress={() => router.replace("/(app)/(tabs)/profile")}
-              style={[styles.backButton, isBlueSky && styles.blueSkyControl]}
+              style={[styles.backButton, isBlueSky && styles.blueSkyControl, { borderColor: colors.border, backgroundColor: colors.control }]}
             >
               <Text style={styles.backButtonText}>‹</Text>
             </Pressable>
             <View style={styles.headerCopy}>
-              <Text style={styles.headerOverline}>ACCOUNT</Text>
-              <Text style={styles.headerTitle}>Settings</Text>
+              <Text style={[styles.headerOverline, { color: colors.muted }]}>ACCOUNT</Text>
+              <Text style={[styles.headerTitle, { color: colors.text }]}>Settings</Text>
             </View>
             <View style={styles.headerSpacer} />
-          </View>
+          </NativeGlassSurface>
           <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
             <NativeSettingsSkeleton />
           </ScrollView>
@@ -412,46 +420,46 @@ export default function NativeSettingsScreen() {
       style={styles.root}
     >
       <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
-        <View style={[styles.header, isBlueSky && styles.blueSkyHeader]}>
+        <NativeGlassSurface enabled={isLiquidGlass} style={[styles.header, isBlueSky && styles.blueSkyHeader, { borderBottomColor: colors.border, backgroundColor: isLiquidGlass ? "transparent" : colors.surface }]}>
           <Pressable
             accessibilityLabel="Go back"
             onPress={() => router.replace("/(app)/(tabs)/profile")}
-            style={[styles.backButton, isBlueSky && styles.blueSkyControl]}
+            style={[styles.backButton, isBlueSky && styles.blueSkyControl, { borderColor: colors.border, backgroundColor: colors.control }]}
           >
             <Text style={styles.backButtonText}>‹</Text>
           </Pressable>
           <View style={styles.headerCopy}>
-            <Text style={styles.headerOverline}>ACCOUNT</Text>
-            <Text style={styles.headerTitle}>Settings</Text>
+            <Text style={[styles.headerOverline, { color: colors.muted }]}>ACCOUNT</Text>
+            <Text style={[styles.headerTitle, { color: colors.text }]}>Settings</Text>
           </View>
           <View style={styles.headerSpacer} />
-        </View>
+        </NativeGlassSurface>
         <ScrollView
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
         >
           {entitlement.status === "error" ? (
-            <View style={[styles.errorCard, isBlueSky && styles.blueSkyOption]}>
-              <Text style={styles.errorText}>VibesPro status could not be checked: {entitlement.error.message}</Text>
-              <Pressable onPress={() => void refreshEntitlement()} style={styles.retryButton}>
+            <View style={[styles.errorCard, isBlueSky && styles.blueSkyOption, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+              <Text style={[styles.errorText, { color: colors.text }]}>VibesPro status could not be checked: {entitlement.error.message}</Text>
+              <Pressable onPress={() => void refreshEntitlement()} style={[styles.retryButton, { backgroundColor: colors.control }]}>
                 <Text style={styles.retryText}>Retry account status</Text>
               </Pressable>
             </View>
           ) : null}
           {screenError ? (
-            <View style={[styles.errorCard, isBlueSky && styles.blueSkyOption]}>
-              <Text style={styles.errorText}>{screenError}</Text>
-              <Pressable onPress={() => void loadProfile()} style={styles.retryButton}>
+            <View style={[styles.errorCard, isBlueSky && styles.blueSkyOption, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+              <Text style={[styles.errorText, { color: colors.text }]}>{screenError}</Text>
+              <Pressable onPress={() => void loadProfile()} style={[styles.retryButton, { backgroundColor: colors.control }]}>
                 <Text style={styles.retryText}>Try again</Text>
               </Pressable>
             </View>
           ) : null}
 
           {entitlement.status === "free" ? (
-            <View style={styles.upgradeCard}>
-              <Text style={styles.upgradeOverline}>VIBESPRO</Text>
-              <Text style={styles.upgradeTitle}>Unlock your premium profile</Text>
-              <Text style={styles.upgradeBody}>Bring your profile to life with the VibesPro experience.</Text>
+            <View style={[styles.upgradeCard, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+              <Text style={[styles.upgradeOverline, { color: colors.accent }]}>VIBESPRO</Text>
+              <Text style={[styles.upgradeTitle, { color: colors.text }]}>Unlock your premium profile</Text>
+              <Text style={[styles.upgradeBody, { color: colors.muted }]}>Bring your profile to life with the VibesPro experience.</Text>
               <Pressable
                 onPress={() => Alert.alert("VibesPro", "VibesPro upgrades are not available in the native app yet.")}
                 style={styles.upgradeButton}
@@ -499,16 +507,22 @@ export default function NativeSettingsScreen() {
                   key={option.value}
                   disabled={saving}
                   onPress={() => void saveLanguage(option.value)}
-                  style={[styles.languageOption, isBlueSky && styles.blueSkyOption, language === option.value && styles.selectedLanguage, language === option.value && isBlueSky && styles.blueSkySelectedOption]}
+                  style={[
+                    styles.languageOption,
+                    isBlueSky && styles.blueSkyOption,
+                    language === option.value && styles.selectedLanguage,
+                    language === option.value && isBlueSky && styles.blueSkySelectedOption,
+                    { borderColor: colors.border, backgroundColor: language === option.value ? colors.control : colors.raised },
+                  ]}
                 >
                   <View style={styles.languageCopy}>
-                    <Text style={styles.rowTitle}>{option.label}</Text>
-                    <Text style={styles.rowDetail}>{option.helper}</Text>
+                    <Text style={[styles.rowTitle, { color: colors.text }]}>{option.label}</Text>
+                    <Text style={[styles.rowDetail, { color: colors.muted }]}>{option.helper}</Text>
                   </View>
                   <Text style={[styles.radio, language === option.value && styles.radioSelected]}>{language === option.value ? "●" : "○"}</Text>
                 </Pressable>
               ))}
-              <Text style={styles.note}>
+              <Text style={[styles.note, { color: colors.muted }]}>
                 Your selection is saved on this device for your VibesPro account. Native screen translations are still being added.
               </Text>
             </View>
@@ -516,47 +530,52 @@ export default function NativeSettingsScreen() {
 
           {accountCanUseBlueSky ? section("Display", "APPEARANCE", (
             <View style={styles.optionList}>
-              <Pressable
-                accessibilityRole="radio"
-                accessibilityState={{ checked: theme === "dark" }}
-                onPress={() => void setTheme("dark").catch((cause: unknown) => Alert.alert("Theme could not be saved", cause instanceof Error ? cause.message : "Please try again."))}
-                style={[styles.languageOption, isBlueSky && styles.blueSkyOption, theme === "dark" && styles.selectedLanguage, theme === "dark" && isBlueSky && styles.blueSkySelectedOption]}
-              >
-                <View style={styles.languageCopy}>
-                  <Text style={styles.rowTitle}>Dark</Text>
-                  <Text style={styles.rowDetail}>{theme === "dark" ? "Current theme" : "Dark slate"}</Text>
-                </View>
-                <Text style={[styles.radio, theme === "dark" && styles.radioSelected]}>{theme === "dark" ? "●" : "○"}</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="radio"
-                accessibilityState={{ checked: theme === "bluesky" }}
-                onPress={() => void setTheme("bluesky").catch((cause: unknown) => Alert.alert("Theme could not be saved", cause instanceof Error ? cause.message : "Please try again."))}
-                style={[styles.languageOption, isBlueSky && styles.blueSkyOption, theme === "bluesky" && styles.selectedLanguage, theme === "bluesky" && styles.blueSkySelectedOption]}
-              >
-                <View style={styles.languageCopy}>
-                  <Text style={styles.rowTitle}>BlueSky</Text>
-                  <Text style={styles.rowDetail}>{theme === "bluesky" ? "Current theme" : "Blue with white text"}</Text>
-                </View>
-                <Text style={[styles.radio, theme === "bluesky" && styles.radioSelected]}>{theme === "bluesky" ? "●" : "○"}</Text>
-              </Pressable>
+              {NATIVE_THEME_OPTIONS.map((option) => (
+                <Pressable
+                  key={option.value}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: theme === option.value }}
+                  onPress={() => void setTheme(option.value).catch((cause: unknown) => Alert.alert("Theme could not be saved", cause instanceof Error ? cause.message : "Please try again."))}
+                  style={[
+                    styles.languageOption,
+                    {
+                      borderColor: theme === option.value ? colors.accent : colors.border,
+                      backgroundColor: theme === option.value ? colors.control : colors.raised,
+                    },
+                  ]}
+                >
+                  <LinearGradient
+                    colors={option.swatch.length > 1 ? option.swatch : [option.swatch[0], option.swatch[0]]}
+                    style={styles.themeSwatch}
+                  />
+                  <View style={styles.languageCopy}>
+                    <Text style={[styles.rowTitle, { color: colors.text }]}>{option.label}</Text>
+                    <Text style={[styles.rowDetail, { color: colors.muted }]}>
+                      {theme === option.value ? "Current theme" : option.value === "white" ? "Bright and minimal" : "Colorful app theme"}
+                    </Text>
+                  </View>
+                  <Text style={[styles.radio, { color: colors.accent }]}>
+                    {theme === option.value ? "●" : "○"}
+                  </Text>
+                </Pressable>
+              ))}
             </View>
           )) : null}
 
           {section("Notifications", "DEVICE ALERTS", (
             <View style={styles.notificationRow}>
               <View style={styles.rowText}>
-                <Text style={styles.rowTitle}>Push notifications</Text>
-                <Text style={styles.rowDetail}>{pushRegistrationStatus.detail}</Text>
+                <Text style={[styles.rowTitle, { color: colors.text }]}>Push notifications</Text>
+                <Text style={[styles.rowDetail, { color: colors.muted }]}>{pushRegistrationStatus.detail}</Text>
                 <View style={styles.notificationDiagnostics}>
                   {NATIVE_PUSH_REGISTRATION_STAGES.map(({ key, label }) => (
-                    <Text key={key} style={styles.rowDetail}>
+                    <Text key={key} style={[styles.rowDetail, { color: colors.muted }]}>
                       {label}: {pushRegistrationStatus.stages[key]?.detail ?? "Not run"}
                     </Text>
                   ))}
                 </View>
               </View>
-              <Text style={styles.unavailableTag}>
+              <Text style={[styles.unavailableTag, { borderColor: colors.border, color: colors.text, backgroundColor: colors.control }]}>
                 {PUSH_REGISTRATION_LABELS[pushRegistrationStatus.state]}
               </Text>
             </View>
@@ -592,16 +611,16 @@ export default function NativeSettingsScreen() {
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.modalBackdrop}>
           <NativeBlurBackdrop intensity={22} overlayColor="rgba(0,0,0,0.55)" />
           <Pressable onPress={() => setEditField(null)} style={StyleSheet.absoluteFill} />
-          <View style={styles.editCard}>
+          <View style={[styles.editCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={styles.modalHeader}>
               <View>
-                <Text style={styles.modalOverline}>EDIT PROFILE</Text>
-                <Text style={styles.modalTitle}>
+                <Text style={[styles.modalOverline, { color: colors.muted }]}>EDIT PROFILE</Text>
+                <Text style={[styles.modalTitle, { color: colors.text }]}>
                   {editField === "name" ? "Name" : editField === "username" ? "Username" : "Profile picture"}
                 </Text>
               </View>
-              <Pressable accessibilityLabel="Close editor" onPress={() => setEditField(null)} style={styles.modalClose}>
-                <Text style={styles.modalCloseText}>×</Text>
+              <Pressable accessibilityLabel="Close editor" onPress={() => setEditField(null)} style={[styles.modalClose, { borderColor: colors.border, backgroundColor: colors.control }]}>
+                <Text style={[styles.modalCloseText, { color: colors.text }]}>×</Text>
               </Pressable>
             </View>
             {editField === "picture" ? (
@@ -623,12 +642,12 @@ export default function NativeSettingsScreen() {
                   autoCorrect={false}
                   onChangeText={setEditValue}
                   placeholder={editField === "name" ? "Your name" : "Username"}
-                  placeholderTextColor="#ffffff"
-                  style={styles.editInput}
+                  placeholderTextColor={colors.muted}
+                  style={[styles.editInput, { borderColor: colors.border, backgroundColor: colors.raised, color: colors.text }]}
                   value={editValue}
                 />
-                {editField === "username" ? <Text style={styles.editHint}>Your username appears on your MeToYou profile.</Text> : null}
-                <Pressable disabled={saving || !editValue.trim()} onPress={() => void saveCurrentField()} style={[styles.saveButton, (saving || !editValue.trim()) && styles.disabled]}>
+                {editField === "username" ? <Text style={[styles.editHint, { color: colors.muted }]}>Your username appears on your MeToYou profile.</Text> : null}
+                <Pressable disabled={saving || !editValue.trim()} onPress={() => void saveCurrentField()} style={[styles.saveButton, { borderColor: colors.border, backgroundColor: colors.accent }, (saving || !editValue.trim()) && styles.disabled]}>
                   {saving ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.saveButtonText}>Save changes</Text>}
                 </Pressable>
               </>
@@ -641,29 +660,29 @@ export default function NativeSettingsScreen() {
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.modalBackdrop}>
           <NativeBlurBackdrop intensity={22} overlayColor="rgba(0,0,0,0.55)" />
           <Pressable onPress={() => setSupportOpen(false)} style={StyleSheet.absoluteFill} />
-          <View style={styles.editCard}>
+          <View style={[styles.editCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={styles.modalHeader}>
               <View>
-                <Text style={styles.modalOverline}>SUPPORT</Text>
-                <Text style={styles.modalTitle}>Report a problem</Text>
+                <Text style={[styles.modalOverline, { color: colors.muted }]}>SUPPORT</Text>
+                <Text style={[styles.modalTitle, { color: colors.text }]}>Report a problem</Text>
               </View>
-              <Pressable accessibilityLabel="Close support form" onPress={() => setSupportOpen(false)} style={styles.modalClose}>
-                <Text style={styles.modalCloseText}>×</Text>
+              <Pressable accessibilityLabel="Close support form" onPress={() => setSupportOpen(false)} style={[styles.modalClose, { borderColor: colors.border, backgroundColor: colors.control }]}>
+                <Text style={[styles.modalCloseText, { color: colors.text }]}>×</Text>
               </Pressable>
             </View>
             <TextInput
               multiline
               onChangeText={setSupportDescription}
               placeholder="Describe the problem"
-              placeholderTextColor="#ffffff"
-              style={[styles.editInput, styles.multilineInput]}
+              placeholderTextColor={colors.muted}
+              style={[styles.editInput, styles.multilineInput, { borderColor: colors.border, backgroundColor: colors.raised, color: colors.text }]}
               value={supportDescription}
             />
             {supportMessage ? <Text style={styles.supportMessage}>{supportMessage}</Text> : null}
             <Pressable
               disabled={supportBusy || !supportDescription.trim()}
               onPress={() => void submitSupportTicket()}
-              style={[styles.saveButton, (supportBusy || !supportDescription.trim()) && styles.disabled]}
+              style={[styles.saveButton, { borderColor: colors.border, backgroundColor: colors.accent }, (supportBusy || !supportDescription.trim()) && styles.disabled]}
             >
               {supportBusy ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.saveButtonText}>Send report</Text>}
             </Pressable>
@@ -675,15 +694,15 @@ export default function NativeSettingsScreen() {
         <View style={styles.modalBackdrop}>
           <NativeBlurBackdrop intensity={22} overlayColor="rgba(0,0,0,0.55)" />
           <Pressable onPress={() => setLogoutOpen(false)} style={StyleSheet.absoluteFill} />
-          <View style={styles.editCard}>
-            <Text style={styles.modalOverline}>END THIS SESSION</Text>
-            <Text style={styles.modalTitle}>Sign out?</Text>
-            <Text style={styles.logoutDescription}>You can sign back in at any time. Your account and content will remain unchanged.</Text>
+          <View style={[styles.editCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.modalOverline, { color: colors.muted }]}>END THIS SESSION</Text>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Sign out?</Text>
+            <Text style={[styles.logoutDescription, { color: colors.muted }]}>You can sign back in at any time. Your account and content will remain unchanged.</Text>
             <View style={styles.logoutActions}>
-              <Pressable onPress={() => setLogoutOpen(false)} style={styles.cancelButton}>
-                <Text style={styles.cancelText}>Cancel</Text>
+              <Pressable onPress={() => setLogoutOpen(false)} style={[styles.cancelButton, { borderColor: colors.border, backgroundColor: colors.raised }]}>
+                <Text style={[styles.cancelText, { color: colors.text }]}>Cancel</Text>
               </Pressable>
-              <Pressable disabled={saving} onPress={() => void signOut()} style={styles.confirmLogoutButton}>
+              <Pressable disabled={saving} onPress={() => void signOut()} style={[styles.confirmLogoutButton, { backgroundColor: colors.accent }]}>
                 {saving ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.confirmLogoutText}>Sign out</Text>}
               </Pressable>
             </View>
@@ -704,7 +723,7 @@ const styles = StyleSheet.create({
   backButtonText: { color: "#ffffff", fontSize: 34, lineHeight: 38 },
   headerCopy: { flex: 1, alignItems: "center" },
   headerOverline: { color: "#ffffff", fontSize: 9, fontWeight: "800", letterSpacing: 2 },
-  headerTitle: { color: "#ffffff", fontSize: 19, fontWeight: "900" },
+  headerTitle: { ...NATIVE_TYPE_SCALE.screenTitle, color: "#ffffff" },
   headerSpacer: { width: 42 },
   content: { gap: 14, padding: 14, paddingTop: 16, paddingBottom: 30 },
   errorCard: { padding: 16, borderWidth: 1, borderColor: "#454b55", borderRadius: 20, backgroundColor: "#151a22" },
@@ -719,10 +738,11 @@ const styles = StyleSheet.create({
   upgradeButtonText: { color: "#ffffff", fontSize: 12, fontWeight: "800" },
   section: { padding: 16, borderWidth: 1, borderColor: "#292f39", borderRadius: 26, backgroundColor: "#10141b", shadowColor: "#000000", shadowOpacity: 0.28, shadowRadius: 16, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
   blueSkySection: { borderColor: "rgba(84,184,255,0.44)", backgroundColor: "#0b2d5b" },
-  sectionSubtitle: { color: "#ffffff", fontSize: 9, fontWeight: "800", letterSpacing: 2 },
-  sectionTitle: { marginTop: 4, color: "#ffffff", fontSize: 20, fontWeight: "900" },
+  sectionSubtitle: { ...NATIVE_TYPE_SCALE.overline, color: "#ffffff" },
+  sectionTitle: { ...NATIVE_TYPE_SCALE.sectionTitle, marginTop: 4, color: "#ffffff" },
   sectionContent: { gap: 8, marginTop: 12 },
   row: { minHeight: 66, flexDirection: "row", alignItems: "center", gap: 11, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, borderColor: "#2e3540", borderRadius: 20, backgroundColor: "#171c25" },
+  themeSwatch: { width: 30, height: 30, borderWidth: 1, borderColor: "rgba(255,255,255,0.5)", borderRadius: 15 },
   blueSkyOption: { borderColor: "#3478bd", backgroundColor: "#104078" },
   infoRow: { minHeight: 60, flexDirection: "row", alignItems: "center", gap: 11, paddingHorizontal: 10, paddingVertical: 8 },
   rowIcon: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 15, backgroundColor: "#252b35" },
@@ -730,7 +750,7 @@ const styles = StyleSheet.create({
   dangerIcon: { backgroundColor: "#252b35" },
   rowIconText: { color: "#ffffff", fontSize: 18, fontWeight: "800" },
   rowText: { flex: 1, gap: 3 },
-  rowTitle: { color: "#ffffff", fontSize: 14, fontWeight: "800" },
+  rowTitle: { ...NATIVE_TYPE_SCALE.body, color: "#ffffff", fontWeight: "700" },
   rowDetail: { color: "#ffffff", fontSize: 11, lineHeight: 16 },
   notificationDiagnostics: { gap: 2, marginTop: 4 },
   rowArrow: { color: "#ffffff", fontSize: 24 },

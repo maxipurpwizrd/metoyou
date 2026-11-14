@@ -37,6 +37,7 @@ export default function NativeConnectionsScreen() {
   const router = useRouter();
   const { theme } = useNativeTheme();
   const isBlueSky = theme === "bluesky";
+  const colors = NATIVE_THEME_COLORS[theme];
   const query = useQuery({
     queryKey: nativeProfileConnectionsQueryKey(profileId ?? "", tab),
     queryFn: () => fetchNativeConnections(profileId!, tab),
@@ -49,17 +50,17 @@ export default function NativeConnectionsScreen() {
   return (
     <LinearGradient colors={backgroundColors} end={{ x: 1, y: 1 }} start={{ x: 0, y: 0 }} style={styles.root}>
       <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
-        <View style={[styles.header, isBlueSky && styles.blueSkyHeader]}>
+        <View style={[styles.header, isBlueSky && styles.blueSkyHeader, { borderBottomColor: colors.border, backgroundColor: colors.surface }]}>
           <Pressable accessibilityLabel="Back to profile" accessibilityRole="button" onPress={() => router.back()} style={styles.backButton}>
-            <Text style={styles.backText}>‹</Text>
+            <Text style={[styles.backText, { color: colors.text }]}>‹</Text>
           </Pressable>
           <View style={styles.headerCopy}>
-            <Text style={styles.title}>Followers</Text>
-            {username ? <Text numberOfLines={1} style={styles.subtitle}>@{username}</Text> : null}
+            <Text style={[styles.title, { color: colors.text }]}>Followers</Text>
+            {username ? <Text numberOfLines={1} style={[styles.subtitle, { color: colors.muted }]}>@{username}</Text> : null}
           </View>
         </View>
 
-        <View style={[styles.tabs, isBlueSky && styles.blueSkyTabs]}>
+        <View style={[styles.tabs, isBlueSky && styles.blueSkyTabs, { borderColor: colors.border, backgroundColor: colors.surface }]}>
           {CONNECTION_TABS.map((item) => {
             const active = tab === item.id;
             return (
@@ -68,9 +69,9 @@ export default function NativeConnectionsScreen() {
                 accessibilityState={{ selected: active }}
                 key={item.id}
                 onPress={() => setTab(item.id)}
-                style={[styles.tab, active && styles.activeTab, isBlueSky && active && styles.blueSkyActiveTab]}
+                style={[styles.tab, active && styles.activeTab, isBlueSky && active && styles.blueSkyActiveTab, { backgroundColor: active ? colors.accent : "transparent" }]}
               >
-                <Text style={[styles.tabText, active && styles.activeTabText]}>{item.label}</Text>
+                <Text style={[styles.tabText, active && styles.activeTabText, { color: active ? colors.accentText : colors.muted }]}>{item.label}</Text>
               </Pressable>
             );
           })}
@@ -92,7 +93,7 @@ export default function NativeConnectionsScreen() {
               <RefreshControl
                 onRefresh={() => void query.refetch()}
                 refreshing={query.isRefetching}
-                tintColor="#ffffff"
+                tintColor={colors.accent}
               />
             }
           >
@@ -106,21 +107,21 @@ export default function NativeConnectionsScreen() {
                   pathname: "/profile/[username]",
                   params: { username: connection.username },
                 })}
-                style={({ pressed }) => [styles.connectionRow, isBlueSky && styles.blueSkyRow, pressed && styles.pressed]}
+                style={({ pressed }) => [styles.connectionRow, isBlueSky && styles.blueSkyRow, { borderColor: colors.border, backgroundColor: colors.surface }, pressed && styles.pressed]}
               >
                 {connection.profile_pic ? (
                   <Image source={{ uri: connection.profile_pic }} style={styles.avatar} />
                 ) : (
-                  <View style={[styles.avatar, styles.avatarFallback, isBlueSky && styles.blueSkyAvatar]}>
-                    <Text style={styles.avatarInitial}>{connection.username.slice(0, 1).toUpperCase()}</Text>
+                  <View style={[styles.avatar, styles.avatarFallback, isBlueSky && styles.blueSkyAvatar, { backgroundColor: colors.control }]}>
+                    <Text style={[styles.avatarInitial, { color: colors.text }]}>{connection.username.slice(0, 1).toUpperCase()}</Text>
                   </View>
                 )}
-                <Text numberOfLines={1} style={styles.username}>@{connection.username}</Text>
-                <Text style={styles.chevron}>›</Text>
+                <Text numberOfLines={1} style={[styles.username, { color: colors.text }]}>@{connection.username}</Text>
+                <Text style={[styles.chevron, { color: colors.muted }]}>›</Text>
               </Pressable>
             )) : (
               <View style={styles.state}>
-                <Text style={styles.emptyTitle}>{EMPTY_COPY[tab]}</Text>
+                <Text style={[styles.emptyTitle, { color: colors.text }]}>{EMPTY_COPY[tab]}</Text>
               </View>
             )}
           </ScrollView>
