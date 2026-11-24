@@ -5,6 +5,7 @@ import {
   Alert,
   AccessibilityInfo,
   Easing,
+  Image,
   Modal,
   Pressable,
   RefreshControl,
@@ -19,6 +20,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Archive, Ban, Mail, Pin, Trash2, X } from "lucide-react-native";
+import Svg, { Defs, Ellipse, Path, RadialGradient, Stop } from "react-native-svg";
 import NativeBlurBackdrop from "./NativeBlurBackdrop";
 import type { MessageThread } from "../../types/message";
 import { formatDisplayDate } from "../../lib/time";
@@ -38,10 +40,36 @@ import { nativeMessageThreadsCacheKey } from "../lib/nativeAccountStorage";
 import { NATIVE_OFFLINE_MESSAGE } from "../lib/networkStatus";
 import { nativeSupabase } from "../lib/supabase";
 import { NativeConversationRowsSkeleton } from "./NativeScreenSkeletons";
+import NativeConfirmDialog from "./NativeConfirmDialog";
 import NativeStories from "./NativeStories";
 import NativeGlassSurface, { NATIVE_LIQUID_GLASS_PRESSED } from "./NativeGlassSurface";
 
 const BOTTOM_BAR_HIDE_DELAY_MS = 10_000;
+
+type ThreadConfirmation = {
+  type: "delete" | "block";
+  thread: MessageThread;
+};
+
+function WizrdSmokeShape() {
+  return (
+    <Svg width="100%" height="100%" viewBox="0 0 80 100">
+      <Defs>
+        <RadialGradient id="wizrdSmokeGradient" cx="50%" cy="45%" r="58%">
+          <Stop offset="0%" stopColor="#c5cbd1" stopOpacity="0.78" />
+          <Stop offset="58%" stopColor="#858d96" stopOpacity="0.52" />
+          <Stop offset="100%" stopColor="#59616b" stopOpacity="0" />
+        </RadialGradient>
+      </Defs>
+      <Path
+        d="M15 88c-9-3-10-14-2-20-8-10-3-22 9-25-3-12 7-22 18-18 5-12 21-13 27-2 11-1 18 11 12 20 10 9 7 23-5 27 3 10-6 18-16 16-9 9-21 7-27 0-5 5-11 5-16 2Z"
+        fill="url(#wizrdSmokeGradient)"
+      />
+      <Ellipse cx="25" cy="59" rx="19" ry="20" fill="url(#wizrdSmokeGradient)" opacity="0.58" />
+      <Ellipse cx="54" cy="55" rx="22" ry="24" fill="url(#wizrdSmokeGradient)" opacity="0.62" />
+    </Svg>
+  );
+}
 
 function parseCachedThreads(raw: string): MessageThread[] {
   const parsed: unknown = JSON.parse(raw);
@@ -128,10 +156,14 @@ export default function NativeMessagesScreen({ folder = "messages" }: { folder?:
   const bottomBarOpacity = useRef(new Animated.Value(1)).current;
   const bottomBarOffset = useRef(new Animated.Value(0)).current;
   const [reduceMotion, setReduceMotion] = useState<boolean | null>(null);
+  const wizrdSmokeLeft = useRef(new Animated.Value(0)).current;
+  const wizrdSmokeCenter = useRef(new Animated.Value(0)).current;
+  const wizrdSmokeRight = useRef(new Animated.Value(0)).current;
   const callPhoneLift = useRef(new Animated.Value(2)).current;
   const callPhoneRotation = useRef(new Animated.Value(0)).current;
   const callArrowOpacity = useRef(new Animated.Value(0)).current;
   const [selectedThread, setSelectedThread] = useState<MessageThread | null>(null);
+  const [threadConfirmation, setThreadConfirmation] = useState<ThreadConfirmation | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const selectedIsPinned = Boolean(selectedThread && pinnedIds.includes(selectedThread.conversationId));
   const selectedIsUnread = Boolean(selectedThread && unreadIds.includes(selectedThread.conversationId));
@@ -286,6 +318,32 @@ export default function NativeMessagesScreen({ folder = "messages" }: { folder?:
   }, []);
 
   useEffect(() => {
+    if (reduceMotion !== false) {
+      wizrdSmokeLeft.setValue(0);
+      wizrdSmokeCenter.setValue(0);
+      wizrdSmokeRight.setValue(0);
+      return;
+    }
+
+    const smokeAnimations = [
+      { value: wizrdSmokeLeft, delay: 0, duration: 1900 },
+      { value: wizrdSmokeCenter, delay: 620, duration: 2200 },
+      { value: wizrdSmokeRight, delay: 1280, duration: 2000 },
+    ].map(({ value, delay, duration }) => Animated.loop(
+      Animated.sequence([
+        Animated.delay(delay),
+        Animated.timing(value, { toValue: 1, duration, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(value, { toValue: 0, duration: 0, useNativeDriver: true }),
+      ]),
+    ));
+
+    smokeAnimations.forEach((animation) => animation.start());
+    return () => {
+      smokeAnimations.forEach((animation) => animation.stop());
+    };
+  }, [reduceMotion, wizrdSmokeCenter, wizrdSmokeLeft, wizrdSmokeRight]);
+
+  useEffect(() => {
     if (!cacheOwnerId) {
       setCachedThreadsUserId(null);
       setCacheError(null);
@@ -359,37 +417,14 @@ export default function NativeMessagesScreen({ folder = "messages" }: { folder?:
     const thread = selectedThread;
     if (!userId || !thread) return;
     setSelectedThread(null);
-    Alert.alert("Delete conversation?", "This removes the conversation from your list on this device.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () => {
-          void setNativeConversationAction(userId, "deletedIds", thread.conversationId, true)
-            .then((next) => queryClient.setQueryData(actionsQueryKey, next))
-            .catch((cause: unknown) => Alert.alert("Could not delete conversation", cause instanceof Error ? cause.message : "Please try again."));
-        },
-      },
-    ]);
+    setThreadConfirmation({ type: "delete", thread });
   };
 
   const confirmBlockThread = () => {
     const thread = selectedThread;
     if (!userId || !thread) return;
     setSelectedThread(null);
-    Alert.alert(`Block @${thread.otherUsername}?`, "They will no longer be able to contact you.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Block",
-        style: "destructive",
-        onPress: () => {
-          void blockNativeUser(thread.otherId)
-            .then(() => setNativeConversationAction(userId, "deletedIds", thread.conversationId, true))
-            .then((next) => queryClient.setQueryData(actionsQueryKey, next))
-            .catch((cause: unknown) => Alert.alert("Could not block user", cause instanceof Error ? cause.message : "Please try again."));
-        },
-      },
-    ]);
+    setThreadConfirmation({ type: "block", thread });
   };
 
   const colors = NATIVE_THEME_COLORS[theme];
@@ -435,8 +470,8 @@ export default function NativeMessagesScreen({ folder = "messages" }: { folder?:
               <Text style={[styles.brand, { color: colors.text }]}>MeToYou 💎✨</Text>
               <Text style={[styles.subtitle, { color: colors.muted }]}>Your conversations, all in one place.</Text>
               <View style={styles.badges}>
-                <Text style={styles.badge}>MESSAGES</Text>
-                <Text style={styles.badgeAlt}>YOUR PEOPLE</Text>
+                <Text style={[styles.badge, { color: colors.accentText, backgroundColor: colors.accent }]}>MESSAGES</Text>
+                <Text style={[styles.badgeAlt, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface }]}>YOUR PEOPLE</Text>
               </View>
             </View>
           ) : !showSpam && entitlement.status === "vibesPro" ? (
@@ -457,8 +492,8 @@ export default function NativeMessagesScreen({ folder = "messages" }: { folder?:
                 </>
               ) : (
                 <>
-                  <ActivityIndicator color="#ffffff" />
-                  <Text style={styles.stateText}>Checking account features…</Text>
+                  <ActivityIndicator color={colors.accent} />
+                  <Text style={[styles.stateText, { color: colors.muted }]}>Checking account features…</Text>
                 </>
               )}
             </View>
@@ -475,9 +510,9 @@ export default function NativeMessagesScreen({ folder = "messages" }: { folder?:
 
           {error && !loading ? (
             <View style={[styles.stateCard, isVibesPro && styles.premiumCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text accessibilityRole="alert" style={styles.error}>{error}</Text>
-              <Pressable accessibilityRole="button" onPress={() => void loadThreads()} style={styles.retryButton}>
-                <Text style={styles.retryText}>Try again</Text>
+              <Text accessibilityRole="alert" style={[styles.error, { color: colors.text }]}>{error}</Text>
+              <Pressable accessibilityRole="button" onPress={() => void loadThreads()} style={[styles.retryButton, { backgroundColor: colors.accent }]}>
+                <Text style={[styles.retryText, { color: colors.accentText }]}>Try again</Text>
               </Pressable>
             </View>
           ) : null}
@@ -527,6 +562,80 @@ export default function NativeMessagesScreen({ folder = "messages" }: { folder?:
             </View>
           )}
         </ScrollView>
+        {!showSpam ? (
+          <>
+            <View
+              pointerEvents="none"
+              style={[styles.wizrdAnimationLayer, { bottom: Math.max(insets.bottom, 8) + 72 }]}
+            >
+              {reduceMotion === false ? (
+                <>
+                  <Animated.View
+                    style={[
+                      styles.wizrdSmoke,
+                      styles.wizrdSmokeLeft,
+                      {
+                        opacity: wizrdSmokeLeft.interpolate({ inputRange: [0, 0.3, 0.7, 1], outputRange: [0, 0.72, 0.55, 0] }),
+                        transform: [
+                          { translateY: wizrdSmokeLeft.interpolate({ inputRange: [0, 1], outputRange: [0, -78] }) },
+                          { translateX: wizrdSmokeLeft.interpolate({ inputRange: [0, 1], outputRange: [0, -16] }) },
+                          { scale: wizrdSmokeLeft.interpolate({ inputRange: [0, 1], outputRange: [0.72, 1.5] }) },
+                        ],
+                      },
+                    ]}
+                  >
+                    <WizrdSmokeShape />
+                  </Animated.View>
+                  <Animated.View
+                    style={[
+                      styles.wizrdSmoke,
+                      styles.wizrdSmokeCenter,
+                      {
+                        opacity: wizrdSmokeCenter.interpolate({ inputRange: [0, 0.3, 0.7, 1], outputRange: [0, 0.68, 0.52, 0] }),
+                        transform: [
+                          { translateY: wizrdSmokeCenter.interpolate({ inputRange: [0, 1], outputRange: [0, -92] }) },
+                          { translateX: wizrdSmokeCenter.interpolate({ inputRange: [0, 1], outputRange: [0, 10] }) },
+                          { scale: wizrdSmokeCenter.interpolate({ inputRange: [0, 1], outputRange: [0.66, 1.62] }) },
+                        ],
+                      },
+                    ]}
+                  >
+                    <WizrdSmokeShape />
+                  </Animated.View>
+                  <Animated.View
+                    style={[
+                      styles.wizrdSmoke,
+                      styles.wizrdSmokeRight,
+                      {
+                        opacity: wizrdSmokeRight.interpolate({ inputRange: [0, 0.3, 0.7, 1], outputRange: [0, 0.7, 0.54, 0] }),
+                        transform: [
+                          { translateY: wizrdSmokeRight.interpolate({ inputRange: [0, 1], outputRange: [0, -72] }) },
+                          { translateX: wizrdSmokeRight.interpolate({ inputRange: [0, 1], outputRange: [0, 18] }) },
+                          { scale: wizrdSmokeRight.interpolate({ inputRange: [0, 1], outputRange: [0.74, 1.48] }) },
+                        ],
+                      },
+                    ]}
+                  >
+                    <WizrdSmokeShape />
+                  </Animated.View>
+                </>
+              ) : null}
+            </View>
+            <Pressable
+              accessibilityLabel="Ask WiZrd"
+              accessibilityRole="button"
+              onPress={() => router.push("/messages/wizrd")}
+              style={({ pressed }) => [styles.wizrdLauncher, { bottom: Math.max(insets.bottom, 8) + 72 }, pressed && styles.wizrdLauncherPressed]}
+            >
+              <Image
+                accessibilityLabel="WiZrd icon"
+                resizeMode="cover"
+                source={require("../../assets/wizrd-icon.png")}
+                style={styles.wizrdLauncherImage}
+              />
+            </Pressable>
+          </>
+        ) : null}
         <Animated.View
           pointerEvents={bottomBarVisible ? "auto" : "none"}
           style={[
@@ -560,11 +669,12 @@ export default function NativeMessagesScreen({ folder = "messages" }: { folder?:
                 pressed && (isLiquidGlass ? NATIVE_LIQUID_GLASS_PRESSED : styles.pressed),
               ]}
             >
-              <Text style={[styles.callPhoneGlyph, isVibesPro && styles.vibesProText]}>☎</Text>
+              <Text style={[styles.callPhoneGlyph, isVibesPro && styles.vibesProText, { color: colors.text }]}>☎</Text>
               <Animated.Text
                 style={[
                   styles.callArrow,
                   isVibesPro && styles.vibesProText,
+                  { color: colors.text },
                   { opacity: callArrowOpacity },
                 ]}
               >
@@ -574,6 +684,7 @@ export default function NativeMessagesScreen({ folder = "messages" }: { folder?:
                 style={[
                   styles.callMobileGlyph,
                   isVibesPro && styles.vibesProText,
+                  { color: colors.text },
                   {
                     transform: [
                       { translateY: callPhoneLift },
@@ -629,7 +740,7 @@ export default function NativeMessagesScreen({ folder = "messages" }: { folder?:
                 <Text style={[styles.actionButtonText, isVibesPro && styles.premiumActionText, isBlueSky && styles.blueSkyActionText]}>{selectedIsUnread ? "Mark read" : "Mark as unread"}</Text>
               </Pressable>
               <Pressable accessibilityRole="button" disabled={actionBusy} onPress={confirmDeleteThread} style={({ pressed }) => [styles.actionButton, styles.dangerActionButton, pressed && (isLiquidGlass ? NATIVE_LIQUID_GLASS_PRESSED : styles.actionPressed)]}>
-                <Trash2 color="#be123c" size={22} />
+                <Trash2 color="#ffffff" size={22} />
                 <Text style={[styles.actionButtonText, styles.dangerText]}>Delete</Text>
               </Pressable>
               <Pressable accessibilityRole="button" disabled={actionBusy} onPress={() => void updateConversationAction("archivedIds", !selectedIsArchived)} style={({ pressed }) => [styles.actionButton, isVibesPro && styles.premiumActionButton, isBlueSky && styles.blueSkyActionButton, { backgroundColor: colors.raised, borderColor: colors.border }, pressed && (isLiquidGlass ? NATIVE_LIQUID_GLASS_PRESSED : styles.actionPressed)]}>
@@ -637,13 +748,31 @@ export default function NativeMessagesScreen({ folder = "messages" }: { folder?:
                 <Text style={[styles.actionButtonText, isVibesPro && styles.premiumActionText, isBlueSky && styles.blueSkyActionText]}>{selectedIsArchived ? "Unarchive" : "Archive"}</Text>
               </Pressable>
               <Pressable accessibilityRole="button" disabled={actionBusy} onPress={confirmBlockThread} style={({ pressed }) => [styles.actionButton, styles.dangerActionButton, pressed && (isLiquidGlass ? NATIVE_LIQUID_GLASS_PRESSED : styles.actionPressed)]}>
-                <Ban color="#be123c" size={22} />
+                <Ban color="#ffffff" size={22} />
                 <Text style={[styles.actionButtonText, styles.dangerText]}>Block</Text>
               </Pressable>
             </View>
           </Pressable>
         </Pressable>
       </Modal>
+      <NativeConfirmDialog
+        confirmLabel={threadConfirmation?.type === "delete" ? "Delete" : "Block"}
+        destructive
+        emoji={threadConfirmation?.type === "delete" ? "🗑️" : "🚫"}
+        message={threadConfirmation?.type === "delete"
+          ? "This removes the conversation from your list on this device."
+          : `They will no longer be able to contact you. Block @${threadConfirmation?.thread.otherUsername ?? "this user"}?`}
+        onCancel={() => setThreadConfirmation(null)}
+        onConfirm={async () => {
+          if (!userId || !threadConfirmation) throw new Error("This action is no longer available.");
+          const { thread, type } = threadConfirmation;
+          if (type === "block") await blockNativeUser(thread.otherId);
+          const next = await setNativeConversationAction(userId, "deletedIds", thread.conversationId, true);
+          queryClient.setQueryData(actionsQueryKey, next);
+        }}
+        title={threadConfirmation?.type === "delete" ? "Delete conversation?" : `Block @${threadConfirmation?.thread.otherUsername ?? "user"}?`}
+        visible={threadConfirmation !== null}
+      />
     </LinearGradient>
   );
 }
@@ -705,6 +834,14 @@ const styles = StyleSheet.create({
   timestamp: { color: "#ffffff", fontSize: 10 },
   premiumFaint: { color: "rgba(255,255,255,0.62)" },
   bottomBarPosition: { position: "absolute", right: 0, bottom: 0, left: 0, alignItems: "center", paddingHorizontal: 24, paddingBottom: 4 },
+  wizrdAnimationLayer: { position: "absolute", right: 0, width: 100, height: 150, zIndex: 1 },
+  wizrdSmoke: { position: "absolute", width: 88, height: 110 },
+  wizrdSmokeLeft: { left: -7, bottom: -12 },
+  wizrdSmokeCenter: { left: 6, bottom: -18 },
+  wizrdSmokeRight: { left: 19, bottom: -14 },
+  wizrdLauncher: { position: "absolute", right: 18, width: 64, height: 64, borderRadius: 32, zIndex: 2, elevation: 10, shadowColor: "#4f46e5", shadowOpacity: 0.4, shadowRadius: 14, shadowOffset: { width: 0, height: 6 } },
+  wizrdLauncherImage: { width: 64, height: 64, borderWidth: 1.5, borderColor: "rgba(255,255,255,0.8)", borderRadius: 32 },
+  wizrdLauncherPressed: { opacity: 0.82, transform: [{ scale: 0.97 }] },
   bottomBar: { width: "100%", maxWidth: 576, minHeight: 64, flexDirection: "row", alignItems: "stretch", borderWidth: 1, borderColor: "#292f39", borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: "hidden", backgroundColor: "#10141b", shadowColor: "#000000", shadowOpacity: 0.28, shadowRadius: 16, shadowOffset: { width: 0, height: -5 }, elevation: 12 },
   vibesProBottomBar: { borderColor: "#292f39", backgroundColor: "#10141b" },
   bottomBarAction: { flex: 1, justifyContent: "center", paddingHorizontal: 12, paddingVertical: 14 },
@@ -734,7 +871,7 @@ const styles = StyleSheet.create({
   actionButtonText: { color: "#334155", fontSize: 12, fontWeight: "700", textAlign: "center" },
   premiumActionText: { color: "#451a03" },
   blueSkyActionText: { color: "#ffffff" },
-  dangerActionButton: { borderColor: "#fecdd3" },
-  dangerText: { color: "#be123c" },
+  dangerActionButton: { borderColor: "#f87171", backgroundColor: "#dc2626" },
+  dangerText: { color: "#ffffff" },
   actionPressed: { opacity: 0.78 },
 });

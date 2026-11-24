@@ -16,6 +16,8 @@ export default function NativeThemeSelector() {
   const isLiquidGlass = theme === "liquidGlass";
   const [visible, setVisible] = useState(false);
 
+  if (!isVibesPro) return null;
+
   const chooseTheme = async (value: (typeof NATIVE_THEME_OPTIONS)[number]["value"]) => {
     try {
       await setTheme(value);
@@ -50,7 +52,7 @@ export default function NativeThemeSelector() {
             <Text style={[styles.subtitle, { color: colors.muted }]}>
               {isVibesPro ? "Choose a look for the whole app" : "Choose an app theme"}
             </Text>
-            {NATIVE_THEME_OPTIONS.filter((option) => isVibesPro || option.value === "dark").map((option) => (
+            {NATIVE_THEME_OPTIONS.map((option) => (
               <Pressable
                 key={option.value}
                 accessibilityRole="radio"

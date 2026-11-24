@@ -462,16 +462,16 @@ export default function NativeProfileScreen() {
           </ScrollView>
         ) : ownEntitlementError ? (
           <View style={styles.center}>
-            <Text style={styles.error}>VibesPro status could not be checked: {entitlement.error.message}</Text>
-            <Pressable onPress={() => void refreshEntitlement()} style={styles.primaryButton}>
-              <Text style={styles.primaryButtonText}>Retry account status</Text>
+            <Text style={[styles.error, { color: colors.text }]}>VibesPro status could not be checked: {entitlement.error.message}</Text>
+            <Pressable onPress={() => void refreshEntitlement()} style={[styles.primaryButton, { backgroundColor: colors.accent }]}>
+              <Text style={[styles.primaryButtonText, { color: colors.accentText }]}>Retry account status</Text>
             </Pressable>
           </View>
         ) : error && !profile ? (
           <View style={styles.center}>
-            <Text style={styles.error}>{error}</Text>
-            <Pressable onPress={() => void refreshProfile()} style={styles.primaryButton}>
-              <Text style={styles.primaryButtonText}>Try again</Text>
+            <Text style={[styles.error, { color: colors.text }]}>{error}</Text>
+            <Pressable onPress={() => void refreshProfile()} style={[styles.primaryButton, { backgroundColor: colors.accent }]}>
+              <Text style={[styles.primaryButtonText, { color: colors.accentText }]}>Try again</Text>
             </Pressable>
           </View>
         ) : profile ? (
@@ -481,9 +481,9 @@ export default function NativeProfileScreen() {
           >
             {error ? (
               <View style={styles.center}>
-                <Text style={styles.error}>{error}</Text>
-                <Pressable onPress={() => void refreshProfile()} style={styles.primaryButton}>
-                  <Text style={styles.primaryButtonText}>Retry</Text>
+                <Text style={[styles.error, { color: colors.text }]}>{error}</Text>
+                <Pressable onPress={() => void refreshProfile()} style={[styles.primaryButton, { backgroundColor: colors.accent }]}>
+                  <Text style={[styles.primaryButtonText, { color: colors.accentText }]}>Retry</Text>
                 </Pressable>
               </View>
             ) : null}
@@ -551,12 +551,12 @@ export default function NativeProfileScreen() {
                 {displayPhoto ? (
                   <Image source={{ uri: displayPhoto }} style={styles.avatar} />
                 ) : (
-                  <View style={styles.avatarFallback}>
-                    <Text style={styles.avatarInitial}>{profile.username.slice(0, 1).toUpperCase()}</Text>
+                  <View style={[styles.avatarFallback, { backgroundColor: colors.control }]}>
+                    <Text style={[styles.avatarInitial, { color: colors.text }]}>{profile.username.slice(0, 1).toUpperCase()}</Text>
                   </View>
                 )}
                 {photoLoading ? (
-                  <View style={styles.avatarLoading}><ActivityIndicator color="#ffffff" /></View>
+                  <View style={styles.avatarLoading}><ActivityIndicator color={colors.accentText} /></View>
                 ) : null}
               </Pressable>
               {isOwnProfile ? (
@@ -665,36 +665,38 @@ export default function NativeProfileScreen() {
               </View>
             </NativeGlassSurface>
 
-            <View style={styles.section}>
-              <Text style={[styles.sectionTitle, vibesPro && !isLiquidGlass && styles.goldText, isLiquidGlass && { color: colors.text }]}>Highlights</Text>
+            <View style={[styles.section, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+              <Text style={[styles.sectionTitle, vibesPro && !isLiquidGlass && styles.goldText, { color: colors.text }]}>Highlights</Text>
               {postsLoading ? <NativeProfilePostsSkeleton /> : posts.some((post) => post.highlighted) ? (
                 posts.filter((post) => post.highlighted).map((post) => (
                   <View key={`highlight-${post.id}`} style={[
                     styles.highlightCard,
                     vibesPro && !isLiquidGlass && styles.highlightCardGold,
                     isLiquidGlass && { borderColor: colors.border, backgroundColor: colors.surface },
+                    { borderColor: colors.border, backgroundColor: colors.raised },
                   ]}>
                     {post.image_url ? <Image source={{ uri: post.image_url }} style={styles.highlightImage} /> : null}
                     <Text numberOfLines={3} style={[
                       styles.highlightText,
                       vibesPro && !isLiquidGlass && styles.premiumText,
                       isLiquidGlass && { color: colors.text },
+                      { color: colors.text },
                     ]}>
                       {post.text || "A highlighted snapshot"}
                     </Text>
                   </View>
                 ))
               ) : posts.length === 0 && !profilePostsQuery.isError ? (
-                <Text style={[styles.emptyText, vibesPro && styles.darkSubtext]}>No highlights yet.</Text>
+                <Text style={[styles.emptyText, vibesPro && styles.darkSubtext, { color: colors.muted }]}>No highlights yet.</Text>
               ) : null}
             </View>
 
-            <View style={styles.section}>
-              <Text style={[styles.sectionTitle, vibesPro && !isLiquidGlass && styles.goldText, isLiquidGlass && { color: colors.text }]}>
+            <View style={[styles.section, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+              <Text style={[styles.sectionTitle, vibesPro && !isLiquidGlass && styles.goldText, { color: colors.text }]}>
                 {isOwnProfile ? "My Snapshots" : "Snapshots"}
               </Text>
               {postsLoading ? <NativeProfilePostsSkeleton /> : posts.length === 0 && !profilePostsQuery.isError ? (
-                <Text style={[styles.emptyText, vibesPro && styles.darkSubtext]}>No posts to show yet.</Text>
+                <Text style={[styles.emptyText, vibesPro && styles.darkSubtext, { color: colors.muted }]}>No posts to show yet.</Text>
               ) : posts.map((post) => <View key={post.id} style={styles.postWrap}>{renderPost(post)}</View>)}
             </View>
           </ScrollView>
@@ -785,30 +787,30 @@ export default function NativeProfileScreen() {
         <View style={[styles.modalBackdrop, isLiquidGlass && { backgroundColor: "rgba(18,20,22,0.34)" }]}>
           <NativeBlurBackdrop intensity={26} overlayColor="rgba(15,23,42,0.42)" />
           <Pressable onPress={() => setEditOpen(false)} style={StyleSheet.absoluteFill} />
-          <View style={[styles.editCard, isLiquidGlass && { borderColor: colors.border, backgroundColor: colors.surface }]}>
-            <Text style={[styles.editTitle, isLiquidGlass && { color: colors.text }]}>Edit profile</Text>
-            <Text style={[styles.inputLabel, isLiquidGlass && { color: colors.text }]}>About me</Text>
+          <View style={[styles.editCard, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+            <Text style={[styles.editTitle, { color: colors.text }]}>Edit profile</Text>
+            <Text style={[styles.inputLabel, { color: colors.text }]}>About me</Text>
             <TextInput
               multiline
               onChangeText={setEditBio}
               placeholder="Tell people a little about you"
-              style={[styles.textInput, styles.bioInput, isLiquidGlass && { color: colors.text, borderColor: colors.border, backgroundColor: colors.control }]}
+              style={[styles.textInput, styles.bioInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.control }]}
               value={editBio}
             />
-            <Text style={[styles.inputLabel, isLiquidGlass && { color: colors.text }]}>Interests</Text>
+            <Text style={[styles.inputLabel, { color: colors.text }]}>Interests</Text>
             <TextInput
               onChangeText={setEditInterests}
               placeholder="Music, art, travel"
-              style={[styles.textInput, isLiquidGlass && { color: colors.text, borderColor: colors.border, backgroundColor: colors.control }]}
+              style={[styles.textInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.control }]}
               value={editInterests}
             />
-            <Text style={[styles.inputHint, isLiquidGlass && { color: colors.muted }]}>Separate interests with commas.</Text>
+            <Text style={[styles.inputHint, { color: colors.muted }]}>Separate interests with commas.</Text>
             <View style={styles.editActions}>
-              <Pressable disabled={savingEdit} onPress={() => setEditOpen(false)} style={styles.cancelButton}>
-                <Text style={styles.cancelText}>Cancel</Text>
+              <Pressable disabled={savingEdit} onPress={() => setEditOpen(false)} style={[styles.cancelButton, { borderColor: colors.border, backgroundColor: colors.raised }]}>
+                <Text style={[styles.cancelText, { color: colors.text }]}>Cancel</Text>
               </Pressable>
-              <Pressable disabled={savingEdit} onPress={() => void saveProfile()} style={styles.primaryButton}>
-                {savingEdit ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.primaryButtonText}>Save changes</Text>}
+              <Pressable disabled={savingEdit} onPress={() => void saveProfile()} style={[styles.primaryButton, { backgroundColor: colors.accent }]}>
+                {savingEdit ? <ActivityIndicator color={colors.accentText} /> : <Text style={[styles.primaryButtonText, { color: colors.accentText }]}>Save changes</Text>}
               </Pressable>
             </View>
           </View>

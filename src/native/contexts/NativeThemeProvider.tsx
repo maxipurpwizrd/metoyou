@@ -6,6 +6,7 @@ import { useNativeEntitlement } from "./NativeEntitlementProvider";
 import { useNativeAuth } from "./NativeAuthProvider";
 
 export type NativeTheme =
+  | "standard"
   | "dark"
   | "bluesky"
   | "white"
@@ -65,6 +66,17 @@ export const NATIVE_TYPE_SCALE = {
 };
 
 export const NATIVE_THEME_COLORS = {
+  standard: {
+    background: ["#e8f8ff", "#dbeafe", "#f8fafc"] as const,
+    surface: "rgba(255,255,255,0.94)",
+    raised: "#f8fafc",
+    control: "#bae6fd",
+    border: "#dbeafe",
+    text: "#082f49",
+    muted: "#0369a1",
+    accent: "#0284c7",
+    accentText: "#ffffff",
+  },
   dark: {
     background: ["#05070b", "#0b0f16", "#111827"] as const,
     surface: "#10141b",
@@ -171,7 +183,7 @@ export function NativeThemeProvider({ children }: { children: ReactNode }) {
   const { entitlement } = useNativeEntitlement();
   const userId = cacheUserId;
   const isVibesPro = entitlement.status === "vibesPro";
-  const [theme, setThemeState] = useState<NativeTheme>("dark");
+  const [theme, setThemeState] = useState<NativeTheme>("standard");
   const [ready, setReady] = useState(false);
   const [loadedUserId, setLoadedUserId] = useState<string | null>(null);
   const themeReady = ready && loadedUserId === userId;
@@ -180,7 +192,7 @@ export function NativeThemeProvider({ children }: { children: ReactNode }) {
     let active = true;
     setReady(false);
     setLoadedUserId(null);
-    setThemeState("dark");
+    setThemeState("standard");
     if (!userId) {
       setReady(true);
       setLoadedUserId(null);
@@ -188,14 +200,23 @@ export function NativeThemeProvider({ children }: { children: ReactNode }) {
         active = false;
       };
     }
+    if (entitlement.status === "loading" || entitlement.status === "unknown") {
+      return () => {
+        active = false;
+      };
+    }
 
     void (async () => {
       try {
-        const userStorageKey = `${STORAGE_KEY_PREFIX}${userId}`;
-        let savedTheme = await AsyncStorage.getItem(userStorageKey);
-        const restoredTheme = NATIVE_THEME_OPTIONS.find((option) => option.value === savedTheme)?.value;
-        if (active && restoredTheme) {
-          setThemeState(restoredTheme);
+        if (entitlement.status === "vibesPro") {
+          const userStorageKey = `${STORAGE_KEY_PREFIX}${userId}`;
+          const savedTheme = await AsyncStorage.getItem(userStorageKey);
+          const restoredTheme = NATIVE_THEME_OPTIONS.find((option) => option.value === savedTheme)?.value;
+          if (active && restoredTheme) {
+            setThemeState(restoredTheme);
+          } else if (active) {
+            setThemeState("dark");
+          }
         }
       } catch (cause: unknown) {
         console.warn("Could not restore the saved native theme.", cause);
@@ -209,7 +230,7 @@ export function NativeThemeProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, [userId]);
+  }, [entitlement.status, userId]);
 
   useEffect(() => {
     if (!userId || !isVibesPro) return;
@@ -235,20 +256,24 @@ export function NativeThemeProvider({ children }: { children: ReactNode }) {
   const setTheme = useCallback(async (nextTheme: NativeTheme) => {
     if (!themeReady) throw new Error("The account theme is still loading.");
     if (!userId) throw new Error("Sign in before changing the app theme.");
-    if (nextTheme !== "dark") {
-      if (entitlement.status === "loading" || entitlement.status === "unknown") {
-        throw new Error("VibesPro access is still loading.");
-      }
-      if (entitlement.status === "error") throw entitlement.error;
-      if (!isVibesPro) throw new Error("App themes are available only to VibesPro accounts.");
+    if (entitlement.status === "loading" || entitlement.status === "unknown") {
+      throw new Error("VibesPro access is still loading.");
     }
+    if (entitlement.status === "error") throw entitlement.error;
+    if (!isVibesPro) {
+      if (nextTheme !== "standard") throw new Error("Only the Standard theme is available to free accounts.");
+      await AsyncStorage.setItem(`${STORAGE_KEY_PREFIX}${userId}`, "standard");
+      setThemeState("standard");
+      return;
+    }
+    if (nextTheme === "standard") throw new Error("Standard is not a VibesPro theme.");
     await AsyncStorage.setItem(`${STORAGE_KEY_PREFIX}${userId}`, nextTheme);
     setThemeState(nextTheme);
   }, [entitlement, isVibesPro, themeReady, userId]);
 
   const value = useMemo(
     () => ({
-      theme: isVibesPro && themeReady ? theme : "dark",
+      theme: isVibesPro && themeReady ? theme : "standard",
       ready: themeReady,
       isVibesPro,
       entitlement,
@@ -259,8 +284,8 @@ export function NativeThemeProvider({ children }: { children: ReactNode }) {
   return (
     <NativeThemeContext.Provider value={value}>
       {themeReady ? children : (
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: NATIVE_THEME_COLORS.dark.surface }}>
-          <ActivityIndicator color={NATIVE_THEME_COLORS.dark.accent} />
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: NATIVE_THEME_COLORS.standard.surface }}>
+          <ActivityIndicator color={NATIVE_THEME_COLORS.standard.accent} />
         </View>
       )}
     </NativeThemeContext.Provider>

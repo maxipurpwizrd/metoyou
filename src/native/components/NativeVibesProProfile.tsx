@@ -661,8 +661,8 @@ export default function NativeVibesProProfile({
                     action.disabled && styles.disabled,
                   ]}
                 >
-                  <Text style={[styles.menuIcon, isBlueSky && styles.blueSkyText, action.danger && styles.dangerText, { color: action.danger ? "#be123c" : colors.accent }]}>{action.icon}</Text>
-                  <Text style={[styles.menuLabel, isBlueSky && styles.blueSkyText, action.danger && styles.dangerText, { color: action.danger ? "#be123c" : colors.text }]}>{action.label}</Text>
+                  <Text style={[styles.menuIcon, { color: action.danger ? "#ffffff" : colors.accent }]}>{action.icon}</Text>
+                  <Text style={[styles.menuLabel, { color: action.danger ? "#ffffff" : colors.text }]}>{action.label}</Text>
                 </Pressable>
               ))}
             </View>
@@ -1031,7 +1031,7 @@ const styles = StyleSheet.create({
   menuGridCell: { width: 9, height: 9, borderRadius: 2, backgroundColor: "#fde68a" },
   menuActionGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   menuActionTile: { width: "48%", minHeight: 82, flexGrow: 1, alignItems: "center", justifyContent: "center", gap: 7, padding: 10, borderWidth: 1, borderColor: "rgba(253,230,138,0.26)", borderRadius: 16, backgroundColor: "rgba(255,255,255,0.06)" },
-  menuDangerTile: { borderColor: "rgba(251,113,133,0.42)", backgroundColor: "rgba(159,18,57,0.12)" },
+  menuDangerTile: { borderColor: "#f87171", backgroundColor: "#dc2626" },
   menuIcon: { color: "#fde68a", fontSize: 23, fontWeight: "800" },
   menuLabel: { color: "#fff3b0", fontSize: 12, fontWeight: "700", textAlign: "center" },
   disabled: { opacity: 0.55 },

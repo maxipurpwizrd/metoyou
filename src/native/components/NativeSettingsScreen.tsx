@@ -28,6 +28,7 @@ import type { NativeProfile } from "../lib/profile";
 import { NATIVE_THEME_COLORS, NATIVE_THEME_OPTIONS, NATIVE_TYPE_SCALE, useNativeTheme } from "../contexts/NativeThemeProvider";
 import NativeGlassSurface, { NATIVE_LIQUID_GLASS_PRESSED } from "./NativeGlassSurface";
 import NativeBlurBackdrop from "./NativeBlurBackdrop";
+import NativeHoldToConfirmDialog from "./NativeHoldToConfirmDialog";
 import { NativeSettingsSkeleton } from "./NativeScreenSkeletons";
 import {
   getNativePushRegistrationStatus,
@@ -398,7 +399,7 @@ export default function NativeSettingsScreen() {
               onPress={() => router.replace("/(app)/(tabs)/profile")}
               style={[styles.backButton, isBlueSky && styles.blueSkyControl, { borderColor: colors.border, backgroundColor: colors.control }]}
             >
-              <Text style={styles.backButtonText}>‹</Text>
+              <Text style={[styles.backButtonText, { color: colors.text }]}>‹</Text>
             </Pressable>
             <View style={styles.headerCopy}>
               <Text style={[styles.headerOverline, { color: colors.muted }]}>ACCOUNT</Text>
@@ -426,7 +427,7 @@ export default function NativeSettingsScreen() {
             onPress={() => router.replace("/(app)/(tabs)/profile")}
             style={[styles.backButton, isBlueSky && styles.blueSkyControl, { borderColor: colors.border, backgroundColor: colors.control }]}
           >
-            <Text style={styles.backButtonText}>‹</Text>
+            <Text style={[styles.backButtonText, { color: colors.text }]}>‹</Text>
           </Pressable>
           <View style={styles.headerCopy}>
             <Text style={[styles.headerOverline, { color: colors.muted }]}>ACCOUNT</Text>
@@ -442,7 +443,7 @@ export default function NativeSettingsScreen() {
             <View style={[styles.errorCard, isBlueSky && styles.blueSkyOption, { borderColor: colors.border, backgroundColor: colors.surface }]}>
               <Text style={[styles.errorText, { color: colors.text }]}>VibesPro status could not be checked: {entitlement.error.message}</Text>
               <Pressable onPress={() => void refreshEntitlement()} style={[styles.retryButton, { backgroundColor: colors.control }]}>
-                <Text style={styles.retryText}>Retry account status</Text>
+                <Text style={[styles.retryText, { color: colors.text }]}>Retry account status</Text>
               </Pressable>
             </View>
           ) : null}
@@ -450,7 +451,7 @@ export default function NativeSettingsScreen() {
             <View style={[styles.errorCard, isBlueSky && styles.blueSkyOption, { borderColor: colors.border, backgroundColor: colors.surface }]}>
               <Text style={[styles.errorText, { color: colors.text }]}>{screenError}</Text>
               <Pressable onPress={() => void loadProfile()} style={[styles.retryButton, { backgroundColor: colors.control }]}>
-                <Text style={styles.retryText}>Try again</Text>
+                <Text style={[styles.retryText, { color: colors.text }]}>Try again</Text>
               </Pressable>
             </View>
           ) : null}
@@ -462,9 +463,9 @@ export default function NativeSettingsScreen() {
               <Text style={[styles.upgradeBody, { color: colors.muted }]}>Bring your profile to life with the VibesPro experience.</Text>
               <Pressable
                 onPress={() => Alert.alert("VibesPro", "VibesPro upgrades are not available in the native app yet.")}
-                style={styles.upgradeButton}
+                style={[styles.upgradeButton, { borderColor: colors.border, backgroundColor: colors.control }]}
               >
-                <Text style={styles.upgradeButtonText}>Explore VibesPro</Text>
+                <Text style={[styles.upgradeButtonText, { color: colors.text }]}>Explore VibesPro</Text>
               </Pressable>
             </View>
           ) : null}
@@ -483,18 +484,18 @@ export default function NativeSettingsScreen() {
 
           {section("Security", "ACCOUNT ACCESS", (
             <>
-              <View style={styles.infoRow}>
-                <View style={styles.rowIcon}><Text style={styles.rowIconText}>✉</Text></View>
+              <View style={[styles.infoRow, { borderColor: colors.border }]}>
+                <View style={[styles.rowIcon, { backgroundColor: colors.control, borderColor: colors.border }]}><Text style={[styles.rowIconText, { color: colors.text }]}>✉</Text></View>
                 <View style={styles.rowText}>
-                    <Text style={styles.rowTitle}>Email address</Text>
-                    <Text style={styles.rowDetail}>{session?.user.email ?? "No email available"}</Text>
+                    <Text style={[styles.rowTitle, { color: colors.text }]}>Email address</Text>
+                    <Text style={[styles.rowDetail, { color: colors.muted }]}>{session?.user.email ?? "No email available"}</Text>
                 </View>
               </View>
-              <View style={styles.infoRow}>
-                <View style={styles.rowIcon}><Text style={styles.rowIconText}>🔒</Text></View>
+              <View style={[styles.infoRow, { borderColor: colors.border }]}>
+                <View style={[styles.rowIcon, { backgroundColor: colors.control, borderColor: colors.border }]}><Text style={[styles.rowIconText, { color: colors.text }]}>🔒</Text></View>
                 <View style={styles.rowText}>
-                  <Text style={styles.rowTitle}>Password</Text>
-                  <Text style={styles.rowDetail}>Password changes are managed through your account sign-in.</Text>
+                  <Text style={[styles.rowTitle, { color: colors.text }]}>Password</Text>
+                  <Text style={[styles.rowDetail, { color: colors.muted }]}>Password changes are managed through your account sign-in.</Text>
                 </View>
               </View>
             </>
@@ -551,7 +552,11 @@ export default function NativeSettingsScreen() {
                   <View style={styles.languageCopy}>
                     <Text style={[styles.rowTitle, { color: colors.text }]}>{option.label}</Text>
                     <Text style={[styles.rowDetail, { color: colors.muted }]}>
-                      {theme === option.value ? "Current theme" : option.value === "white" ? "Bright and minimal" : "Colorful app theme"}
+                      {theme === option.value
+                        ? "Current theme"
+                        : option.value === "white"
+                          ? "Bright and minimal"
+                          : "Colorful app theme"}
                     </Text>
                   </View>
                   <Text style={[styles.radio, { color: colors.accent }]}>
@@ -600,8 +605,8 @@ export default function NativeSettingsScreen() {
           ))}
 
           {section("Sign out", "END THIS SESSION", (
-            <Pressable onPress={() => setLogoutOpen(true)} style={styles.logoutButton}>
-              <Text style={styles.logoutText}>Sign out</Text>
+            <Pressable onPress={() => setLogoutOpen(true)} style={[styles.logoutButton, { borderColor: "#f87171", backgroundColor: "#dc2626" }]}>
+              <Text style={[styles.logoutText, { color: "#ffffff" }]}>Sign out</Text>
             </Pressable>
           ))}
         </ScrollView>
@@ -627,11 +632,11 @@ export default function NativeSettingsScreen() {
               <View style={styles.pictureActions}>
                 {profile?.profile_pic ? <Image source={{ uri: profile.profile_pic }} style={styles.picturePreview} /> : null}
                 <Pressable disabled={saving} onPress={() => void uploadProfilePicture()} style={styles.pictureButton}>
-                  {saving ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.pictureButtonText}>Choose from gallery</Text>}
+                  {saving ? <ActivityIndicator color={colors.accentText} /> : <Text style={[styles.pictureButtonText, { color: colors.text }]}>Choose from gallery</Text>}
                 </Pressable>
                 {profile?.profile_pic ? (
                   <Pressable disabled={saving} onPress={() => void removeProfilePicture()} style={styles.removePictureButton}>
-                    <Text style={styles.removePictureText}>Remove profile picture</Text>
+                    <Text style={[styles.removePictureText, { color: colors.text }]}>Remove profile picture</Text>
                   </Pressable>
                 ) : null}
               </View>
@@ -648,7 +653,7 @@ export default function NativeSettingsScreen() {
                 />
                 {editField === "username" ? <Text style={[styles.editHint, { color: colors.muted }]}>Your username appears on your MeToYou profile.</Text> : null}
                 <Pressable disabled={saving || !editValue.trim()} onPress={() => void saveCurrentField()} style={[styles.saveButton, { borderColor: colors.border, backgroundColor: colors.accent }, (saving || !editValue.trim()) && styles.disabled]}>
-                  {saving ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.saveButtonText}>Save changes</Text>}
+                  {saving ? <ActivityIndicator color={colors.accentText} /> : <Text style={[styles.saveButtonText, { color: colors.accentText }]}>Save changes</Text>}
                 </Pressable>
               </>
             )}
@@ -678,37 +683,24 @@ export default function NativeSettingsScreen() {
               style={[styles.editInput, styles.multilineInput, { borderColor: colors.border, backgroundColor: colors.raised, color: colors.text }]}
               value={supportDescription}
             />
-            {supportMessage ? <Text style={styles.supportMessage}>{supportMessage}</Text> : null}
+            {supportMessage ? <Text style={[styles.supportMessage, { color: colors.muted }]}>{supportMessage}</Text> : null}
             <Pressable
               disabled={supportBusy || !supportDescription.trim()}
               onPress={() => void submitSupportTicket()}
               style={[styles.saveButton, { borderColor: colors.border, backgroundColor: colors.accent }, (supportBusy || !supportDescription.trim()) && styles.disabled]}
             >
-              {supportBusy ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.saveButtonText}>Send report</Text>}
+              {supportBusy ? <ActivityIndicator color={colors.accentText} /> : <Text style={[styles.saveButtonText, { color: colors.accentText }]}>Send report</Text>}
             </Pressable>
           </View>
         </KeyboardAvoidingView>
       </Modal>
 
-      <Modal animationType="fade" onRequestClose={() => setLogoutOpen(false)} transparent visible={logoutOpen}>
-        <View style={styles.modalBackdrop}>
-          <NativeBlurBackdrop intensity={22} overlayColor="rgba(0,0,0,0.55)" />
-          <Pressable onPress={() => setLogoutOpen(false)} style={StyleSheet.absoluteFill} />
-          <View style={[styles.editCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.modalOverline, { color: colors.muted }]}>END THIS SESSION</Text>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Sign out?</Text>
-            <Text style={[styles.logoutDescription, { color: colors.muted }]}>You can sign back in at any time. Your account and content will remain unchanged.</Text>
-            <View style={styles.logoutActions}>
-              <Pressable onPress={() => setLogoutOpen(false)} style={[styles.cancelButton, { borderColor: colors.border, backgroundColor: colors.raised }]}>
-                <Text style={[styles.cancelText, { color: colors.text }]}>Cancel</Text>
-              </Pressable>
-              <Pressable disabled={saving} onPress={() => void signOut()} style={[styles.confirmLogoutButton, { backgroundColor: colors.accent }]}>
-                {saving ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.confirmLogoutText}>Sign out</Text>}
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <NativeHoldToConfirmDialog
+        busy={saving}
+        onCancel={() => setLogoutOpen(false)}
+        onConfirm={() => void signOut()}
+        visible={logoutOpen}
+      />
     </LinearGradient>
   );
 }
@@ -789,10 +781,6 @@ const styles = StyleSheet.create({
   removePictureText: { color: "#ffffff", fontWeight: "800" },
   multilineInput: { minHeight: 130, textAlignVertical: "top", paddingTop: 12 },
   supportMessage: { marginTop: 9, color: "#ffffff", fontSize: 12, fontWeight: "700" },
-  logoutDescription: { marginTop: 8, color: "#ffffff", fontSize: 13, lineHeight: 20 },
-  logoutActions: { flexDirection: "row", gap: 10, marginTop: 18 },
   cancelButton: { flex: 1, minHeight: 46, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#454b55", borderRadius: 15, backgroundColor: "#171c25" },
   cancelText: { color: "#ffffff", fontWeight: "800" },
-  confirmLogoutButton: { flex: 1, minHeight: 46, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#555d69", borderRadius: 15, backgroundColor: "#303743" },
-  confirmLogoutText: { color: "#ffffff", fontWeight: "900" },
 });

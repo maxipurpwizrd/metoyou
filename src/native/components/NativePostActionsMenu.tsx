@@ -142,8 +142,7 @@ export default function NativePostActionsMenu(props: Props) {
             onPress={(event) => event.stopPropagation()}
             style={[
               styles.menuCard,
-              premium && theme === "dark" && styles.premiumMenu,
-              theme !== "dark" && !isLiquidGlass && { borderColor: colors.border, backgroundColor: colors.surface },
+              { borderColor: colors.border, backgroundColor: colors.surface },
               isLiquidGlass && NATIVE_LIQUID_GLASS_POPUP_SURFACE,
             ]}
           >
@@ -156,7 +155,7 @@ export default function NativePostActionsMenu(props: Props) {
                 accessibilityRole="button"
                 disabled={busy}
                 onPress={() => setMode("closed")}
-                style={styles.closeButton}
+                style={[styles.closeButton, { backgroundColor: colors.control }]}
               >
                 <Text style={[styles.closeText, { color: titleColor }]}>×</Text>
               </Pressable>
@@ -172,9 +171,9 @@ export default function NativePostActionsMenu(props: Props) {
                     onPress={action.onPress}
                     style={({ pressed }) => [
                       styles.actionButton,
-                      premium && theme === "dark" && styles.premiumActionButton,
-                      theme !== "dark" && !isLiquidGlass && { borderColor: colors.border, backgroundColor: colors.raised },
+                      { borderColor: colors.border, backgroundColor: colors.raised },
                       isLiquidGlass && styles.liquidGlassActionButton,
+                      action.danger && styles.dangerActionButton,
                       pressed && !action.disabled && (isLiquidGlass ? NATIVE_LIQUID_GLASS_PRESSED : styles.pressed),
                       action.disabled && styles.actionDisabled,
                     ]}
@@ -182,9 +181,7 @@ export default function NativePostActionsMenu(props: Props) {
                     <Text
                       style={[
                         styles.actionIcon,
-                        premium && theme === "dark" && styles.premiumActionText,
-                          { color: colors.text },
-                        action.danger && styles.dangerText,
+                        { color: action.danger ? "#ffffff" : colors.text },
                         action.disabled && styles.disabledText,
                       ]}
                     >
@@ -193,9 +190,7 @@ export default function NativePostActionsMenu(props: Props) {
                     <Text
                       style={[
                         styles.actionLabel,
-                        premium && theme === "dark" && styles.premiumActionText,
-                        { color: colors.muted },
-                        action.danger && styles.dangerText,
+                        { color: action.danger ? "#ffffff" : colors.muted },
                         action.disabled && styles.disabledText,
                       ]}
                     >
@@ -212,17 +207,16 @@ export default function NativePostActionsMenu(props: Props) {
                   multiline
                   onChangeText={setEditText}
                   placeholder="Drop your vibe 💬"
-                  placeholderTextColor={premium ? "#92400e" : "#94a3b8"}
+                  placeholderTextColor={colors.muted}
                   style={[
                     styles.editInput,
-                    premium && theme === "dark" && styles.premiumInput,
-                    theme !== "dark" && !isLiquidGlass && { borderColor: colors.border, backgroundColor: colors.raised, color: colors.text },
+                    { borderColor: colors.border, backgroundColor: colors.control, color: colors.text },
                     isLiquidGlass && styles.liquidGlassInput,
                   ]}
                   textAlignVertical="top"
                   value={editText}
                 />
-                <Text style={styles.characterCount}>{editText.length}/500</Text>
+                <Text style={[styles.characterCount, { color: colors.muted }]}>{editText.length}/500</Text>
                 <Pressable
                   accessibilityRole="button"
                   disabled={busy}
@@ -231,12 +225,16 @@ export default function NativePostActionsMenu(props: Props) {
                       await props.onEdit(editText);
                     })
                   }
-                  style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}
+                  style={({ pressed }) => [
+                    styles.primaryButton,
+                    { backgroundColor: colors.accent },
+                    pressed && styles.pressed,
+                  ]}
                 >
                   {busy ? (
-                    <ActivityIndicator color="#ffffff" />
+                    <ActivityIndicator color={colors.accentText} />
                   ) : (
-                    <Text style={styles.primaryButtonText}>Save changes</Text>
+                    <Text style={[styles.primaryButtonText, { color: colors.accentText }]}>Save changes</Text>
                   )}
                 </Pressable>
               </>
@@ -250,16 +248,15 @@ export default function NativePostActionsMenu(props: Props) {
                     onPress={() => void execute(() => props.onReport(reason))}
                     style={({ pressed }) => [
                       styles.reportOption,
-                      premium && theme === "dark" && styles.premiumActionButton,
-                      theme !== "dark" && !isLiquidGlass && { borderColor: colors.border, backgroundColor: colors.raised },
+                      { borderColor: colors.border, backgroundColor: colors.raised },
                       isLiquidGlass && styles.liquidGlassActionButton,
                       pressed && styles.pressed,
                     ]}
                   >
-                    <Text style={[styles.reportNumber, premium && theme === "dark" && styles.premiumActionText, { color: colors.text }]}>
+                    <Text style={[styles.reportNumber, { color: colors.muted }]}>
                       {index + 1}.
                     </Text>
-                    <Text style={[styles.reportText, premium && theme === "dark" && styles.premiumActionText, { color: colors.text }]}>
+                    <Text style={[styles.reportText, { color: colors.text }]}>
                       {reason}
                     </Text>
                   </Pressable>
@@ -303,7 +300,7 @@ const styles = StyleSheet.create({
   },
   gridIcon: { width: 23, height: 23, flexDirection: "row", flexWrap: "wrap", gap: 3 },
   gridCell: { width: 9, height: 9, borderRadius: 2, backgroundColor: "#334155" },
-  goldGridCell: { backgroundColor: "#78350f" },
+  goldGridCell: { backgroundColor: "#ffffff" },
   backdrop: {
     flex: 1,
     alignItems: "center",
@@ -344,6 +341,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
   },
   liquidGlassActionButton: { borderColor: "rgba(235,240,242,0.4)", backgroundColor: "rgba(50,53,55,0.62)" },
+  dangerActionButton: { borderColor: "#f87171", backgroundColor: "#dc2626" },
   premiumActionButton: { borderColor: "#d97706", backgroundColor: "#fcd34d" },
   actionIcon: { color: "#334155", fontSize: 23, fontWeight: "800" },
   actionLabel: { color: "#334155", fontSize: 12, fontWeight: "700", textAlign: "center" },

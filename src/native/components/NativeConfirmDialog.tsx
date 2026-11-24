@@ -10,6 +10,7 @@ import {
 import NativeBlurBackdrop from "./NativeBlurBackdrop";
 import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
 import NativeGlassSurface, { NATIVE_LIQUID_GLASS_POPUP_SURFACE, NATIVE_LIQUID_GLASS_PRESSED } from "./NativeGlassSurface";
+import NativeHoldToConfirmDialog from "./NativeHoldToConfirmDialog";
 
 type Props = {
   visible: boolean;
@@ -56,6 +57,18 @@ export default function NativeConfirmDialog({
       setBusy(false);
     }
   };
+
+  if (destructive) {
+    return (
+      <NativeHoldToConfirmDialog
+        busy={busy}
+        errorMessage={error}
+        onCancel={onCancel}
+        onConfirm={() => void confirm()}
+        visible={visible}
+      />
+    );
+  }
 
   return (
     <Modal
@@ -121,16 +134,19 @@ export default function NativeConfirmDialog({
               onPress={() => void confirm()}
               style={({ pressed }) => [
                 styles.confirmButton,
-                destructive && !vibesPro && styles.destructiveButton,
                 vibesPro && theme === "dark" && styles.vibesProConfirmButton,
-                theme !== "dark" && { backgroundColor: destructive && !isLiquidGlass ? "#e11d48" : colors.accent },
+                theme !== "dark" && { backgroundColor: colors.accent },
                 pressed && (isLiquidGlass ? NATIVE_LIQUID_GLASS_PRESSED : styles.pressed),
               ]}
             >
               {busy ? (
                 <ActivityIndicator color="#ffffff" size="small" />
               ) : (
-                <Text style={[styles.confirmText, vibesPro && theme === "dark" && styles.vibesProConfirmText, { color: theme !== "dark" ? colors.accentText : vibesPro ? "#0B0B0B" : "#ffffff" }]}>
+                <Text style={[
+                  styles.confirmText,
+                  vibesPro && theme === "dark" && styles.vibesProConfirmText,
+                  { color: theme !== "dark" ? colors.accentText : vibesPro ? "#0B0B0B" : "#ffffff" },
+                ]}>
                   {confirmLabel}
                 </Text>
               )}
@@ -201,7 +217,6 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     backgroundColor: "#0284c7",
   },
-  destructiveButton: { backgroundColor: "#e11d48" },
   vibesProConfirmButton: { backgroundColor: "#D4AF37" },
   cancelText: { color: "#0369a1", fontSize: 14, fontWeight: "800" },
   vibesProCancelText: { color: "#ffffff" },

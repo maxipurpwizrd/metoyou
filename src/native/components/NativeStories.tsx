@@ -569,7 +569,11 @@ export default function NativeStories({
                     <Pressable
                       key={item.label}
                       onPress={item.action}
-                      style={({ pressed }) => [styles.menuAction, pressed && isLiquidGlass && NATIVE_LIQUID_GLASS_PRESSED]}
+                      style={({ pressed }) => [
+                        styles.menuAction,
+                        item.label === "Delete story" && styles.deleteMenuAction,
+                        pressed && isLiquidGlass && NATIVE_LIQUID_GLASS_PRESSED,
+                      ]}
                     >
                       <Text style={[
                         styles.menuActionText,
@@ -885,7 +889,8 @@ const styles = StyleSheet.create({
   blueSkyMenuCard: { borderColor: "#3478bd", backgroundColor: "#0b2d5b" },
   menuAction: { minHeight: 48, justifyContent: "center", paddingHorizontal: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#e2e8f0" },
   menuActionText: { color: "#0f172a", fontSize: 14, fontWeight: "700" },
-  deleteText: { color: "#e11d48" },
+  deleteMenuAction: { borderBottomColor: "#f87171", backgroundColor: "#dc2626" },
+  deleteText: { color: "#ffffff" },
   composerRoot: { flex: 1, justifyContent: "center", padding: 18 },
   composerBackdrop: { ...StyleSheet.absoluteFill },
   composerCard: { maxHeight: "92%", padding: 20, borderWidth: 1, borderColor: "#dbeafe", borderRadius: 27, backgroundColor: "#f8fdff", elevation: 12 },

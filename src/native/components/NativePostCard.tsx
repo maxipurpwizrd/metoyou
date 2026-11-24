@@ -3,6 +3,7 @@ import {
   Animated,
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
   Image,
   Modal,
   Pressable,
@@ -10,10 +11,12 @@ import {
   Share,
   StyleSheet,
   Text,
+  TextInput,
   View,
   Platform,
   useWindowDimensions,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Clipboard from "expo-clipboard";
 import { useRouter } from "expo-router";
@@ -24,9 +27,28 @@ import NativeGlassSurface, { NATIVE_LIQUID_GLASS_PRESSED } from "./NativeGlassSu
 import type { PostRecord } from "../../types/post";
 import { getRelativeTime } from "../../lib/time";
 import { isVibesProEnabled } from "../../lib/vibesPro";
+import { useNativeAuth } from "../contexts/NativeAuthProvider";
 import { NATIVE_THEME_COLORS, useNativeTheme } from "../contexts/NativeThemeProvider";
 import NativeCommentsSheet from "./NativeCommentsSheet";
 import NativePostActionsMenu from "./NativePostActionsMenu";
+
+const VIBES_PRO_BADGE_EMOJI_KEY_PREFIX = "metoyou-native-vibespro-badge-emoji:";
+const DEFAULT_VIBES_PRO_BADGE_EMOJI = "👑";
+const vibesProBadgeEmojiLoads = new Map<string, Promise<string>>();
+
+function loadVibesProBadgeEmoji(userId: string) {
+  const cached = vibesProBadgeEmojiLoads.get(userId);
+  if (cached) return cached;
+
+  const load = AsyncStorage.getItem(`${VIBES_PRO_BADGE_EMOJI_KEY_PREFIX}${userId}`)
+    .then((value) => value?.trim() || DEFAULT_VIBES_PRO_BADGE_EMOJI)
+    .catch((cause: unknown) => {
+      vibesProBadgeEmojiLoads.delete(userId);
+      throw cause;
+    });
+  vibesProBadgeEmojiLoads.set(userId, load);
+  return load;
+}
 
 export type NativePostcardTheme =
   | "bluesky"
@@ -103,12 +125,16 @@ export default function NativePostCard({
   const [classicCaptionExpanded, setClassicCaptionExpanded] = useState(false);
   const [classicCaptionHasMore, setClassicCaptionHasMore] = useState(false);
   const [commentCount, setCommentCount] = useState(post.comments_count ?? 0);
+  const [badgeEmojiPreference, setBadgeEmojiPreference] = useState<{ userId: string; emoji: string } | null>(null);
+  const [badgeEmojiDraft, setBadgeEmojiDraft] = useState("");
+  const [badgeEmojiEditorOpen, setBadgeEmojiEditorOpen] = useState(false);
   const { width: screenWidth } = useWindowDimensions();
   const wideLayout = screenWidth >= 768;
   const captionLineHeight = wideLayout ? 25 : 22;
   const imageCaptionHeight = captionLineHeight * 5 + 22;
   const imagePostHeight = imageCaptionHeight + 9 + 36 * 2 + 8;
   const imageOnlyHeight = 360;
+  const { cacheUserId } = useNativeAuth();
   const { theme: appTheme } = useNativeTheme();
   const appColors = NATIVE_THEME_COLORS[appTheme];
   const router = useRouter();
@@ -116,6 +142,10 @@ export default function NativePostCard({
     is_vibes_pro: post.profiles?.is_vibes_pro ?? undefined,
     vibes_pro: post.profiles?.vibes_pro ?? undefined,
   });
+  const postcardBadgeEmoji =
+    badgeEmojiPreference?.userId === cacheUserId
+      ? badgeEmojiPreference.emoji
+      : DEFAULT_VIBES_PRO_BADGE_EMOJI;
   const username = post.profiles?.username || post.author_id;
   const avatar = post.profiles?.profile_pic;
   const text = post.text?.trim() ?? "";
@@ -263,6 +293,28 @@ export default function NativePostCard({
                 : "rgba(255,255,245,0.72)";
 
   useEffect(() => {
+    let active = true;
+    if (!cacheUserId || !isOwner || !isVibesPro) {
+      setBadgeEmojiPreference(null);
+      return () => {
+        active = false;
+      };
+    }
+
+    void loadVibesProBadgeEmoji(cacheUserId)
+      .then((emoji) => {
+        if (active) setBadgeEmojiPreference({ userId: cacheUserId, emoji });
+      })
+      .catch((cause: unknown) => {
+        console.warn("Could not restore the VibesPro badge emoji.", cause);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [cacheUserId, isOwner, isVibesPro]);
+
+  useEffect(() => {
     setCaptionHasScrolled(false);
     setCaptionScrollSize({ contentHeight: 0, viewportHeight: 0 });
   }, [post.id, text]);
@@ -278,6 +330,26 @@ export default function NativePostCard({
   };
   const updateCaptionContent = (contentHeight: number) => {
     setCaptionScrollSize((current) => ({ ...current, contentHeight }));
+  };
+  const openBadgeEmojiEditor = () => {
+    if (!cacheUserId || !isOwner) return;
+    setBadgeEmojiDraft(postcardBadgeEmoji);
+    setBadgeEmojiEditorOpen(true);
+  };
+  const saveBadgeEmoji = async () => {
+    if (!cacheUserId) return;
+    const emoji = badgeEmojiDraft.trim() || DEFAULT_VIBES_PRO_BADGE_EMOJI;
+    try {
+      await AsyncStorage.setItem(`${VIBES_PRO_BADGE_EMOJI_KEY_PREFIX}${cacheUserId}`, emoji);
+      vibesProBadgeEmojiLoads.set(cacheUserId, Promise.resolve(emoji));
+      setBadgeEmojiPreference({ userId: cacheUserId, emoji });
+      setBadgeEmojiEditorOpen(false);
+    } catch (cause: unknown) {
+      Alert.alert(
+        "Could not save badge emoji",
+        cause instanceof Error ? cause.message : "Please try again.",
+      );
+    }
   };
 
   useEffect(() => {
@@ -524,14 +596,18 @@ export default function NativePostCard({
                 {username}
               </Text>
               {isVibesPro ? (
-                <View
+                <Pressable
+                  accessibilityLabel={isOwner ? "Change your VibesPro badge emoji" : undefined}
+                  accessibilityRole={isOwner ? "button" : undefined}
+                  disabled={!isOwner}
+                  onPress={openBadgeEmojiEditor}
                   style={[
                     styles.vibesBadge,
                     palette && { borderColor: palette.border, backgroundColor: palette.control },
                   ]}
                 >
-                  <Text style={[styles.vibesBadgeText, palette && { color: palette.controlText }]}>👑 VibesPro</Text>
-                </View>
+                  <Text style={[styles.vibesBadgeText, palette && { color: palette.controlText }]}>{postcardBadgeEmoji} VibesPro</Text>
+                </Pressable>
               ) : null}
               <Text style={[
                 styles.time,
@@ -1050,6 +1126,52 @@ export default function NativePostCard({
           </Pressable>
         </View>
       </Modal>
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setBadgeEmojiEditorOpen(false)}
+        transparent
+        visible={badgeEmojiEditorOpen}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={styles.badgeEmojiBackdrop}
+        >
+          <Pressable
+            accessibilityLabel="Close badge emoji editor"
+            onPress={() => setBadgeEmojiEditorOpen(false)}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={styles.badgeEmojiCard}>
+            <Text style={styles.badgeEmojiTitle}>Choose your badge emoji</Text>
+            <TextInput
+              accessibilityLabel="VibesPro badge emoji"
+              autoFocus
+              maxLength={16}
+              onChangeText={setBadgeEmojiDraft}
+              onSubmitEditing={() => void saveBadgeEmoji()}
+              placeholder={DEFAULT_VIBES_PRO_BADGE_EMOJI}
+              returnKeyType="done"
+              selectTextOnFocus
+              style={styles.badgeEmojiInput}
+              value={badgeEmojiDraft}
+            />
+            <View style={styles.badgeEmojiActions}>
+              <Pressable
+                onPress={() => setBadgeEmojiEditorOpen(false)}
+                style={styles.badgeEmojiCancel}
+              >
+                <Text style={styles.badgeEmojiCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => void saveBadgeEmoji()}
+                style={styles.badgeEmojiSave}
+              >
+                <Text style={styles.badgeEmojiSaveText}>Save</Text>
+              </Pressable>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </>
   );
 }
@@ -1151,6 +1273,15 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffe27a",
   },
   vibesBadgeText: { color: "#451a03", fontSize: 9, fontWeight: "900" },
+  badgeEmojiBackdrop: { flex: 1, justifyContent: "center", padding: 22, backgroundColor: "rgba(2,6,23,0.64)" },
+  badgeEmojiCard: { width: "100%", maxWidth: 360, alignSelf: "center", padding: 18, borderWidth: 1, borderColor: "#dbeafe", borderRadius: 22, backgroundColor: "#f8fdff" },
+  badgeEmojiTitle: { color: "#082f49", fontSize: 17, fontWeight: "900" },
+  badgeEmojiInput: { minHeight: 52, marginTop: 14, paddingHorizontal: 14, borderWidth: 1, borderColor: "#bae6fd", borderRadius: 14, color: "#0c4a6e", backgroundColor: "#ffffff", fontSize: 24, textAlign: "center" },
+  badgeEmojiActions: { flexDirection: "row", justifyContent: "flex-end", gap: 9, marginTop: 14 },
+  badgeEmojiCancel: { minHeight: 42, justifyContent: "center", paddingHorizontal: 14, borderRadius: 13, backgroundColor: "#e2e8f0" },
+  badgeEmojiCancelText: { color: "#334155", fontSize: 13, fontWeight: "800" },
+  badgeEmojiSave: { minHeight: 42, justifyContent: "center", paddingHorizontal: 18, borderRadius: 13, backgroundColor: "#0284c7" },
+  badgeEmojiSaveText: { color: "#ffffff", fontSize: 13, fontWeight: "900" },
   time: { flexShrink: 0, color: "#64748b", fontSize: 10 },
   goldenTime: { color: "#78350f" },
   highlightBadge: {

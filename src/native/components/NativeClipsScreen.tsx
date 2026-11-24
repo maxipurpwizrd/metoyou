@@ -39,8 +39,8 @@ import {
 import NativeBlurBackdrop, { NativeBlurTargetContext, type NativeBlurTargetRef } from "./NativeBlurBackdrop";
 import NativeClipCard from "./NativeClipCard";
 import NativeCommentsSheet from "./NativeCommentsSheet";
+import NativeClipShareButton from "./NativeClipShareButton";
 import NativeConfirmDialog from "./NativeConfirmDialog";
-import NativeSurfaceShareButton from "./NativeSurfaceShareButton";
 import { NativeVerticalMediaSkeleton } from "./NativeScreenSkeletons";
 import NativeSurfaceDock, { NATIVE_SURFACE_DOCK_HEIGHT, useNativeSurfaceDockVisibility } from "./NativeSurfaceDock";
 
@@ -96,7 +96,6 @@ export default function NativeClipsScreen() {
   const [reportBusy, setReportBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [blockedAuthorIds, setBlockedAuthorIds] = useState<Set<string>>(() => new Set());
-  const [shareFlowOpen, setShareFlowOpen] = useState(false);
   const { visible: dockVisible, onScroll: handleDockScroll } = useNativeSurfaceDockVisibility();
 
   const loadFirstPage = useCallback(async (refresh = false) => {
@@ -372,7 +371,7 @@ export default function NativeClipsScreen() {
               ref={listRef}
               renderItem={({ item }) => (
                 <NativeClipCard
-                  active={isFocused && !shareFlowOpen && activeClipId === item.id}
+                  active={isFocused && activeClipId === item.id}
                   clip={item}
                   height={pageHeight}
                   onActions={() => {
@@ -442,11 +441,7 @@ export default function NativeClipsScreen() {
                 <Text style={styles.kicker}>VIBESPRO</Text>
                 <Text style={[styles.title, darkTheme && styles.darkTitle, { color: colors.text }]}>Clips</Text>
               </View>
-              <NativeSurfaceShareButton
-                onOpenChange={setShareFlowOpen}
-                onPublished={() => void loadFirstPage(true)}
-                surface="clips"
-              />
+              <NativeClipShareButton onPublished={() => void loadFirstPage(true)} />
             </View>
 
             {loadingMore ? (
@@ -574,7 +569,7 @@ function MenuButton({
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
-      style={({ pressed }) => [styles.menuButton, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.menuButton, danger && styles.dangerButton, pressed && styles.pressed]}
     >
       <Text style={[styles.menuIcon, danger && styles.danger]}>{icon}</Text>
       <Text style={[styles.menuLabel, danger && styles.danger]}>{label}</Text>
@@ -658,7 +653,8 @@ const styles = StyleSheet.create({
   },
   menuIcon: { color: "#0369a1", fontSize: 21, fontWeight: "900" },
   menuLabel: { color: "#334155", fontSize: 11, fontWeight: "800", textAlign: "center" },
-  danger: { color: "#e11d48" },
+  dangerButton: { borderColor: "#f87171", backgroundColor: "#dc2626" },
+  danger: { color: "#ffffff" },
   actionError: { marginBottom: 10, color: "#be123c", fontSize: 13, lineHeight: 19 },
   reportCard: {
     width: "100%",

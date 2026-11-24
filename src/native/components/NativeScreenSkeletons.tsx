@@ -146,8 +146,15 @@ export function NativeTrackRowsSkeleton({ count = 5 }: { count?: number }) {
 
 export function NativeVerticalMediaSkeleton({ height }: { height: number }) {
   const { theme, isVibesPro } = useNativeTheme();
-  const mediaSkeletonColor = theme === "bluesky" ? "#1b4e80" : isVibesPro ? "#252a33" : "#273747";
-  const backgroundColor = theme === "bluesky" ? "#061a3a" : isVibesPro ? "#080b12" : "#10141b";
+  const colors = NATIVE_THEME_COLORS[theme];
+  const mediaSkeletonColor = theme === "bluesky"
+    ? "#1b4e80"
+    : theme === "standard"
+      ? colors.control
+      : isVibesPro
+        ? "#252a33"
+        : "#273747";
+  const backgroundColor = theme === "standard" ? colors.background[0] : theme === "bluesky" ? "#061a3a" : isVibesPro ? "#080b12" : "#10141b";
   return (
     <View style={[styles.mediaPage, { height, backgroundColor }]}>
       <View style={styles.mediaImage}>

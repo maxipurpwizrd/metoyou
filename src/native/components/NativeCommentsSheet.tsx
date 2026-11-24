@@ -400,8 +400,8 @@ export default function NativeCommentsSheet({
                             >
                               <Text style={styles.smallAction}>Edit</Text>
                             </Pressable>
-                            <Pressable accessibilityLabel="Delete comment" onPress={() => deleteComment(item.id)}>
-                              <Text style={[styles.smallAction, styles.deleteText]}>Delete</Text>
+                            <Pressable accessibilityLabel="Delete comment" onPress={() => deleteComment(item.id)} style={styles.deleteCommentButton}>
+                              <Text style={styles.deleteText}>Delete</Text>
                             </Pressable>
                           </View>
                         ) : null}
@@ -554,7 +554,8 @@ const styles = StyleSheet.create({
   username: { flexShrink: 1, color: "#334155", fontSize: 13, fontWeight: "800" },
   time: { color: "#94a3b8", fontSize: 10 },
   smallAction: { color: "#0284c7", fontSize: 11, fontWeight: "700" },
-  deleteText: { color: "#e11d48" },
+  deleteCommentButton: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: "#dc2626" },
+  deleteText: { color: "#ffffff", fontSize: 11, fontWeight: "800" },
   commentTextScroll: { maxHeight: 240, marginTop: 4 },
   commentText: { color: "#475569", fontSize: 14, lineHeight: 20 },
   editArea: { marginTop: 6, gap: 7 },

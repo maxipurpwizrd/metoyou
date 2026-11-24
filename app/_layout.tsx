@@ -30,6 +30,12 @@ function NativeThemeWallpaper() {
   );
 }
 
+function NativeStatusBar() {
+  const { theme } = useNativeTheme();
+  const style = theme === "white" || theme === "standard" ? "dark" : "light";
+  return <StatusBar style={style} />;
+}
+
 export default function RootLayout() {
   const blurTargetRef = useRef<NativeBlurTargetRef>(null);
 
@@ -40,7 +46,7 @@ export default function RootLayout() {
           <NativeMusicProvider>
             <NativeEntitlementProvider>
               <NativeThemeProvider>
-                <StatusBar style="auto" />
+                <NativeStatusBar />
                 <NativeBlurTargetContext.Provider value={blurTargetRef}>
                   <BlurTargetView ref={blurTargetRef} style={{ flex: 1 }}>
                     <NativeLiquidGlassTouchLayer>

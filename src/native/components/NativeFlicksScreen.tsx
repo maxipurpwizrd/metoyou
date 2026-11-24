@@ -36,7 +36,7 @@ import { blockNativeUser, deleteNativePost, reportNativePost, toggleNativePostLi
 import NativeBlurBackdrop, { NativeBlurTargetContext, type NativeBlurTargetRef } from "./NativeBlurBackdrop";
 import NativeCommentsSheet from "./NativeCommentsSheet";
 import NativeConfirmDialog from "./NativeConfirmDialog";
-import NativeSurfaceShareButton from "./NativeSurfaceShareButton";
+import NativeFlicksShareButton from "./NativeFlicksShareButton";
 import { NativeVerticalMediaSkeleton } from "./NativeScreenSkeletons";
 import NativeSurfaceDock, { NATIVE_SURFACE_DOCK_HEIGHT, useNativeSurfaceDockVisibility } from "./NativeSurfaceDock";
 
@@ -454,7 +454,7 @@ export default function NativeFlicksScreen() {
                 <Text style={[styles.kicker, theme === "dark" && styles.darkKicker]}>VIBESPRO</Text>
                 <Text style={[styles.title, theme === "dark" && styles.darkTitle, theme === "bluesky" && styles.blueSkyTitle, { color: colors.text }]}>Flicks</Text>
               </View>
-              <NativeSurfaceShareButton onPublished={() => void loadFirstPage(true)} surface="flicks" />
+              <NativeFlicksShareButton onPublished={() => void loadFirstPage(true)} />
             </View>
             {loadingMore ? <ActivityIndicator color="#0284c7" style={styles.headerSpinner} /> : null}
 
@@ -497,7 +497,7 @@ export default function NativeFlicksScreen() {
                 <MenuButton label="Save to device" icon={<Download color="#0369a1" size={22} />} onPress={() => void runFlickAction(() => saveFlickToDevice(menuFlick))} />
                 <MenuButton label="Repost to Feed" icon={<Repeat2 color="#0369a1" size={22} />} onPress={() => void runFlickAction(() => repostNativeFlick(menuFlick, userId ?? ""))} />
                 {ownerAction(menuFlick, userId) ? (
-                  <MenuButton danger label="Delete Flick" icon={<Trash2 color="#e11d48" size={22} />} onPress={() => {
+                  <MenuButton danger label="Delete Flick" icon={<Trash2 color="#ffffff" size={22} />} onPress={() => {
                     setConfirmation({ type: "delete", flick: menuFlick });
                     setMenuFlick(null);
                   }} />
@@ -507,7 +507,7 @@ export default function NativeFlicksScreen() {
                       setReportFlick(menuFlick);
                       setMenuFlick(null);
                     }} />
-                    <MenuButton danger label="Block author" icon={<Ban color="#e11d48" size={22} />} onPress={() => {
+                    <MenuButton danger label="Block author" icon={<Ban color="#ffffff" size={22} />} onPress={() => {
                       setConfirmation({ type: "block", flick: menuFlick });
                       setMenuFlick(null);
                     }} />
@@ -578,7 +578,7 @@ function MenuButton({
   onPress: () => void;
 }) {
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.menuButton, pressed && styles.pressed]}>
+    <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.menuButton, danger && styles.dangerButton, pressed && styles.pressed]}>
       {icon}
       <Text style={[styles.menuLabel, danger && styles.danger]}>{label}</Text>
     </Pressable>
@@ -631,8 +631,9 @@ const styles = StyleSheet.create({
   closeText: { color: "#64748b", fontSize: 27, lineHeight: 31 },
   actionGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   menuButton: { width: "48%", minHeight: 76, flexGrow: 1, alignItems: "center", justifyContent: "center", gap: 6, padding: 8, borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 15, backgroundColor: "#f8fdff" },
+  dangerButton: { borderColor: "#f87171", backgroundColor: "#dc2626" },
   menuLabel: { color: "#334155", fontSize: 11, fontWeight: "800", textAlign: "center" },
-  danger: { color: "#e11d48" },
+  danger: { color: "#ffffff" },
   actionError: { marginBottom: 10, color: "#be123c", fontSize: 13, lineHeight: 19 },
   reportCard: { width: "100%", maxWidth: 370, padding: 20, borderWidth: 1, borderColor: "#bae6fd", borderRadius: 25, backgroundColor: "#ffffff" },
   reportDescription: { marginTop: 7, marginBottom: 14, color: "#64748b", fontSize: 13 },

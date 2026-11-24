@@ -663,7 +663,7 @@ export default function NativeFeedScreen() {
               isVibesPro && theme === "dark" && styles.vibesProRefreshIndicator,
               theme === "liquidGlass"
                 ? styles.liquidGlassRefreshIndicator
-                : theme !== "dark" && styles.blueSkyRefreshIndicator,
+                : theme !== "dark" && theme !== "standard" && styles.blueSkyRefreshIndicator,
             ]}
           >
             <ActivityIndicator color={themeColors.accent} size="small" />

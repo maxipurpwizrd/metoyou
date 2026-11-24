@@ -250,9 +250,15 @@ export default function NativeNotificationsScreen() {
             accessibilityLabel="Delete all notifications"
             disabled={notifications.length === 0}
             onPress={() => setConfirmation("all")}
-            style={[styles.headerButton, isVibesPro && styles.vibesProButton, isBlueSky && styles.blueSkyButton, { backgroundColor: colors.control, borderColor: colors.border }, notifications.length === 0 && styles.disabled]}
+            style={[
+              styles.headerButton,
+              isVibesPro && styles.vibesProButton,
+              isBlueSky && styles.blueSkyButton,
+              { backgroundColor: "#dc2626", borderColor: "#f87171" },
+              notifications.length === 0 && styles.disabled,
+            ]}
           >
-            <Text style={[styles.deleteAllIcon, isVibesPro && styles.vibesProText, isBlueSky && styles.blueSkyText, { color: colors.text }]}>⌫</Text>
+            <Text style={[styles.deleteAllIcon, { color: "#ffffff" }]}>⌫</Text>
           </Pressable>
         </NativeGlassSurface>
         {loading && notifications.length === 0 ? (
@@ -352,11 +358,11 @@ export default function NativeNotificationsScreen() {
                     styles.deleteButton,
                     isVibesPro && styles.vibesProButton,
                     isBlueSky && styles.blueSkyButton,
-                    { backgroundColor: colors.control, borderColor: colors.border },
+                    { backgroundColor: "#dc2626", borderColor: "#f87171" },
                     pressed && isLiquidGlass && NATIVE_LIQUID_GLASS_PRESSED,
                   ]}
                 >
-                  <Text style={[styles.deleteIcon, isVibesPro && styles.vibesProText, isBlueSky && styles.blueSkyText, { color: colors.text }]}>×</Text>
+                  <Text style={[styles.deleteIcon, { color: "#ffffff" }]}>×</Text>
                 </Pressable>
               </NativeGlassSurface>
             ))}

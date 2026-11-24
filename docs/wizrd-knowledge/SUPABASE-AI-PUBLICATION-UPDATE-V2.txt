@@ -1,0 +1,510 @@
+SUPABASE AI - PUBLICATION UPDATE V2 HANDOFF
+Prepared: 2026-11-18
+Purpose: Atomic update instructions and complete corrected Markdown for seven existing published records.
+
+This file is a handoff only. No Supabase access or update was performed by its author.
+
+CONTENTS
+1. Update mapping
+2. Instructions for Supabase AI
+3. Complete corrected version 2 Markdown documents
+   3.1 metoyou-identity.md
+   3.2 feature-inventory.md
+   3.3 user-guide.md
+   3.4 community-guidelines.md
+   3.5 privacy-and-safety.md
+   3.6 product-roadmap.md
+   3.7 founder-profile.md
+4. Completeness checklist
+
+======================================================================
+PART 1 - UPDATE MAPPING
+======================================================================
+
+Slug                    Category             New version   Status
+----------------------  -------------------  ------------  ---------
+metoyou-identity        product-identity     2             published
+feature-inventory       product-features     2             published
+user-guide              user-guide           2             published
+community-guidelines    community-policy     2             published
+privacy-and-safety      privacy-and-safety   2             published
+product-roadmap         product-roadmap      2             published
+founder-profile         founder-profile      2             published
+
+Preserve each record's canonical category and keywords as listed in its included Markdown frontmatter. Replace each existing record's content with the complete corresponding Markdown document below. Do not create duplicate records.
+
+======================================================================
+PART 2 - INSTRUCTIONS FOR SUPABASE AI
+======================================================================
+
+1. Verify all seven existing records by slug.
+2. Confirm each is currently version 1 and published.
+3. Stop if any record is missing or has unexpected content/version/status.
+4. Update all seven existing records atomically.
+5. Replace content with the complete corrected version 2 Markdown.
+6. Set version to 2.
+7. Keep status published.
+8. Preserve canonical categories and keywords.
+9. Allow the existing trigger to update search_vector and updated_at.
+10. Verify all seven updated records by reading them back.
+11. Verify the search RPC returns the updated content.
+12. Do not insert duplicate records.
+13. Do not modify table structure, RLS, permissions, grants or RPC definitions.
+
+Do not access Supabase or perform the update unless operating under the authorized Supabase AI workflow. Stop and report any discrepancy rather than guessing or partially updating records.
+
+======================================================================
+PART 3 - COMPLETE CORRECTED VERSION 2 MARKDOWN DOCUMENTS
+======================================================================
+
+The following seven documents are included in full, with frontmatter and all content. Their frontmatter categories and keywords are canonical and must be preserved.
+
+----- BEGIN COMPLETE DOCUMENT: docs/wizrd-knowledge/metoyou-identity.md -----
+---
+title: "MeToYou Identity"
+slug: "metoyou-identity"
+category: "product-identity"
+version: 2
+status: "published"
+keywords:
+  - MeToYou
+  - product identity
+  - WiZrd
+  - social app
+source_references:
+  - "../MeToYou-Feature-Audit-Report.md"
+last_reviewed: "2026-11-18"
+---
+
+## Content
+
+The descriptions below are limited to the checked-out project and are not confirmation of current production availability.
+
+### What MeToYou is
+
+The checked-out MeToYou project is a mobile application with social and communication features. Its code includes account access, a feed, profiles and connections, username search, stories, direct messages, media surfaces, in-app notifications, local games, settings, and early WiZrd assistant support.
+
+This is a technical description of the repository, not an approved brand promise or a guarantee that every feature is available to every user. The project audit did not query production services or verify deployed database policies, remote functions, regional availability, or account entitlements.
+
+### WiZrd
+
+The repository includes a native WiZrd chat experience and local backend source. The implementation includes conversation history and progressive response handling. Production deployment, backend compatibility, knowledge content, and provider operation were not verified in the audit. WiZrd must not claim that a capability works in production solely because code for it exists.
+
+### Identity facts approved for use
+
+- **MaxiPop WiZrd (Tony Maxwell) is the creator and owner of MeToYou.**
+- No further personal biography has been supplied or verified.
+
+### Safe description
+
+When asked what MeToYou offers, describe only a feature whose current availability has been confirmed by an authoritative, current product source. If that source is unavailable, explain that the checked-out project contains implementation evidence but that current production availability has not been verified.
+
+Do not invent a mission statement, audience promise, supported platform list, privacy guarantee, or brand history. Do not infer founder biography beyond the approved identity above.
+
+## Source references
+
+- [MeToYou Feature Audit Report](../MeToYou-Feature-Audit-Report.md)
+
+----- END COMPLETE DOCUMENT: docs/wizrd-knowledge/metoyou-identity.md -----
+
+----- BEGIN COMPLETE DOCUMENT: docs/wizrd-knowledge/feature-inventory.md -----
+---
+title: "MeToYou Feature Inventory"
+slug: "feature-inventory"
+category: "product-features"
+version: 2
+status: "published"
+keywords:
+  - features
+  - implementation status
+  - production availability
+  - MeToYou
+source_references:
+  - "../MeToYou-Feature-Audit-Report.md"
+last_reviewed: "2026-11-18"
+---
+
+## Content
+
+“Implementation status” below describes evidence in the checked-out repository only. It is separate from confirmed production availability, which was not independently verified for any feature in this audit.
+
+### How to read this inventory
+
+- **Implementation status** describes what the checked-out code does: implemented, partial/gated, UI-only, or not found.
+- **Production verification** is separate. The audit did not query production, inspect deployed database policies, or confirm remote service configuration. Treat availability as **unverified** unless a current authoritative source confirms it.
+- A screen, button, API helper, database type, or local Edge Function is not by itself proof of a working production feature.
+
+| Feature | Implementation status in checked-out code | Production availability verification |
+|---|---|---|
+| Email/password sign-up and sign-in | Implemented in native screens and Supabase Auth helpers; authenticated routes redirect signed-out users. | Unverified. Supabase Auth configuration and deployed app behavior were not checked. |
+| Google and Apple authentication | UI-only; buttons report “coming soon” and do not call an identity provider. | Not available through the checked-in native flow; production status otherwise unverified. |
+| Feed and text/image posts | Implemented: feed pagination, text/image composer, likes, comments, editing/deletion, sharing, highlighting and local saved-post identifiers. Ordinary post repost is a placeholder. | Unverified. Remote tables, storage, policies and production behavior were not checked. |
+| Stories | Implemented for text and photo creation, viewing, sharing, local saving and owner deletion. Voice-story data types do not correspond to a native creation flow. | Unverified. Remote schema, storage, policies and deployment were not checked. |
+| Profiles and social connections | Implemented: profile viewing/editing, profile picture, follows, followers/following and mutual-friend browsing. | Unverified. `public_profiles` view definition and grants are absent from checked-in migrations. |
+| People search | Implemented for debounced username search and navigation to a selected profile. | Unverified. Remote access and production behavior were not checked. |
+| Direct messaging | Implemented in the client for text, attachments, voice notes, replies, forwarding, reactions, editing/deleting, read receipts, typing/presence and Realtime updates. | Unverified. Message RLS and Storage policies are not established by this checkout. |
+| Inbox organization and message requests | Implemented, with pin/unread/archive/hide state stored locally. The Spam/request classification is a mutual-follow/message-direction heuristic. Search and Message settings are placeholders. | Unverified. Local-only actions should not be described as cross-device features. |
+| In-app notifications | Implemented screen and Realtime client handling for viewing, marking read, deleting and refreshing notifications. | Unverified. Remote table and Realtime policies are not present in the checked-in migrations. General OS push notifications are not established. |
+| Clips | Playback, pagination, item actions and reposting to Feed are implemented; VibesPro entitlement gates the feed. A production publish flow is absent from the Clips screen; helper/prototype code exists. | Unverified. Entitlement, media backend and deployment were not checked. |
+| Flicks | Image browsing and photo publishing with caption from camera/gallery are implemented; reposting to Feed is present. | Unverified. Camera, Storage and backend configuration were not checked. |
+| Tracks and device audio | Remote audio playback and local MP3 selection are implemented, with entitlement/platform limitations. No native music upload flow was found. | Unverified. Entitlement and remote audio availability were not checked. |
+| Audio/video calls | Partially implemented: WebRTC setup, call UI, signaling, call history, device registration and call push code exist. Requires a custom build; README notes no TURN relay or system call UI, and end-to-end operation is not established. | Unverified. Deployment, push delivery, background/terminated behavior and production reliability were not tested. |
+| Call history | Native screen and redial interactions are implemented. | Unverified. Call-history schema and access policies are not established by the migrations. |
+| Offline games | Local implementations of Tetris, Bubble Shooter, Yahtzee and Tesla Roadster Race are present. Game Feed is a placeholder. | Local code is present; production build availability was not checked. Multiplayer/shared scores were not found. |
+| Account settings and preferences | Implemented profile/preferences, theme, language selection, blocked-user management, support submission and sign-out. Translations are incomplete; Help Center and About are placeholders. | Unverified. Remote storage/policies and support handling were not checked. |
+| Reporting and blocking | Report submission UI and block/unblock actions are implemented. A blocked-user RPC migration derives identity from `auth.uid()`. Report review is not established. | Unverified. Report policies, operations and moderation staffing were not checked. |
+| Moderation status and appeals | Partial UI/API path: VibesPro profile UI calls moderation status and can submit appeal details. Review workflow and policies are not established. | Unverified. |
+| WiZrd assistant | Native chat, history, streaming client, local `wizrd-chat` function and published-document search call are present. | Unverified. Deployed function, schema, grants, knowledge content and provider operation were not checked. |
+| VibesPro subscription/entitlement | Entitlement fields and content gates are present. Native upgrade/manage flow is explicitly unavailable; billing API handlers also exist. | Unverified. Provider configuration and entitlement consistency were not checked. |
+| Market, Game Feed, saved collections, communities/groups, creator analytics, general content search, OAuth, message search/settings, Help Center, About and native admin | Not implemented as complete user workflows in the checked-out native app; several are placeholders or repository roadmap ideas. | No production availability confirmed. |
+
+### Production verification rule
+
+Before telling a user a feature is available, check a current owner-approved product source that confirms its production status and any eligibility, platform, regional, or account limitations. This inventory is not that confirmation.
+
+## Source references
+
+- [MeToYou Feature Audit Report](../MeToYou-Feature-Audit-Report.md)
+- [Native app routes](../../app)
+- [Supabase functions](../../supabase/functions)
+- [Checked-in migrations](../../supabase/migrations)
+
+----- END COMPLETE DOCUMENT: docs/wizrd-knowledge/feature-inventory.md -----
+
+----- BEGIN COMPLETE DOCUMENT: docs/wizrd-knowledge/user-guide.md -----
+---
+title: "MeToYou User Guide"
+slug: "user-guide"
+category: "user-guide"
+version: 2
+status: "published"
+keywords:
+  - getting started
+  - feed
+  - stories
+  - messages
+  - profile
+  - settings
+source_references:
+  - "../MeToYou-Feature-Audit-Report.md"
+last_reviewed: "2026-11-18"
+---
+
+## Content
+
+These steps describe flows evidenced in the checked-out native app. They do not confirm that a feature, server, or account entitlement is currently available in production.
+
+### Account access
+
+- **Where:** On launch, signed-out users are directed to sign-in. The sign-up screen is linked from the sign-in flow.
+- **How:** The checked-in forms accept email/password and request first/last name on sign-up. If email confirmation is required, the app surfaces that state.
+- **What the code does:** It uses Supabase Auth and routes authenticated users into the app.
+- **Limits:** Google/Apple buttons show a “coming soon” message; they are not implemented OAuth flows. No native password-reset workflow was found. Production configuration was not verified.
+
+### Feed, posts and comments
+
+- **Where:** Feed tab.
+- **How:** The native composer supports text and one image. Feed items expose like, comment and share actions; post menus include owner editing/deletion, highlighting, local save, and report/block options where shown.
+- **What the code does:** Post, comment and like actions are submitted through the Supabase client; feed loading is paginated and refreshable.
+- **Limits:** No ordinary post repost or general video/audio post creation flow was found. Saved-post identifiers are device-local. Production database and storage access were not verified.
+
+### Stories
+
+- **Where:** Story rail on Feed; the code also shows stories in Messages for VibesPro accounts.
+- **How:** Create text or photo content, select one of the displayed durations (2, 4, 8, 12 or 24 hours), open a story to view it, or use its menu to share, save locally or delete your own.
+- **What the code does:** Story data is sent to the configured backend; saved-story identifiers are kept on the device.
+- **Limits:** Native creation is text/photo only. The presence of a voice-story type in data does not mean users can create voice stories. Production configuration is unverified.
+
+### Profiles, connections and people search
+
+- **Where:** Profile tab, or a profile opened from a feed item, notification, connection list or search result.
+- **How:** The profile UI supports editing profile fields and picture. Other profiles expose follow/unfollow, message, share, report or block actions where shown. Connection lists show followers/following/mutual friends. Search looks for usernames.
+- **What the code does:** Profile and connection actions use Supabase; selecting a username result navigates to that profile.
+- **Limits:** Search is username-only. The audit did not find a private-account control. Do not assume profile visibility settings.
+
+### Messages and inbox
+
+- **Where:** Messages tab; open a conversation from the inbox or a profile.
+- **How:** The chat UI supports text, attachments, voice notes, replies, forwarding, reactions, editing/deleting one’s own messages and read receipts. Long-press inbox threads for pin/unread/archive/hide actions. Spam is a request-folder heuristic.
+- **What the code does:** The client calls Supabase and listens for Realtime updates. Inbox organization identifiers are stored locally on the device.
+- **Limits:** Search and Message settings are placeholders. Local organization does not imply synchronization across devices. Message and attachment privacy are not confirmed by the checked-in policies.
+
+### Notifications
+
+- **Where:** Bell control in the Feed header.
+- **How:** Open a notification, refresh the list, mark items read, or use the controls to delete one or all.
+- **What the code does:** The screen handles in-app notification records and Realtime changes.
+- **Limits:** This is not evidence of general operating-system push notifications. The checked-in native push path is call-specific. Production notification policies were not checked.
+
+### Flicks, Clips and Tracks
+
+- **Flicks:** The surface dock opens image posts. The share control selects/captures a photo and adds a caption; an item menu can repost a Flick to Feed.
+- **Clips:** The surface dock opens paginated video posts when the VibesPro gate allows access. Item actions include reposting a Clip. A production publishing control was not found.
+- **Tracks:** The surface dock opens available audio. Device Files can select local MP3s. Android automatic scanning requires a custom development build; iOS uses the system file picker.
+- **Limits:** Camera/photo-library permissions, entitlement, platform support, remote media and Storage setup can affect these flows. The audit did not verify any of those production dependencies. No native music publishing workflow was found.
+
+### Games
+
+- **Where:** Gaming item in the surface dock or the offline prompt.
+- **How:** Open the games list and select Tetris, Bubble Shooter, Yahtzee or Tesla Roadster Race.
+- **What the code does:** Gameplay runs locally.
+- **Limits:** The Game Feed is a placeholder. No multiplayer or shared leaderboard was found. Production app distribution was not verified.
+
+### Settings, blocked users and support
+
+- **Where:** Profile > Settings; blocked accounts appear under Settings > Privacy.
+- **How:** The checked-in UI provides profile editing, language/theme selection, blocked-user review/unblock, support-form submission and sign-out.
+- **What the code does:** It saves profile/preferences through Supabase and/or local storage and submits a support ticket with app/platform/route context.
+- **Limits:** Native translations are incomplete; Help Center and About are placeholders. Support-ticket access/handling and production availability were not verified. Offline sign-out clears local state even if remote sign-out cannot be confirmed.
+
+### Calls
+
+- **Where:** Audio/video controls in a chat; call history is linked from the Messages bottom bar.
+- **How:** The UI contains start/accept, mute, speaker, camera, end and redial interactions.
+- **Limits:** Requires a custom development build and configured remote backend; it does not run in Expo Go. TURN, system call UI and reliable background/terminated operation are absent or unverified. Do not promise call availability.
+
+### WiZrd
+
+The Messages screen has a WiZrd entry point. The local code includes chat history, streaming output and error/recovery handling. Treat production operation and answer coverage as unverified until the owner confirms the deployed backend and approved knowledge sources.
+
+## Source references
+
+- [MeToYou Feature Audit Report](../MeToYou-Feature-Audit-Report.md)
+- [Native route tree](../../app)
+- [Native screens](../../src/native/components)
+
+----- END COMPLETE DOCUMENT: docs/wizrd-knowledge/user-guide.md -----
+
+----- BEGIN COMPLETE DOCUMENT: docs/wizrd-knowledge/community-guidelines.md -----
+---
+title: "MeToYou Community Guidelines"
+slug: "community-guidelines"
+category: "community-policy"
+version: 2
+status: "published"
+keywords:
+  - community guidelines
+  - community policy
+  - reports
+  - moderation
+source_references:
+  - "../MeToYou-Feature-Audit-Report.md"
+last_reviewed: "2026-11-18"
+---
+
+## Content
+
+> **Information notice only — this is not an approved community policy or a replacement for one.**
+
+### Official policy source not found
+
+The repository audit did not find an official MeToYou Community Guidelines or Code of Conduct document, and no approved official community policy was supplied for this document. Therefore, this document intentionally does **not** state behavioral rules, prohibited content, enforcement actions, appeal rights, or reporting response commitments.
+
+UI report categories and moderation labels in the application are not substitutes for approved community guidelines. They must not be presented as the official policy.
+
+### Instructions for WiZrd while this source is missing
+
+- Say plainly that an approved Community Guidelines source is not available in the knowledge materials.
+- Do not invent, infer, or paraphrase informal rules as official policy.
+- Do not promise that a report will be reviewed, resolved by a deadline, or result in a particular enforcement action.
+- Direct the user to an owner-approved support or policy location only after one is supplied and verified.
+
+### Required owner input before adding official policy content
+
+Provide the official approved policy document, its effective date and version, an authoritative publication location, and the approved description of reporting, review, enforcement, and appeals. Obtain any required legal review. Until an approved policy is supplied, this published document remains an information notice about the missing source, not a replacement policy.
+
+## Source references
+
+- [MeToYou Feature Audit Report](../MeToYou-Feature-Audit-Report.md) — records that no official community-guidelines document was found and that report/moderation operations are unverified.
+- [Report and moderation UI evidence](../../src/native/lib/posts.ts)
+- [Moderation UI evidence](../../src/native/components/NativeVibesProProfile.tsx)
+
+----- END COMPLETE DOCUMENT: docs/wizrd-knowledge/community-guidelines.md -----
+
+----- BEGIN COMPLETE DOCUMENT: docs/wizrd-knowledge/privacy-and-safety.md -----
+---
+title: "MeToYou Privacy and Safety"
+slug: "privacy-and-safety"
+category: "privacy-and-safety"
+version: 2
+status: "published"
+keywords:
+  - privacy
+  - safety
+  - messages
+  - reports
+  - moderation
+  - data access
+source_references:
+  - "../MeToYou-Feature-Audit-Report.md"
+last_reviewed: "2026-11-18"
+---
+
+## Content
+
+This is a repository-level verification document, not a privacy policy and not a security certification. It is also not a legal opinion or confirmation of production configuration.
+
+### What the checked-out code supports
+
+- Native authentication uses Supabase Auth, and authenticated routes redirect signed-out users.
+- Some profile/chat paths read other users through a `public_profiles` view. The view definition and grants are not in the checked-in migrations.
+- A checked-in blocked-user RPC derives the requesting user from `auth.uid()` and limits execution to authenticated users.
+- The native-call migration includes participant-scoped access controls and call functions that perform identity and participant checks.
+- The Stripe webhook source validates its provider signature.
+- The client includes report submission and block/unblock flows. This proves client behavior, not that reports are safely stored or reviewed.
+
+These are limited observations about checked-in code. They do not establish that the protections are deployed, configured correctly, or comprehensive.
+
+### What is not verified
+
+- **Core database permissions:** The checked-in migrations do not establish the production Row Level Security (RLS) policies for core tables such as messages, conversations, profiles, posts, stories, reports, notifications or support records.
+- **Storage privacy:** The message client creates `getPublicUrl` links for message attachments. The repository does not establish whether the bucket is public or what its deployed object policies permit. Do not describe attachments as private or publicly accessible without checking authoritative bucket settings.
+- **Private messages and staff access:** The checked-in client and migrations do not establish who can read messages in production. Do not claim end-to-end encryption, absolute privacy, or that staff/admins can or cannot access messages.
+- **Profiles and media:** Profile-view fields, media visibility and audience controls were not confirmed. No private-profile control was found in the native UI.
+- **Reports and moderation:** The app has report submission and a limited status/appeal UI, but report access policies, moderation queue, staffing, review decisions and response times are unknown.
+- **Legal requests and case handling:** No law-enforcement/case-handling policy or workflow was found in the repository. Do not make claims about disclosure, preservation, escalation, or access to case data.
+- **Support requests:** The client submits support tickets, but the access controls and operational handling are not established here.
+- **Other backend paths:** The audit identified billing/admin code requiring owner/security review. Production deployment and exposure were not verified; this document does not claim those paths are or are not active.
+
+### Safe response guidance
+
+If asked whether a message, attachment, report, profile, or support request is private, explain that the checked-in repository does not verify the relevant production access policies. Do not assure the user about staff access or confidentiality. Refer the user to an owner-approved privacy notice or support contact only after its existence and current location are confirmed.
+
+Do not give legal or incident-response assurances. If the question requires policy or production details, state that the authoritative information has not been supplied.
+
+### Owner verification checklist
+
+Before using this as user-facing privacy information, obtain and review:
+
+1. The current privacy notice and terms, approved by the owner/legal reviewer.
+2. Deployed RLS policies and grants for messages, conversations, profiles, posts, stories, reports, notifications and support records.
+3. Storage bucket visibility, object policies, URL behavior, and attachment access paths.
+4. Report/appeal access roles, review ownership, retention and user-facing response expectations.
+5. Approved statements about staff access, encryption, law-enforcement requests, and case handling.
+6. Confirmation that the protections described in code are present in the deployed environment.
+
+## Source references
+
+- [MeToYou Feature Audit Report](../MeToYou-Feature-Audit-Report.md)
+- [Auth provider](../../src/native/contexts/NativeAuthProvider.tsx)
+- [Supabase client](../../src/native/lib/supabase.ts)
+- [Chat operations](../../src/native/lib/chat.ts)
+- [Checked-in migrations](../../supabase/migrations)
+
+----- END COMPLETE DOCUMENT: docs/wizrd-knowledge/privacy-and-safety.md -----
+
+----- BEGIN COMPLETE DOCUMENT: docs/wizrd-knowledge/product-roadmap.md -----
+---
+title: "MeToYou Product Roadmap — Unconfirmed Items"
+slug: "product-roadmap"
+category: "product-roadmap"
+version: 2
+status: "published"
+keywords:
+  - roadmap
+  - planned
+  - development
+  - owner approval
+source_references:
+  - "../MeToYou-Feature-Audit-Report.md"
+last_reviewed: "2026-11-18"
+---
+
+## Content
+
+The items listed below are not approved commitments; each is awaiting owner approval. Repository mentions are not proof of approval, priority, schedule, or delivery.
+
+### Development work represented in the checked-out code
+
+These areas have partial implementations or development artifacts. Their production readiness and future priority are not confirmed:
+
+- **WiZrd:** native streaming client, local chat function and a published-document search call. Deployment, schema, knowledge content and provider operation were not verified.
+- **Calling:** WebRTC UI, signaling, call tables/RPCs, push-device registration and receipt code. Production rollout, background behavior, TURN and reliability remain unverified.
+- **Clip publishing:** render/upload helpers and a development-only preview exist, but a production create/publish workflow was not found.
+- **Moderation:** report submission and limited status/appeal UI exist; review tooling, policies and operational ownership are unclear.
+
+These describe repository state only; they do not promise ongoing development or a release.
+
+### Ideas listed in repository planning documents
+
+The audit found the following ideas in `ROADMAP.md` and `ENHANCEMENT_PLAN.md`. **Each is awaiting owner approval and may be stale, exploratory, deferred, or rejected.**
+
+- Stories improvements and better search/discovery.
+- Saved collections.
+- Creator tools and analytics.
+- Groups and communities.
+- WiZrd AI onboarding and personalized onboarding.
+- TURN/background calling.
+- Moderation improvements.
+- Monetization and native subscription purchase.
+- Offline resilience.
+
+Other items represented as incomplete in the app include Market, Game Feed, OAuth, ordinary-post reposting, general content search, message search/settings, Help Center/About, and general OS notifications. These also remain **awaiting approval**; a placeholder is not a commitment.
+
+### Approval and communication rule
+
+WiZrd must not give delivery dates, say an item is “coming soon” unless the owner has approved that wording, or describe an item as planned work based only on repository text. If asked, say that the project contains an unconfirmed idea and no approved schedule is available.
+
+### Owner decisions needed
+
+For every candidate item, the owner must identify whether it is approved, exploratory, deferred, or rejected; confirm scope and priority; and provide any authorized timing and user-facing wording. Confirm whether the repository planning files are current and authoritative.
+
+## Source references
+
+- [MeToYou Feature Audit Report](../MeToYou-Feature-Audit-Report.md)
+- [Repository roadmap](../../ROADMAP.md)
+- [Enhancement plan](../../ENHANCEMENT_PLAN.md)
+
+----- END COMPLETE DOCUMENT: docs/wizrd-knowledge/product-roadmap.md -----
+
+----- BEGIN COMPLETE DOCUMENT: docs/wizrd-knowledge/founder-profile.md -----
+---
+title: "MeToYou Founder Profile"
+slug: "founder-profile"
+category: "founder-profile"
+version: 2
+status: "published"
+keywords:
+  - founder
+  - owner
+  - creator
+  - MaxiPop WiZrd
+  - Tony Maxwell
+source_references:
+  - "Owner-provided identity in the knowledge-document request"
+last_reviewed: "2026-11-18"
+---
+
+## Content
+
+This profile contains only the approved identity below; no further biography has been supplied or verified.
+
+### Approved identity
+
+**MaxiPop WiZrd (Tony Maxwell) is the creator and owner of MeToYou.**
+
+No additional personal biography information was provided or verified for this document. Do not infer or invent personal history, location, age, education, employment, family details, contact information, achievements, motivations, or other biography.
+
+If asked for information beyond the approved identity above, WiZrd should say that no verified information is available in its approved knowledge materials.
+
+## Source references
+
+- Owner-provided identity in the request for the WiZrd knowledge documents.
+
+----- END COMPLETE DOCUMENT: docs/wizrd-knowledge/founder-profile.md -----
+
+======================================================================
+PART 4 - COMPLETENESS CHECKLIST
+======================================================================
+
+[ ] All seven existing records were verified by slug and confirmed to be version 1 and published before any update.
+[ ] Any missing record or unexpected content, version, or status caused the operation to stop before writing.
+[ ] All seven existing records were updated atomically; no duplicate records were inserted.
+[ ] Each record now contains the complete corrected Markdown document included above.
+[ ] Each record has version 2, remains published, and retains its canonical category and keywords.
+[ ] The existing trigger updated search_vector and updated_at; no schema, RLS, permission, grant, or RPC changes were made.
+[ ] All seven records were read back and their IDs, slugs, categories, versions, statuses, and complete content were verified.
+[ ] The search RPC returns the updated content for published documents.
+[ ] Final status for each of the seven records is published; no record was unpublished or moved to another status.
+
+End of handoff.

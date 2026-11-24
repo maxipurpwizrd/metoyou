@@ -888,7 +888,7 @@ export default function NativeTracksScreen() {
                     setReportOpen(true);
                   }} />
                 ) : (
-                  <MenuButton danger icon={<Trash2 color="#e11d48" size={22} />} label="Delete" onPress={() => {
+                  <MenuButton danger icon={<Trash2 color="#ffffff" size={22} />} label="Delete" onPress={() => {
                     setMenuOpen(false);
                     setConfirmationVisible(true);
                   }} />
@@ -1226,7 +1226,7 @@ function MenuButton({
   onPress: () => void;
 }) {
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.menuButton, pressed && styles.pressed]}>
+    <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.menuButton, danger && styles.dangerButton, pressed && styles.pressed]}>
       {icon}
       <Text style={[styles.menuButtonText, danger && styles.danger]}>{label}</Text>
     </Pressable>
@@ -1340,8 +1340,9 @@ const styles = StyleSheet.create({
   darkSubtext: { color: "#94a3b8" },
   actionGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   menuButton: { width: "48%", minHeight: 76, flexGrow: 1, alignItems: "center", justifyContent: "center", gap: 6, padding: 8, borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 15, backgroundColor: "#f8fdff" },
+  dangerButton: { borderColor: "#f87171", backgroundColor: "#dc2626" },
   menuButtonText: { color: "#334155", fontSize: 11, fontWeight: "800", textAlign: "center" },
-  danger: { color: "#e11d48" },
+  danger: { color: "#ffffff" },
   reportCard: { width: "100%", maxWidth: 370, padding: 20, borderWidth: 1, borderColor: "#bae6fd", borderRadius: 25, backgroundColor: "#ffffff" },
   reportDescription: { marginTop: 7, marginBottom: 14, color: "#64748b", fontSize: 13 },
   reportChoice: { minHeight: 47, justifyContent: "center", marginTop: 7, paddingHorizontal: 13, borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 13, backgroundColor: "#f8fdff" },

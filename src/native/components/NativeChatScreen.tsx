@@ -64,6 +64,7 @@ import {
   nativeMessageThreadsQueryKey,
 } from "../lib/queryKeys";
 import NativeBlurBackdrop from "./NativeBlurBackdrop";
+import NativeConfirmDialog from "./NativeConfirmDialog";
 import NativeGlassSurface, { NATIVE_LIQUID_GLASS_PRESSED } from "./NativeGlassSurface";
 import { NativeChatSkeleton } from "./NativeScreenSkeletons";
 import { getPresenceLabel } from "../../lib/presenceStatus";
@@ -141,20 +142,36 @@ function getMetadataText(message: Message, key: string) {
 }
 
 function NativeVoiceMessage({ uri, mine, isVibesPro }: { uri: string; mine: boolean; isVibesPro: boolean }) {
+  const { theme } = useNativeTheme();
+  const colors = NATIVE_THEME_COLORS[theme];
+  const outgoingTextColor = isVibesPro ? "#ffffff" : colors.accentText;
   const player = useAudioPlayer(uri);
   const status = useAudioPlayerStatus(player);
   const duration = status.duration || 0;
   const progress = duration > 0 ? Math.min(1, status.currentTime / duration) : 0;
   const remaining = Math.max(0, Math.ceil(duration - status.currentTime));
   return (
-    <View style={[styles.voicePlayer, mine && styles.mineVoicePlayer, isVibesPro && !mine && styles.premiumVoicePlayer]}>
+    <View style={[
+      styles.voicePlayer,
+      mine && styles.mineVoicePlayer,
+      isVibesPro && !mine && styles.premiumVoicePlayer,
+      isVibesPro && mine && { backgroundColor: "rgba(255,255,255,0.18)" },
+    ]}>
       <Pressable
         accessibilityLabel={status.playing ? "Pause voice note" : "Play voice note"}
         accessibilityRole="button"
         onPress={() => (status.playing ? player.pause() : player.play())}
-        style={[styles.voicePlayerButton, mine && styles.mineVoicePlayerButton]}
+        style={[
+          styles.voicePlayerButton,
+          mine && styles.mineVoicePlayerButton,
+          isVibesPro && mine && { backgroundColor: "rgba(255,255,255,0.22)" },
+        ]}
       >
-        <Text style={[styles.voicePlayerGlyph, mine && styles.mineVoicePlayerGlyph]}>{status.playing ? "Ⅱ" : "▶"}</Text>
+        <Text style={[
+          styles.voicePlayerGlyph,
+          mine && styles.mineVoicePlayerGlyph,
+          isVibesPro && mine && { color: outgoingTextColor },
+        ]}>{status.playing ? "Ⅱ" : "▶"}</Text>
       </Pressable>
       <View accessibilityLabel="Voice note waveform" style={styles.playbackWaveform}>
         {Array.from({ length: 24 }, (_, index) => {
@@ -167,6 +184,8 @@ function NativeVoiceMessage({ uri, mine, isVibesPro }: { uri: string; mine: bool
                 styles.playbackWaveformBar,
                 { height: 5 + sample * 20 },
                 played && (mine ? styles.playedWaveformBarMine : styles.playedWaveformBar),
+                isVibesPro && mine && !played && { backgroundColor: "rgba(0,0,0,0.22)" },
+                isVibesPro && mine && played && { backgroundColor: colors.accentText },
                 isVibesPro && !mine && !played && styles.premiumPlaybackWaveformBar,
                 isVibesPro && !mine && played && styles.premiumPlayedWaveformBar,
               ]}
@@ -174,7 +193,11 @@ function NativeVoiceMessage({ uri, mine, isVibesPro }: { uri: string; mine: bool
           );
         })}
       </View>
-      <Text style={[styles.voicePlayerTime, mine && styles.mineVoicePlayerGlyph]}>
+      <Text style={[
+        styles.voicePlayerTime,
+        mine && styles.mineVoicePlayerGlyph,
+        isVibesPro && mine && { color: outgoingTextColor },
+      ]}>
         {`${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}`}
       </Text>
     </View>
@@ -332,6 +355,7 @@ export default function NativeChatScreen() {
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [editTarget, setEditTarget] = useState<Message | null>(null);
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+  const [pendingDeleteMessage, setPendingDeleteMessage] = useState<Message | null>(null);
   const [forwardPickerVisible, setForwardPickerVisible] = useState(false);
   const [forwardThreads, setForwardThreads] = useState<MessageThread[]>([]);
   const [loadingForwardThreads, setLoadingForwardThreads] = useState(false);
@@ -341,6 +365,7 @@ export default function NativeChatScreen() {
   const [attachment, setAttachment] = useState<NativeChatAttachment | null>(null);
   const [attachmentPickerVisible, setAttachmentPickerVisible] = useState(false);
   const [pendingVoiceUri, setPendingVoiceUri] = useState<string | null>(null);
+  const [imageViewer, setImageViewer] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [voiceRecordingPaused, setVoiceRecordingPaused] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
@@ -748,24 +773,7 @@ export default function NativeChatScreen() {
 
   const removeMessage = (message: Message) => {
     if (!userId) return;
-    Alert.alert("Delete message?", "This removes the message from the conversation.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () => {
-          void deleteNativeMessage(message.id, userId)
-            .then(() => {
-              queryClient.setQueryData<NativeConversationMessageCache>(
-                messagesQueryKey,
-                (current) => removeMessageFromCache(current, message.id),
-              );
-              void invalidateThreads();
-            })
-            .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "The message could not be deleted."));
-        },
-      },
-    ]);
+    setPendingDeleteMessage(message);
   };
 
   const closeMessageActions = () => {
@@ -866,6 +874,8 @@ export default function NativeChatScreen() {
   };
 
   const colors = NATIVE_THEME_COLORS[theme];
+  const outgoingBubbleColor = isVibesPro ? "#0284c7" : colors.accent;
+  const outgoingBubbleTextColor = isVibesPro ? "#ffffff" : colors.accentText;
   const primaryText = { color: colors.text };
   const mutedText = { color: colors.muted };
   const selectedMessage = messages.find((message) => message.id === selectedMessageId) ?? null;
@@ -980,26 +990,69 @@ export default function NativeChatScreen() {
                         mine ? styles.mineBubble : styles.theirBubble,
                         isBlueSky && (mine ? styles.blueSkyMineBubble : styles.blueSkyTheirBubble),
                         isVibesPro && (mine ? styles.premiumMineBubble : styles.premiumTheirBubble),
-                        { backgroundColor: mine ? colors.accent : colors.surface, borderColor: colors.border },
+                          {
+                            backgroundColor: mine
+                              ? outgoingBubbleColor
+                              : theme === "standard"
+                                ? "#e0f2fe"
+                                : theme === "white"
+                                  ? "#3f3f46"
+                                : colors.surface,
+                            borderColor: isVibesPro && mine
+                              ? "#0369a1"
+                              : theme === "standard" && !mine
+                                ? "#bae6fd"
+                                : theme === "white" && !mine
+                                  ? "#52525b"
+                                : colors.border,
+                          },
                       ]}
                     >
                       {item.metadata?.forwarded === true ? (
-                        <Text style={[styles.forwardedLabel, mine && styles.mineForwardedLabel]}>↪ Forwarded</Text>
+                        <Text style={[
+                          styles.forwardedLabel,
+                          mine && styles.mineForwardedLabel,
+                          theme === "standard" && !mine && { color: "#0369a1" },
+                          isVibesPro && mine && { color: outgoingBubbleTextColor },
+                        ]}>↪ Forwarded</Text>
                       ) : null}
                       {replyText ? (
-                        <View style={[styles.replyQuote, mine && styles.mineReplyQuote]}>
-                          <Text numberOfLines={2} style={[styles.replyQuoteText, mine && styles.mineReplyQuoteText]}>{replyText}</Text>
+                        <View style={[
+                          styles.replyQuote,
+                          mine && styles.mineReplyQuote,
+                          theme === "standard" && !mine && { borderLeftColor: "#0284c7", backgroundColor: "#dbeafe" },
+                          isVibesPro && mine && { borderLeftColor: outgoingBubbleTextColor, backgroundColor: "rgba(255,255,255,0.18)" },
+                        ]}>
+                          <Text numberOfLines={2} style={[
+                            styles.replyQuoteText,
+                            mine && styles.mineReplyQuoteText,
+                            theme === "standard" && !mine && { color: "#0c4a6e" },
+                            isVibesPro && mine && { color: outgoingBubbleTextColor },
+                          ]}>{replyText}</Text>
                         </View>
                       ) : null}
                       {item.text ? (
-                        <Text style={[styles.messageText, mine && styles.mineMessageText, isVibesPro && !mine && styles.premiumText, { color: mine ? colors.accentText : colors.text }]}>
+                        <Text style={[
+                          styles.messageText,
+                          mine && styles.mineMessageText,
+                          isVibesPro && !mine && styles.premiumText,
+                          {
+                            color: mine
+                              ? outgoingBubbleTextColor
+                              : theme === "standard"
+                                ? "#0c4a6e"
+                                : theme === "white"
+                                  ? "#ffffff"
+                                : colors.text,
+                          },
+                        ]}>
                           {item.text}
                         </Text>
                       ) : null}
                       {item.image_url ? (
                         <Pressable
                           accessibilityLabel="Open image attachment"
-                          onPress={() => void Linking.openURL(item.image_url!).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "The image could not be opened."))}
+                          onPress={() => setImageViewer(item.image_url!)}
                         >
                           <Image source={{ uri: item.image_url }} resizeMode="cover" style={styles.imageAttachment} />
                         </Pressable>
@@ -1008,10 +1061,24 @@ export default function NativeChatScreen() {
                         <Pressable
                           accessibilityLabel="Open video attachment"
                           onPress={() => void Linking.openURL(item.video_url!).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "The video could not be opened."))}
-                          style={[styles.fileAttachment, mine && styles.mineFileAttachment]}
+                          style={[
+                            styles.fileAttachment,
+                            mine && styles.mineFileAttachment,
+                            theme === "standard" && !mine && { backgroundColor: "#bae6fd" },
+                            isVibesPro && mine && { backgroundColor: "rgba(255,255,255,0.18)" },
+                          ]}
                         >
-                          <Text style={styles.fileAttachmentIcon}>▶</Text>
-                          <Text style={[styles.fileAttachmentName, mine && styles.mineMessageText]}>Open video</Text>
+                          <Text style={[
+                            styles.fileAttachmentIcon,
+                            theme === "standard" && !mine && { color: "#0c4a6e" },
+                            isVibesPro && mine && { color: outgoingBubbleTextColor },
+                          ]}>▶</Text>
+                          <Text style={[
+                            styles.fileAttachmentName,
+                            mine && styles.mineMessageText,
+                            theme === "standard" && !mine && { color: "#0c4a6e" },
+                            isVibesPro && mine && { color: outgoingBubbleTextColor },
+                          ]}>Open video</Text>
                         </Pressable>
                       ) : null}
                       {item.audio_url ? <NativeVoiceMessage isVibesPro={isVibesPro} mine={mine} uri={item.audio_url} /> : null}
@@ -1019,20 +1086,58 @@ export default function NativeChatScreen() {
                         <Pressable
                           accessibilityLabel={`Open attachment ${fileName}`}
                           onPress={() => void Linking.openURL(fileUrl).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "The file could not be opened."))}
-                          style={[styles.fileAttachment, mine && styles.mineFileAttachment]}
+                          style={[
+                            styles.fileAttachment,
+                            mine && styles.mineFileAttachment,
+                            theme === "standard" && !mine && { backgroundColor: "#bae6fd" },
+                            isVibesPro && mine && { backgroundColor: "rgba(255,255,255,0.18)" },
+                          ]}
                         >
-                          <Text style={styles.fileAttachmentIcon}>↗</Text>
-                          <Text numberOfLines={2} style={[styles.fileAttachmentName, mine && styles.mineMessageText]}>{fileName}</Text>
+                          <Text style={[
+                            styles.fileAttachmentIcon,
+                            theme === "standard" && !mine && { color: "#0c4a6e" },
+                            isVibesPro && mine && { color: outgoingBubbleTextColor },
+                          ]}>↗</Text>
+                          <Text numberOfLines={2} style={[
+                            styles.fileAttachmentName,
+                            mine && styles.mineMessageText,
+                            theme === "standard" && !mine && { color: "#0c4a6e" },
+                            isVibesPro && mine && { color: outgoingBubbleTextColor },
+                          ]}>{fileName}</Text>
                         </Pressable>
                       ) : null}
                       <View style={styles.messageMeta}>
-                        {item.edited_at ? <Text style={[styles.messageTime, mine && styles.mineTime]}>Edited · </Text> : null}
-                        <Text style={[styles.messageTime, mine && styles.mineTime]}>{formatDisplayTime(item.created_at)}</Text>
-                        {mine ? <Text style={styles.receipt}>{item.read_at || item.status === "read" ? "  👀" : "  📨"}</Text> : null}
+                        {item.edited_at ? <Text style={[
+                          styles.messageTime,
+                          mine && styles.mineTime,
+                          theme === "standard" && !mine && { color: "#64748b" },
+                          isVibesPro && mine && { color: outgoingBubbleTextColor },
+                        ]}>Edited · </Text> : null}
+                        <Text style={[
+                          styles.messageTime,
+                          mine && styles.mineTime,
+                          theme === "standard" && !mine && { color: "#64748b" },
+                          isVibesPro && mine && { color: outgoingBubbleTextColor },
+                        ]}>{formatDisplayTime(item.created_at)}</Text>
+                        {mine ? <Text style={[styles.receipt, isVibesPro && { color: outgoingBubbleTextColor }]}>
+                          {item.read_at || item.status === "read" ? "  👀" : "  📨"}
+                        </Text> : null}
                       </View>
                       {Object.entries(item.reactions ?? {}).map(([emoji, users]) => (
-                        <Pressable key={emoji} onPress={() => void toggleReaction(item, emoji)} style={styles.reactionChip}>
-                          <Text style={styles.reactionText}>{emoji} {users.length}</Text>
+                        <Pressable
+                          key={emoji}
+                          onPress={() => void toggleReaction(item, emoji)}
+                          style={[
+                            styles.reactionChip,
+                            theme === "standard" && !mine && { backgroundColor: "#bae6fd" },
+                            isVibesPro && mine && { backgroundColor: "rgba(255,255,255,0.22)" },
+                          ]}
+                        >
+                          <Text style={[
+                            styles.reactionText,
+                            theme === "standard" && !mine && { color: "#0c4a6e" },
+                            isVibesPro && mine && { color: outgoingBubbleTextColor },
+                          ]}>{emoji} {users.length}</Text>
                         </Pressable>
                       ))}
                     </Pressable>
@@ -1090,7 +1195,7 @@ export default function NativeChatScreen() {
                 <View style={styles.recordingWaveformPanel}>
                   <View style={styles.recordingTimeRow}>
                     <View style={styles.recordingDot} />
-                    <Text style={[styles.recordingLabel, isVibesPro && styles.premiumText]}>
+                    <Text style={[styles.recordingLabel, isVibesPro && styles.premiumText, theme === "standard" && { color: colors.text }]}>
                       {voiceRecordingPaused ? "Paused" : "Recording"} · {String(Math.floor(recordingSeconds / 60)).padStart(2, "0")}:{String(recordingSeconds % 60).padStart(2, "0")}
                     </Text>
                   </View>
@@ -1100,9 +1205,17 @@ export default function NativeChatScreen() {
                   accessibilityLabel={voiceRecordingPaused ? "Resume recording" : "Pause recording"}
                   accessibilityRole="button"
                   onPress={toggleRecordingPause}
-                  style={[styles.pauseRecordingButton, isVibesPro && styles.premiumPauseRecordingButton]}
+                  style={[
+                    styles.pauseRecordingButton,
+                    isVibesPro && styles.premiumPauseRecordingButton,
+                    theme === "standard" && { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.control },
+                  ]}
                 >
-                  <Text style={[styles.pauseRecordingGlyph, isVibesPro && styles.premiumText]}>
+                  <Text style={[
+                    styles.pauseRecordingGlyph,
+                    isVibesPro && styles.premiumText,
+                    theme === "standard" && { color: colors.text },
+                  ]}>
                     {voiceRecordingPaused ? "▶" : "Ⅱ"}
                   </Text>
                 </Pressable>
@@ -1110,9 +1223,13 @@ export default function NativeChatScreen() {
                   accessibilityLabel="Send voice note"
                   accessibilityRole="button"
                   onPress={() => void stopRecording(true)}
-                  style={[styles.lockedSendButton, isVibesPro && styles.premiumLockedSendButton]}
+                  style={[
+                    styles.lockedSendButton,
+                    isVibesPro && styles.premiumLockedSendButton,
+                    theme === "standard" && { borderWidth: 1, borderColor: colors.accent, backgroundColor: colors.accent },
+                  ]}
                 >
-                  <Text style={styles.lockedSendGlyph}>➤</Text>
+                  <Text style={[styles.lockedSendGlyph, theme === "standard" && { color: colors.accentText }]}>➤</Text>
                 </Pressable>
               </View>
             ) : null}
@@ -1150,17 +1267,33 @@ export default function NativeChatScreen() {
             ) : null}
             {!isRecording ? (
               <View style={styles.composerRow}>
-                  <Pressable accessibilityLabel="Attach photo, video, or file" disabled={sending} onPress={openAttachmentPicker} style={[styles.utilityButton, isVibesPro && styles.premiumAction, sending && styles.disabledButton]}>
-                    <Text style={[styles.utilityGlyph, primaryText]}>＋</Text>
+                  <Pressable
+                    accessibilityLabel="Attach photo, video, or file"
+                    disabled={sending}
+                    onPress={openAttachmentPicker}
+                    style={[
+                      styles.utilityButton,
+                      isVibesPro && styles.premiumAction,
+                      theme === "standard" && { borderColor: colors.border, backgroundColor: colors.control },
+                      sending && styles.disabledButton,
+                    ]}
+                  >
+                    <Text style={[styles.utilityGlyph, theme === "standard" ? { color: colors.text } : primaryText]}>＋</Text>
                   </Pressable>
                   <Pressable
                     accessibilityLabel="Record voice note"
                     accessibilityRole="button"
                     disabled={sending || Boolean(attachment) || Boolean(pendingVoiceUri) || loading}
                     onPress={() => void startRecording()}
-                    style={[styles.utilityButton, styles.voiceRecordButton, isVibesPro && styles.premiumAction, (sending || attachment || pendingVoiceUri || loading) && styles.disabledButton]}
+                    style={[
+                      styles.utilityButton,
+                      styles.voiceRecordButton,
+                      isVibesPro && styles.premiumAction,
+                      theme === "standard" && { borderColor: colors.border, backgroundColor: colors.control },
+                      (sending || attachment || pendingVoiceUri || loading) && styles.disabledButton,
+                    ]}
                   >
-                    <Mic color="#ffffff" size={20} strokeWidth={2.4} />
+                    <Mic color={theme === "standard" ? colors.text : "#ffffff"} size={20} strokeWidth={2.4} />
                   </Pressable>
                   <TextInput
                     accessibilityLabel="Message"
@@ -1177,7 +1310,15 @@ export default function NativeChatScreen() {
                     value={input}
                   />
                   {!inputFocused ? (
-                    <Pressable accessibilityLabel="Choose emoji" onPress={() => setEmojiPickerVisible((visible) => !visible)} style={[styles.utilityButton, isVibesPro && styles.premiumAction]}>
+                    <Pressable
+                      accessibilityLabel="Choose emoji"
+                      onPress={() => setEmojiPickerVisible((visible) => !visible)}
+                      style={[
+                        styles.utilityButton,
+                        isVibesPro && styles.premiumAction,
+                        theme === "standard" && { borderColor: colors.border, backgroundColor: colors.control },
+                      ]}
+                    >
                       <Text style={styles.actionEmoji}>😊</Text>
                     </Pressable>
                   ) : null}
@@ -1186,9 +1327,20 @@ export default function NativeChatScreen() {
                     accessibilityRole="button"
                     disabled={(!input.trim() && !attachment && !pendingVoiceUri) || sending || loading}
                     onPress={() => void (editTarget ? submitEdit() : send())}
-                    style={[styles.sendButton, isVibesPro && styles.premiumSendButton, ((!input.trim() && !attachment && !pendingVoiceUri) || sending || loading) && styles.disabledButton]}
+                    style={[
+                      styles.sendButton,
+                      isVibesPro && styles.premiumSendButton,
+                      theme === "standard" && { borderWidth: 1, borderColor: colors.accent, backgroundColor: colors.accent },
+                      ((!input.trim() && !attachment && !pendingVoiceUri) || sending || loading) && styles.disabledButton,
+                    ]}
                   >
-                    {sending ? <ActivityIndicator color="#ffffff" size="small" /> : <Text style={[styles.sendGlyph, isVibesPro && styles.premiumSendGlyph]}>{editTarget ? "✓" : "➤"}</Text>}
+                    {sending
+                      ? <ActivityIndicator color={theme === "standard" ? colors.accentText : "#ffffff"} size="small" />
+                      : <Text style={[
+                          styles.sendGlyph,
+                          isVibesPro && styles.premiumSendGlyph,
+                          theme === "standard" && { color: colors.accentText },
+                        ]}>{editTarget ? "✓" : "➤"}</Text>}
                   </Pressable>
               </View>
             ) : null}
@@ -1437,6 +1589,55 @@ export default function NativeChatScreen() {
           </View>
         </View>
       </Modal>
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setImageViewer(null)}
+        statusBarTranslucent
+        transparent
+        visible={imageViewer !== null}
+      >
+        <View style={styles.imageViewer}>
+          <Pressable
+            accessibilityLabel="Close image viewer"
+            onPress={() => setImageViewer(null)}
+            style={StyleSheet.absoluteFill}
+          />
+          {imageViewer ? (
+            <Image
+              pointerEvents="none"
+              resizeMode="contain"
+              source={{ uri: imageViewer }}
+              style={StyleSheet.absoluteFill}
+            />
+          ) : null}
+          <Pressable
+            accessibilityLabel="Close image viewer"
+            accessibilityRole="button"
+            onPress={() => setImageViewer(null)}
+            style={[styles.imageViewerClose, { top: insets.top + 10 }]}
+          >
+            <Text style={styles.imageViewerCloseText}>×</Text>
+          </Pressable>
+        </View>
+      </Modal>
+      <NativeConfirmDialog
+        confirmLabel="Delete"
+        destructive
+        emoji="🗑️"
+        message="This removes the message from the conversation."
+        onCancel={() => setPendingDeleteMessage(null)}
+        onConfirm={async () => {
+          if (!userId || !pendingDeleteMessage) throw new Error("This message is no longer available.");
+          await deleteNativeMessage(pendingDeleteMessage.id, userId);
+          queryClient.setQueryData<NativeConversationMessageCache>(
+            messagesQueryKey,
+            (current) => removeMessageFromCache(current, pendingDeleteMessage.id),
+          );
+          void invalidateThreads();
+        }}
+        title="Delete message?"
+        visible={pendingDeleteMessage !== null}
+      />
     </LinearGradient>
   );
 }
@@ -1490,6 +1691,9 @@ const styles = StyleSheet.create({
   messageText: { color: "#ffffff", fontSize: 15, lineHeight: 21 },
   mineMessageText: { color: "#ffffff" },
   imageAttachment: { width: 220, height: 220, marginTop: 8, borderRadius: 14, backgroundColor: "#252b35" },
+  imageViewer: { flex: 1, backgroundColor: "#020617" },
+  imageViewerClose: { position: "absolute", right: 14, width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 21, backgroundColor: "rgba(15,23,42,0.78)" },
+  imageViewerCloseText: { color: "#ffffff", fontSize: 28, fontWeight: "700", lineHeight: 32 },
   fileAttachment: { minWidth: 150, flexDirection: "row", alignItems: "center", gap: 10, marginTop: 8, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 14, backgroundColor: "#252b35" },
   mineFileAttachment: { backgroundColor: "#454b55" },
   fileAttachmentIcon: { color: "#ffffff", fontSize: 18, fontWeight: "900" },
@@ -1520,7 +1724,7 @@ const styles = StyleSheet.create({
   reactionText: { color: "#ffffff", fontSize: 12 },
   forwardedLabel: { marginBottom: 4, color: "#ffffff", fontSize: 10, fontWeight: "800" },
   mineForwardedLabel: { color: "rgba(255,255,255,0.82)" },
-  deleteLabel: { color: "#be123c", fontSize: 11, fontWeight: "700" },
+  deleteLabel: { color: "#ffffff", fontSize: 11, fontWeight: "700" },
   messageActionSheet: { maxHeight: "78%", paddingHorizontal: 20, paddingTop: 12, paddingBottom: Platform.OS === "ios" ? 34 : 24, borderTopLeftRadius: 30, borderTopRightRadius: 30, backgroundColor: "#10141b", shadowColor: "#000000", shadowOpacity: 0.28, shadowRadius: 24, shadowOffset: { width: 0, height: -8 }, elevation: 18 },
   messageActionHeading: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 },
   messageReactionRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 12, padding: 7, borderRadius: 24, backgroundColor: "#171c25" },
@@ -1528,7 +1732,7 @@ const styles = StyleSheet.create({
   messageReactionButton: { width: 48, height: 44, alignItems: "center", justifyContent: "center", borderRadius: 22 },
   messageReactionEmoji: { fontSize: 25 },
   messageActionRow: { minHeight: 50, flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 8, paddingHorizontal: 14, borderWidth: 1, borderColor: "#2e3540", borderRadius: 17, backgroundColor: "#171c25" },
-  deleteActionRow: { borderColor: "#454b55", backgroundColor: "#252b35" },
+  deleteActionRow: { borderColor: "#f87171", backgroundColor: "#dc2626" },
   messageActionEmoji: { width: 26, fontSize: 19, textAlign: "center" },
   messageActionLabel: { color: "#ffffff", fontSize: 14, fontWeight: "700" },
   messageActionError: { marginTop: 4, color: "#fda4af", fontSize: 12 },

@@ -20,6 +20,8 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error("Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in .env.");
 }
 
+export const nativeSupabaseUrl = supabaseUrl;
+export const nativeSupabaseAnonKey = supabaseAnonKey;
 const projectRef = new URL(supabaseUrl).hostname.split(".")[0];
 const supabaseOrigin = new URL(supabaseUrl).origin;
 export const nativeAuthStorageKey = `sb-${projectRef}-auth-token`;
