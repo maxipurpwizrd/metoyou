@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { CloudSun, Eye, EyeOff } from "lucide-react";
 import { login } from "../lib/auth";
 
@@ -26,8 +26,10 @@ import { supabase } from "../lib/supabase";
 import { useLanguage } from "../contexts/LanguageContext";
 import { useSession } from "../contexts/SessionContext";
 import type { Language } from "../lib/i18n";
+import { getSafeReturnTo } from "../lib/safeReturnTo";
 
 export default function Login() {
+  const location = useLocation();
   const navigate = useNavigate();
   const { language, setLanguage, t } = useLanguage();
   const { refreshSession } = useSession();
@@ -39,8 +41,7 @@ export default function Login() {
   const [oauthComingSoon, setOauthComingSoon] = useState<"Google" | "Apple" | null>(null);
   const selectedLanguage: Language = language;
 
-  // Always return to the feed after login to avoid returning to previous protected pages
-  const returnTo = "/feed";
+  const returnTo = getSafeReturnTo(location.state) ?? "/feed";
 
   async function handleLogin(e?: FormEvent) {
     e?.preventDefault();

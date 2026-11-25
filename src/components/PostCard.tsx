@@ -10,6 +10,7 @@ import { useAutoplayVideo } from "../hooks/useAutoplayVideo";
 import { useAutoplayAudio } from "../hooks/useAutoplayAudio";
 import { useVideoContext } from "../contexts/VideoContext";
 import { submitPostReport } from "../lib/reportApi";
+import { postUrl } from "../lib/contentLinks";
 import type { Comment, User } from "../contexts/FeedContext";
 const loadedImageUrls = new Set<string>();
 
@@ -449,16 +450,33 @@ export default function PostCard({
       : `${normalizedText.split(/\r?\n/).slice(0, 7).join("\n")}…`
     : normalizedText;
   const isPremiumTheme = Boolean(isVibesPro || variant === "gold" || author?.is_vibes_pro);
+  const sharePost = async () => {
+    const url = postId === undefined ? undefined : postUrl(postId);
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: `${author.username}'s post`,
+          text: normalizedText,
+          ...(url ? { url } : {}),
+        });
+      } else {
+        await navigator.clipboard.writeText(url ?? normalizedText);
+      }
+    } catch {
+      // Sharing can be cancelled by the user.
+    }
+    setShowMenu(false);
+  };
   const feedMenuActions: MediaAction[] = isOwner
     ? [
         { label: t("post.edit"), icon: "edit", onClick: () => { setDraftPostText(text); setIsEditingPost(true); setShowMenu(false); } },
-        { label: t("post.share"), icon: "share", onClick: async () => { try { if (navigator.share) await navigator.share({ title: `${author.username}'s post`, text, url: window.location.href }); else await navigator.clipboard.writeText(window.location.href); } catch { /* ignore share failure */ } setShowMenu(false); } },
+        { label: t("post.share"), icon: "share", onClick: sharePost },
         ...(video ? [{ label: t("post.deleteVideo"), icon: "delete" as const, tone: "danger" as const, onClick: () => { onDeleteVideo?.(); setShowMenu(false); } }] : []),
         { label: highlighted ? t("post.unhighlight") : t("post.highlight"), icon: "highlight", onClick: () => { onHighlight?.(); setShowMenu(false); } },
         { label: t("post.deletePost"), icon: "delete" as const, tone: "danger" as const, onClick: () => { onDeletePost?.(); setShowMenu(false); } },
       ]
     : [
-        { label: t("post.share"), icon: "share", onClick: async () => { try { if (navigator.share) await navigator.share({ title: `${author.username}'s post`, text, url: window.location.href }); else await navigator.clipboard.writeText(window.location.href); } catch { /* ignore share failure */ } setShowMenu(false); } },
+        { label: t("post.share"), icon: "share", onClick: sharePost },
         { label: t("post.save"), icon: "download", onClick: () => { onSavePost?.(); setShowMenu(false); } },
         { label: t("post.repost"), icon: "repost", onClick: () => { onRepost?.(); setShowMenu(false); } },
         { label: t("post.report"), icon: "report", onClick: () => { setIsReportModalOpen(true); setShowMenu(false); } },

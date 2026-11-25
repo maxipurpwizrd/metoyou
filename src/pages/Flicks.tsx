@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type TouchEvent } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Ban, CloudSun, Download, Flag, Grid2X2, LoaderCircle, MessageCircle, Mic, MoonStar, Repeat2, Share2, Square, Trash2 } from "lucide-react";
 import { fetchFlicksPage, type FlickRecord } from "../lib/flicksApi";
 import { likePost, unlikePost } from "../lib/likeApi";
@@ -13,6 +13,7 @@ import { deletePostFromSupabase, fetchPostByIdFromSupabase, savePostToSupabase }
 import { submitPostReport } from "../lib/reportApi";
 import { restoreSurfaceScrollPosition, saveSurfaceScrollPosition } from "../lib/surfaceScrollPosition";
 import { useLanguage } from "../contexts/LanguageContext";
+import { flickUrl } from "../lib/contentLinks";
 
 const PAGE_SIZE = 7;
 const FLICKS_CACHE_KEY = "metoyou-flicks-cache";
@@ -60,9 +61,10 @@ export default function Flicks() {
   const { t } = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
+  const { postId: routePostId } = useParams<{ postId?: string }>();
   const { user } = useAuth();
   const requestedImage = new URLSearchParams(location.search).get("image");
-  const requestedPostId = new URLSearchParams(location.search).get("postId");
+  const requestedPostId = routePostId ?? new URLSearchParams(location.search).get("postId");
   const hasQueryFocus = Boolean(requestedImage || requestedPostId);
   const isImageOnlyViewer = Boolean(requestedImage && !requestedPostId);
   const [theme, setTheme] = useState<"bluesky" | "dark">(() => {
@@ -106,7 +108,7 @@ export default function Flicks() {
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const isDark = theme === "dark";
   const visibleFlicks = hasQueryFocus
-    ? focusedFlick ? [focusedFlick] : []
+    ? focusedFlick && !blockedAuthorIds.includes(focusedFlick.author_id) ? [focusedFlick] : []
     : flicks.filter((flick) => !blockedAuthorIds.includes(flick.author_id));
   const visibleLoading = hasQueryFocus
     ? Boolean(requestedPostId) && (focusedFlickLoading || (!focusedFlick && !focusedFlickError))
@@ -381,7 +383,7 @@ export default function Flicks() {
   };
 
   const shareFlick = async (flick: FlickRecord) => {
-    const url = `${window.location.origin}/flicks?postId=${encodeURIComponent(flick.id)}`;
+    const url = flickUrl(flick.id);
     try {
       if (navigator.share) {
         await navigator.share({ title: `${flick.username}'s Flick`, text: flick.text ?? "", url });

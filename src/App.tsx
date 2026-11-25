@@ -37,6 +37,7 @@ import LoginWelcomePopup from "./components/LoginWelcomePopup";
 import { useAuth } from "./hooks/useAuth";
 import { GlobalCallProvider } from "./contexts/GlobalCallContext";
 import { shouldRedirectAuthenticatedPublicRoute } from "./lib/authStateIsolation";
+import { getSafeReturnTo } from "./lib/safeReturnTo";
 
 const LAST_ROUTE_STORAGE_KEY = "metoyou:last-auth-route";
 const PUBLIC_ROUTES = new Set(["/", "/welcome", "/login", "/signup", "/about"]);
@@ -81,6 +82,15 @@ function PublicRoute({ children }: { children: ReactNode }) {
     const publicPaths = ["/", "/welcome", "/login", "/signup"];
     if (!publicPaths.includes(location.pathname)) return;
 
+    const returnTo = location.pathname === "/login"
+      ? getSafeReturnTo(location.state)
+      : null;
+    if (returnTo) {
+      window.sessionStorage.removeItem(LAST_ROUTE_STORAGE_KEY);
+      navigate(returnTo, { replace: true });
+      return;
+    }
+
     if (shouldRedirectAuthenticatedPublicRoute(location.pathname, user.id)) {
       window.sessionStorage.removeItem(LAST_ROUTE_STORAGE_KEY);
       navigate("/feed", { replace: true });
@@ -88,15 +98,15 @@ function PublicRoute({ children }: { children: ReactNode }) {
     }
 
     const savedRoute = window.sessionStorage.getItem(LAST_ROUTE_STORAGE_KEY);
-    const target = savedRoute && savedRoute.startsWith("/") ? savedRoute : "/feed";
+    const target = getSafeReturnTo(savedRoute) ?? "/feed";
     navigate(target, { replace: true });
-  }, [isLoading, location.pathname, navigate, user]);
+  }, [isLoading, location.pathname, location.state, navigate, user]);
 
   if (isLoading) return null;
   return user ? null : <>{children}</>;
 }
 
-function AppRoutes() {
+export function AppRoutes() {
   const location = useLocation();
   const navigate = useNavigate();
   const previousPathRef = useRef<string | null>(null);
@@ -159,8 +169,11 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={<PublicRoute><Home /></PublicRoute>} />
       <Route path="/feed" element={<RequireAuth><Feed /></RequireAuth>} />
+      <Route path="/posts/:postId" element={<RequireAuth><Feed /></RequireAuth>} />
       <Route path="/clips" element={<RequireAuth><Clips /></RequireAuth>} />
+      <Route path="/clips/:postId" element={<RequireAuth><Clips /></RequireAuth>} />
       <Route path="/flicks" element={<RequireAuth><Flicks /></RequireAuth>} />
+      <Route path="/flicks/:postId" element={<RequireAuth><Flicks /></RequireAuth>} />
       <Route path="/tracks" element={<RequireAuth><Tracks /></RequireAuth>} />
       <Route path="/welcome" element={<PublicRoute><AuthChoice /></PublicRoute>} />
       <Route path="/about" element={<AboutMeToYou />} />
@@ -168,6 +181,7 @@ function AppRoutes() {
       <Route path="/signup" element={<PublicRoute><Signup /></PublicRoute>} />
       <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
       <Route path="/profile/:username" element={<RequireAuth><Profile /></RequireAuth>} />
+      <Route path="/profiles/:username" element={<RequireAuth><Profile /></RequireAuth>} />
       <Route path="/profile/status" element={<RequireAuth><ProfileStatus /></RequireAuth>} />
       <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
       <Route path="/settings/blocked-users" element={<RequireAuth><BlockedUsers /></RequireAuth>} />

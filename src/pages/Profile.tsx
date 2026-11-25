@@ -24,6 +24,7 @@ import { useAppInit } from "../contexts/AppInitContext";
 import { isVibesProEnabled } from "../lib/vibesPro";
 import { formatDisplayDateTime } from "../lib/time";
 import { blockUser } from "../lib/moderationApi";
+import { profileUrl } from "../lib/contentLinks";
 
 type ProfileComment = {
   id: string | number;
@@ -966,12 +967,12 @@ export default function Profile({ embedded }: { embedded?: boolean } = {}) {
   }, [profile?.id, viewingOwn]);
 
   const shareProfile = async () => {
-    const profileUrl = window.location.href;
+    const url = profileUrl(profile.username);
     try {
       if (navigator.share) {
-        await navigator.share({ title: `${profile.username}'s profile`, url: profileUrl });
+        await navigator.share({ title: `${profile.username}'s profile`, url });
       } else {
-        await navigator.clipboard.writeText(profileUrl);
+        await navigator.clipboard.writeText(url);
       }
     } catch {
       // Sharing can be cancelled by the user.

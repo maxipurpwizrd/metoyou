@@ -1,7 +1,7 @@
 import Navbar from "../components/Navbar";
 import { useMemo, useState, useEffect, useRef, useCallback, useLayoutEffect, type CSSProperties } from "react";
 import { AutoSizer, CellMeasurer, CellMeasurerCache, List, WindowScroller } from "react-virtualized";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useFeed, type Comment as FeedComment, type Post as FeedPost } from "../contexts/FeedContext";
 import { useSession } from "../contexts/SessionContext";
 import { useLanguage } from "../contexts/LanguageContext";
@@ -84,6 +84,7 @@ export default function Feed(props: { embedded?: boolean } = {}) {
   const feedInitializing = !appReady || !profileReady;
   const location = useLocation();
   const navigate = useNavigate();
+  const { postId: routePostId } = useParams<{ postId?: string }>();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const musicInputRef = useRef<HTMLInputElement>(null);
   const voiceInputRef = useRef<HTMLInputElement>(null);
@@ -98,10 +99,11 @@ export default function Feed(props: { embedded?: boolean } = {}) {
   const [focusedPost, setFocusedPost] = useState<FeedPost | null>(null);
   const [commentsPostId, setCommentsPostId] = useState<string | number | null>(null);
   const requestedPostId = useMemo(() => {
+    if (routePostId) return routePostId;
     const params = new URLSearchParams(location.search);
     const value = params.get("postId");
     return value ? String(value) : null;
-  }, [location.search]);
+  }, [location.search, routePostId]);
   const requestedCommentsOpen = useMemo(
     () => new URLSearchParams(location.search).get("showComments") === "1",
     [location.search],
@@ -268,6 +270,12 @@ export default function Feed(props: { embedded?: boolean } = {}) {
 
     const loadFocusedPost = async () => {
       const existing = posts.find((post) => String(post.id) === requestedPostId);
+      if (existing && mutedUsers.includes(existing.author.id)) {
+        setFocusedPost(null);
+        setSelectedPostId(requestedPostId);
+        setCommentsPostId(null);
+        return;
+      }
       if (existing) {
         const comments = requestedCommentsOpen ? mapFeedComments(await getComments(requestedPostId)) : existing.comments;
         if (!active) return;
@@ -283,7 +291,7 @@ export default function Feed(props: { embedded?: boolean } = {}) {
       const record = await fetchPostByIdFromSupabase(requestedPostId);
       if (!active) return;
 
-      if (!record) {
+      if (!record || mutedUsers.includes(record.author_id)) {
         setFocusedPost(null);
         setSelectedPostId(requestedPostId);
         setCommentsPostId(null);
@@ -331,7 +339,7 @@ export default function Feed(props: { embedded?: boolean } = {}) {
     return () => {
       active = false;
     };
-  }, [posts, requestedCommentsOpen, requestedPostId, setSelectedPostId]);
+  }, [mutedUsers, posts, requestedCommentsOpen, requestedPostId, setSelectedPostId]);
 
   const suppressAutoCloseRef = useRef(false);
   const commentInputFocusedRef = useRef(false);

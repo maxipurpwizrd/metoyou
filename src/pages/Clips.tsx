@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type TouchEvent } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Ban, CloudSun, Download, Flag, Grid2X2, LoaderCircle, MessageCircle, Mic, MoonStar, Music2, Play, Repeat2, Share2, Square, Trash2, Volume2, VolumeX } from "lucide-react";
 import { useSession } from "../contexts/SessionContext";
 import RequireVibesPro from "../components/RequireVibesPro";
@@ -15,6 +15,7 @@ import ReportReasonModal, { type PostReportReason } from "../components/ReportRe
 import { submitPostReport } from "../lib/reportApi";
 import { restoreSurfaceScrollPosition, saveSurfaceScrollPosition } from "../lib/surfaceScrollPosition";
 import { useLanguage } from "../contexts/LanguageContext";
+import { clipUrl } from "../lib/contentLinks";
 
 const PAGE_SIZE = 8;
 const CLIPS_CACHE_KEY = "metoyou-clips-cache";
@@ -235,7 +236,7 @@ function ClipCard({
   };
 
   const shareClip = async () => {
-    const url = `${window.location.origin}/clips`;
+    const url = clipUrl(clip.id);
     try {
       if (navigator.share) await navigator.share({ title: `${clip.username}'s Clip`, text: clip.text ?? "", url });
       else await navigator.clipboard.writeText(url);
@@ -475,9 +476,10 @@ function ClipCard({
 export default function Clips() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { postId: routePostId } = useParams<{ postId?: string }>();
   const { profile } = useSession();
   const { user } = useAuth();
-  const requestedPostId = new URLSearchParams(location.search).get("postId");
+  const requestedPostId = routePostId ?? new URLSearchParams(location.search).get("postId");
   const requestedCommentsOpen = new URLSearchParams(location.search).get("showComments") === "1";
   const hasQueryFocus = Boolean(requestedPostId);
   const [theme, setTheme] = useState<"bluesky" | "dark">(() => {
